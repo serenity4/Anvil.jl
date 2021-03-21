@@ -1,0 +1,13 @@
+name = "Givre"
+uuid = "3680adac-b468-4089-a5b4-2beb8414818d"
+authors = ["Cédric Belmant"]
+version = "0.1.0"
+
+[compat]
+julia = "1.6"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
