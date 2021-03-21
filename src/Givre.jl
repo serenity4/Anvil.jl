@@ -5,6 +5,7 @@ using VulkanShaders
 using XCB
 using MLStyle
 using UnPack
+using AbstractGUI
 
 include("vulkan/init.jl")
 include("vulkan/memory.jl")
