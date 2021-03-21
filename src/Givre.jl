@@ -6,9 +6,13 @@ using XCB
 using MLStyle
 using UnPack
 
-include("init.jl")
+include("vulkan/init.jl")
+include("vulkan/memory.jl")
+include("app.jl")
+include("window.jl")
 
 function __init__()
+    # for debugging in Vulkan
     debug_callback_c[] = @cfunction(
         default_debug_callback,
         UInt32,
@@ -20,10 +24,6 @@ function __init__()
         )
     )
 end
-
-include("memory.jl")
-include("app.jl")
-include("window.jl")
 
 export
     Application
