@@ -1,3 +1,8 @@
+if get(ENV, "JULIA_GITHUB_ACTIONS_CI", "OFF") == "ON"
+    import SwiftShader_jll
+    ENV["JULIA_VULKAN_LIBNAME"] = basename(SwiftShader_jll.libvulkan)
+end
+
 using Givre
 using XCB
 using Test
