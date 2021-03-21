@@ -14,14 +14,11 @@ jobs:
           - 'nightly'
         os:
           - ubuntu-latest
-        arch:
-          - x64
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
       - uses: actions/cache@v1
         env:
           cache-name: cache-artifacts
@@ -33,4 +30,7 @@ jobs:
             ${{ runner.os }}-test-
             ${{ runner.os }}-
       - uses: julia-actions/julia-buildpkg@v1
-      - uses: julia-actions/julia-runtest@v1
+      - name: Run tests with xvfb
+        run: |
+          sudo apt-get install xvfb
+          /usr/bin/xvfb-run -n99 julia --project=. -e 'using Pkg; Pkg.test()'
