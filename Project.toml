@@ -12,6 +12,7 @@ VulkanShaders = "afc6ba6b-17fe-44ae-937e-3208623195e7"
 XCB = "16167f82-ea26-5cba-b1de-ed6fd5e30a10"
 
 [compat]
+Vulkan = "0.1"
 julia = "1.6"
 
 [extras]
