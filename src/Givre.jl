@@ -1,30 +1,20 @@
 module Givre
 
-using Vulkan
-using VulkanShaders
 using XCB
 using MLStyle
 using UnPack
 using AbstractGUI
+using Meshes
+using SignedDistanceFunctions
 
-include("vulkan/init.jl")
-include("vulkan/memory.jl")
+import AbstractGUI: callbacks, vertex_data
+
+include("render/Render.jl")
+using .Render
+
+include("widgets.jl")
+include("textures.jl")
 include("app.jl")
-include("window.jl")
-
-function __init__()
-    # for debugging in Vulkan
-    debug_callback_c[] = @cfunction(
-        default_debug_callback,
-        UInt32,
-        (
-            VkDebugUtilsMessageSeverityFlagBitsEXT,
-            VkDebugUtilsMessageTypeFlagBitsEXT,
-            Ptr{vk.VkDebugUtilsMessengerCallbackDataEXT},
-            Ptr{Cvoid},
-        )
-    )
-end
 
 export
     Application

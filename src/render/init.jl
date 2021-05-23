@@ -1,4 +1,24 @@
-const debug_callback_c = Ref{Ptr{Cvoid}}(C_NULL)
+function debug_init(instance::Instance)
+    messenger = DebugUtilsMessengerEXT(
+        instance,
+        |(
+            DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
+            DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
+            DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
+            DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+        ),
+        |(
+            DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT,
+            DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+            DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT,
+        ),
+        debug_callback_c[],
+        function_pointer(instance, "vkCreateDebugUtilsMessengerEXT"),
+        function_pointer(instance, "vkDestroyDebugUtilsMessengerEXT"),
+    )
+    debug_messenger[] = messenger
+    nothing
+end
 
 function init(;
     instance_layers = [],
@@ -8,6 +28,7 @@ function init(;
     nqueues = 1,
     queue_flags = QUEUE_COMPUTE_BIT | QUEUE_GRAPHICS_BIT,
     with_validation = true,
+    debug = true,
 )
 
     if with_validation && "VK_LAYER_KHRONOS_validation" ∉ instance_layers
@@ -30,23 +51,7 @@ function init(;
     end
 
     instance = Instance(instance_layers, instance_extensions; application_info = ApplicationInfo(v"1", v"1", v"1.2"))
-    messenger = DebugUtilsMessengerEXT(
-        instance,
-        |(
-            DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT,
-            DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT,
-            DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
-            DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-        ),
-        |(
-            DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT,
-            DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-            DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT,
-        ),
-        debug_callback_c[],
-        function_pointer(instance, "vkCreateDebugUtilsMessengerEXT"),
-        function_pointer(instance, "vkDestroyDebugUtilsMessengerEXT"),
-    )
+
     physical_device = first(unwrap(enumerate_physical_devices(instance)))
 
     # TODO: check for supported device features
@@ -56,13 +61,17 @@ function init(;
         error("Requesting unsupported device extensions: $unsupported_extensions")
     end
 
-    queue_index = find_queue_index(physical_device, queue_flags)
+    if debug
+        debug_init(instance)
+    end
+
+    queue_family = find_queue_family(physical_device, queue_flags)
     device = Device(
         physical_device,
-        [DeviceQueueCreateInfo(queue_index, ones(Float32, nqueues))],
+        [DeviceQueueCreateInfo(queue_family, ones(Float32, nqueues))],
         [],
         device_extensions;
         enabled_features,
     )
-    device, get_device_queue(device, 0, queue_index), messenger
+    device, queue_family
 end
