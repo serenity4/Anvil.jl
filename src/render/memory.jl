@@ -2,7 +2,7 @@ function find_memory_type(physical_device::PhysicalDevice, type_flag, properties
     mem_props = get_physical_device_memory_properties(physical_device)
     indices =
         findall(
-            x -> (x.property_flags & properties) == properties,
+            x -> properties in x.property_flags,
             mem_props.memory_types[1:mem_props.memory_type_count],
         ) .- 1
     if isempty(indices)
