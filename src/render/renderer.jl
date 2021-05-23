@@ -1,16 +1,26 @@
-struct Renderer
+abstract type AbstractRenderer end
+
+"""
+Basic renderer that can only render 2D textures.
+"""
+struct BasicRenderer <: AbstractRenderer
     device::Device
     queue::DeviceQueueInfo2
-    pipelines::Dict{Symbol,Pipeline}
+    features::PhysicalDeviceFeatures
+    extensions::Vector{String}
+    wh::XWindowHandler
 end
 
-submit(r::Renderer, submits::AbstractArray{<:SubmitInfo}, fence::Fence) = queue_submit(get_device_queue_2(r.device, r.queue), submits, fence)
+require_feature(r, feature) = getproperty(r.features.vks, feature) || error("Feature '$feature' required but not enabled.")
+require_extension(r, ext) = ext in r.extensions || error("Extension '$ext' required but not enabled.")
 
-function Renderer()
-    device, queue_family = init(; queue_flags = QUEUE_COMPUTE_BIT | QUEUE_GRAPHICS_BIT | QUEUE_TRANSFER_BIT, nqueues = 1)
-    Renderer(device, DeviceQueueInfo2(queue_family, 0))
+function BasicRenderer(device_features::PhysicalDeviceFeatures, device_extensions, wh::XWindowHandler)
+    device, queue = init(;
+        enabled_features = device_features,
+        device_extensions,
+    )
+    BasicRenderer(device, DeviceQueueInfo2(queue_family, 0), device_features, device_extensions, wh)
 end
 
-function execute_draws(r::Renderer)
-
-end
+submit(r::AbstractRenderer, submits::AbstractArray{<:SubmitInfo}; fence = C_NULL) = queue_submit_2_khr(get_device_queue_2(r.device, r.queue), submits, fence)
+present(r::AbstractRenderer, present_info) = queue_present_khr(get_device_queue_2(r.device, r.queue), present_info)

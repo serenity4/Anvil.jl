@@ -3,10 +3,15 @@ module Render
 using Vulkan
 using VulkanShaders
 using UnPack
+using ColorTypes
+using Meshes
 
 include("init.jl")
 include("memory.jl")
+include("vertex.jl")
 include("renderer.jl")
+include("frames.jl")
+include("texture.jl")
 
 const debug_callback_c = Ref{Ptr{Cvoid}}(C_NULL)
 const debug_messenger = Ref{DebugUtilsMessengerEXT}()

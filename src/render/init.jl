@@ -1,4 +1,4 @@
-function debug_init(instance::Instance)
+function init_debug(instance::Instance)
     messenger = DebugUtilsMessengerEXT(
         instance,
         |(
@@ -34,7 +34,7 @@ function init(;
     if with_validation && "VK_LAYER_KHRONOS_validation" ∉ instance_layers
         push!(instance_layers, "VK_LAYER_KHRONOS_validation")
     end
-    if "VK_EXT_debug_utils" ∉ instance_extensions
+    if debug && "VK_EXT_debug_utils" ∉ instance_extensions
         push!(instance_extensions, "VK_EXT_debug_utils")
     end
 
@@ -62,7 +62,7 @@ function init(;
     end
 
     if debug
-        debug_init(instance)
+        init_debug(instance)
     end
 
     queue_family = find_queue_family(physical_device, queue_flags)
