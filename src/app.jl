@@ -42,7 +42,7 @@ function Application()
 
     app_state = ApplicationState()
 
-    function on_key_pressed(wh::XWindowHandler, details::EventDetails)
+    function on_key_pressed(details::EventDetails)
         @unpack win, data = details
         @info keystroke_info(wh.keymap, details)
         @unpack key, modifiers = data
@@ -53,7 +53,7 @@ function Application()
     end
 
     set_callbacks!(wh, win, WindowCallbacks(;
-        on_key_pressed = x -> on_key_pressed(wh, x),
+        on_key_pressed,
     ))
 
     Application(wh, Widget[], app_state)
