@@ -420,10 +420,10 @@ function render_texture(r::BasicRenderer, points, texture; width = 1000, height 
     image
 end
 
-main(
-    joinpath(@__DIR__, "render.png"),
-    Point2f[(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)],
-    joinpath(@__DIR__, "texture_2d.png"),
-    width = 2048,
-    height = 2048,
-)
+# main(
+#     joinpath(@__DIR__, "render.png"),
+#     Point2f[(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)],
+#     joinpath(@__DIR__, "texture_2d.png"),
+#     width = 2048,
+#     height = 2048,
+# )
