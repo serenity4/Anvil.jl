@@ -7,6 +7,7 @@ using ColorTypes
 using Meshes
 using MLStyle
 using XCB
+using Setfield
 
 include("init.jl")
 include("memory.jl")
