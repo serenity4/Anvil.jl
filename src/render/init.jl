@@ -66,12 +66,13 @@ function init(;
     end
 
     queue_family = find_queue_family(physical_device, queue_flags)
-    device = Device(
+    device_ci = DeviceCreateInfo(
         physical_device,
         [DeviceQueueCreateInfo(queue_family, ones(Float32, nqueues))],
         [],
         device_extensions;
         enabled_features,
     )
-    device, queue_family
+    device = Device(device_ci)
+    device, device_ci
 end
