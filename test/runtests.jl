@@ -1,6 +1,8 @@
 using Givre
 using Test
 
+ENV["JULIA_DEBUG"] = "all"
+
 ENV["DISPLAY"] = ":0"
 
 function main()

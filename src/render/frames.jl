@@ -1,5 +1,4 @@
 mutable struct WindowState
-    device::Device
     swapchain::SwapchainKHR
     swapchain_ci::SwapchainCreateInfoKHR
     render_pass::RenderPass
@@ -8,10 +7,15 @@ mutable struct WindowState
     fbs::Vector{Framebuffer}
 end
 
-function update!(ws::WindowState)
-    @unpack device, swapchain = ws
+function Vulkan.SurfaceCapabilities2KHR(ws::WindowState)
+    unwrap(get_physical_device_surface_capabilities_2_khr(ws.render_pass.device.physical_device, PhysicalDeviceSurfaceInfo2KHR(ws.swapchain.surface)))
+end
 
-    new_extent = unwrap(get_physical_device_surface_capabilities_2_khr(device.physical_device, PhysicalDeviceSurfaceInfo2KHR(swapchain.surface))).current_extent
+function update!(ws::WindowState)
+    @unpack swapchain, render_pass = ws
+    device = render_pass.device
+
+    new_extent = SurfaceCapabilities2KHR(ws).current_extent
 
     if new_extent ≠ ws.swapchain_ci.image_extent # regenerate swapchain
         ws.swapchain_ci = setproperties(ws.swapchain_ci, old_swapchain=swapchain, image_extent=new_extent)
@@ -38,8 +42,8 @@ function update!(ws::WindowState)
     @pack! ws = swapchain, fb_imgs, fb_views, fbs
 end
 
-function WindowState(device::Device, swapchain::SwapchainKHR, swapchain_ci::SwapchainCreateInfoKHR, render_pass::RenderPass)
-    ws = WindowState(device, swapchain, render_pass, [], [], [])
+function WindowState(swapchain::SwapchainKHR, swapchain_ci::SwapchainCreateInfoKHR, render_pass::RenderPass)
+    ws = WindowState(swapchain, swapchain_ci, render_pass, [], [], [])
     update!(ws)
 end
 
