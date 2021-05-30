@@ -7,15 +7,17 @@ mutable struct WindowState
     fbs::Vector{Framebuffer}
 end
 
-function Vulkan.SurfaceCapabilities2KHR(ws::WindowState)
-    unwrap(get_physical_device_surface_capabilities_2_khr(ws.render_pass.device.physical_device, PhysicalDeviceSurfaceInfo2KHR(ws.swapchain.surface)))
+function Vulkan.SurfaceCapabilitiesKHR(ws::WindowState)
+    unwrap(get_physical_device_surface_capabilities_khr(ws.render_pass.device.physical_device, ws.swapchain.surface))
 end
 
 function update!(ws::WindowState)
     @unpack swapchain, render_pass = ws
     device = render_pass.device
 
-    new_extent = SurfaceCapabilities2KHR(ws).current_extent
+    # TODO: fix in Vulkan.jl
+    _extent = SurfaceCapabilitiesKHR(ws).current_extent.vks
+    new_extent = Extent2D(_extent.width, _extent.height)
 
     if new_extent ≠ ws.swapchain_ci.image_extent # regenerate swapchain
         ws.swapchain_ci = setproperties(ws.swapchain_ci, old_swapchain=swapchain, image_extent=new_extent)
@@ -29,14 +31,14 @@ function update!(ws::WindowState)
             device,
             img,
             IMAGE_VIEW_TYPE_2D,
-            ws.format,
+            ws.swapchain_ci.image_format,
             ComponentMapping(fill(COMPONENT_SWIZZLE_IDENTITY, 4)...),
             ImageSubresourceRange(IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
         )
     end
 
     fbs = map(fb_views) do view
-        Framebuffer(device, ws.render_pass, [fb_image_view], extent.width, extent.height, 1)
+        Framebuffer(device, ws.render_pass, [view], new_extent.width, new_extent.height, 1)
     end
 
     @pack! ws = swapchain, fb_imgs, fb_views, fbs
@@ -45,6 +47,7 @@ end
 function WindowState(swapchain::SwapchainKHR, swapchain_ci::SwapchainCreateInfoKHR, render_pass::RenderPass)
     ws = WindowState(swapchain, swapchain_ci, render_pass, [], [], [])
     update!(ws)
+    ws
 end
 
 """
@@ -62,7 +65,7 @@ mutable struct FrameState
 end
 
 function FrameState(device::Device, ws::WindowState)
-    max_in_flight = length(draw_cbs)
+    max_in_flight = length(ws.swapchain_ci.min_image_count)
     FrameState(
         device,
         ws,
@@ -70,6 +73,7 @@ function FrameState(device::Device, ws::WindowState)
         1,
         map(x -> Semaphore(device), 1:max_in_flight),
         map(x -> Semaphore(device), 1:max_in_flight),
+        max_in_flight
     )
 end
 

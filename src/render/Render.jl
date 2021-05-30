@@ -14,12 +14,20 @@ using ..GPU
 include("vertex.jl")
 include("renderer.jl")
 include("frames.jl")
+include("state.jl")
 
 export
     AbstractRenderer,
     BasicRenderer,
-
+    require_extension,
+    require_feature,
     submit,
-    present
+    present,
+
+    WindowState,
+    FrameState,
+    RenderState
+
+
 
 end # module

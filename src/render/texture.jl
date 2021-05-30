@@ -6,9 +6,6 @@ function render_texture(r::BasicRenderer, points, texture; width = 1000, height 
     device = r.device
     queue = r.queue
 
-    require_feature(r, :sampler_anisotropy)
-    require_extension(r, "VK_KHR_swapchain")
-
     props = get_physical_device_properties(device.physical_device)
 
     uv_coords = something(uv_coords, [Point2f((1 .+ coordinates(p)) / 2) for p ∈ points])
@@ -150,45 +147,6 @@ function render_texture(r::BasicRenderer, points, texture; width = 1000, height 
             ],
         ),
     )
-
-    # load texture into buffer
-    tdata = RGBA{Float16}.(load(texture))
-    tbuffer = Buffer(
-        device,
-        buffer_size(tdata),
-        BUFFER_USAGE_TRANSFER_DST_BIT | BUFFER_USAGE_TRANSFER_SRC_BIT,
-        SHARING_MODE_EXCLUSIVE,
-        [0],
-    )
-    tmemory = DeviceMemory(tbuffer, tdata)
-
-    # create texture image
-    timage_info = ImageCreateInfo(
-        IMAGE_TYPE_2D,
-        format,
-        Extent3D(size(tdata)..., 1),
-        1,
-        1,
-        SAMPLE_COUNT_1_BIT,
-        IMAGE_TILING_OPTIMAL,
-        IMAGE_USAGE_TRANSFER_DST_BIT | IMAGE_USAGE_SAMPLED_BIT,
-        SHARING_MODE_EXCLUSIVE,
-        [0],
-        IMAGE_LAYOUT_UNDEFINED,
-    )
-    timage = Image(ImageCreateInfo())
-    timage_memory = DeviceMemory(timage, MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-    tresource = GPUResource(timage, timage_memory)
-
-    command_pool = CommandPool(device, 0)
-
-    # upload texture to image
-    cbuffer, _... = unwrap(
-        allocate_command_buffers(device, CommandBufferAllocateInfo(command_pool, COMMAND_BUFFER_LEVEL_PRIMARY, 1)),
-    )
-
-    tuploaded = Fence(device)
-    unwrap(queue_submit(queue, [SubmitInfo([], [], [cbuffer], [])]; fence = tuploaded))
 
     timage_view = ImageView(
         timage.device,

@@ -10,13 +10,18 @@ struct BasicRenderer <: AbstractRenderer
     queue::DeviceQueueInfo2
     wh::XWindowHandler
     gpu::GPUState
-    command_pool::CommandPool
 end
 
 require_feature(r, feature) = getproperty(r.device_ci.enabled_features, feature) || error("Feature '$feature' required but not enabled.")
 require_extension(r, ext) = string(ext) in r.device_ci.enabled_extension_names || error("Extension '$ext' required but not enabled.")
 
-function BasicRenderer(instance_extensions, device_features::PhysicalDeviceFeatures, device_extensions, wh::XWindowHandler)
+function BasicRenderer(
+        instance_extensions,
+        device_features::PhysicalDeviceFeatures,
+        device_extensions,
+        wh::XWindowHandler
+    )
+
     device, device_ci = init(;
         instance_extensions,
         device_extensions,
@@ -24,8 +29,9 @@ function BasicRenderer(instance_extensions, device_features::PhysicalDeviceFeatu
         nqueues = 1
     )
     surface = unwrap(create_xcb_surface_khr(device.physical_device.instance, XcbSurfaceCreateInfoKHR(wh.conn.h, wh.windows[1].id)))
-    command_pool = CommandPool(device, 0)
-    r = BasicRenderer(device, device_ci, surface, DeviceQueueInfo2(first(device_ci.queue_create_infos).queue_family_index, 0), wh, GPUState(), command_pool)
+
+    gpu = GPUState(command_pools = Dict(:primary => CommandPool(device, 0)))
+    r = BasicRenderer(device, device_ci, surface, DeviceQueueInfo2(first(device_ci.queue_create_infos).queue_family_index, 0), wh, gpu)
     can_present(r) || error("Presentation not supported for physical device $physical_device")
     r
 end

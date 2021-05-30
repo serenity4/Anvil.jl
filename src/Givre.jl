@@ -23,6 +23,8 @@ using .Render
 include("utils.jl")
 include("widgets.jl")
 include("app.jl")
+include("noise.jl")
+include("render.jl")
 
 export
     Application,
