@@ -24,8 +24,8 @@ function __init__()
         default_debug_callback,
         UInt32,
         (
-            VkDebugUtilsMessageSeverityFlagBitsEXT,
-            VkDebugUtilsMessageTypeFlagBitsEXT,
+            DebugUtilsMessageSeverityFlagEXT,
+            DebugUtilsMessageTypeFlagEXT,
             Ptr{vk.VkDebugUtilsMessengerCallbackDataEXT},
             Ptr{Cvoid},
         )

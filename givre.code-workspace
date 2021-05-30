@@ -1,0 +1,13 @@
+{
+    "folders": [
+        {
+            "path": ".",
+        },
+        {
+            "path": "../VulkanExamples"
+        }
+    ],
+    "settings": {
+        "julia.environmentPath": "/home/belmant/.julia/dev/Givre"
+    }
+}

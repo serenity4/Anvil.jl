@@ -23,7 +23,7 @@ Vulkan.VertexInputAttributeDescription(::Type{T}, binding) where {T<:VertexData}
 Vulkan.VertexInputBindingDescription(
     ::Type{T},
     binding;
-    input_rate = VK_VERTEX_INPUT_RATE_VERTEX,
+    input_rate = VERTEX_INPUT_RATE_VERTEX,
 ) where {T<:VertexData} = VertexInputBindingDescription(binding, sizeof(T), input_rate)
 
 function invert_y_axis(p::Point)
@@ -33,10 +33,10 @@ end
 
 function vk.VkFormat(::Type{T}) where {T}
     @match T begin
-        &Point1f => VK_FORMAT_R32_SFLOAT
-        &Point2f => VK_FORMAT_R32G32_SFLOAT
-        &Point3f || &RGB{Float16} => VK_FORMAT_R32G32B32_SFLOAT
-        &Point4f || &RGBA{Float32} => VK_FORMAT_R32G32B32A32_SFLOAT
-        &RGBA{Float16} => VK_FORMAT_R16G16B16A16_SFLOAT
+        &Point1f => FORMAT_R32_SFLOAT
+        &Point2f => FORMAT_R32G32_SFLOAT
+        &Point3f || &RGB{Float16} => FORMAT_R32G32B32_SFLOAT
+        &Point4f || &RGBA{Float32} => FORMAT_R32G32B32A32_SFLOAT
+        &RGBA{Float16} => FORMAT_R16G16B16A16_SFLOAT
     end
 end
