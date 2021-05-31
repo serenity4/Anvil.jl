@@ -45,25 +45,6 @@ function render_texture(r::BasicRenderer, points, texture; width = 1000, height 
         ],
     )
 
-    capabilities = unwrap(get_physical_device_surface_capabilities_2_khr(device.physical_device, PhysicalDeviceSurfaceInfo2KHR(surface)))
-
-    swapchain = unwrap(create_swapchain_khr(
-        device,
-        r.surface,
-        3,
-        format,
-        COLOR_SPACE_SRGB_NONLINEAR_KHR,
-        capabilities.current_extent,
-        1,
-        IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        SHARING_MODE_EXCLUSIVE,
-        [],
-        capabilities.current_transform,
-        COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        PRESENT_MODE_IMMEDIATE_KHR,
-        false,
-    ))
-
     ws = WindowState(swapchain, render_pass)
 
     # prepare vertex and index data
