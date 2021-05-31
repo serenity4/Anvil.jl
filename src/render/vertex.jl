@@ -16,7 +16,7 @@ Vulkan.VertexInputAttributeDescription(::Type{T}, binding) where {T<:VertexData}
     VertexInputAttributeDescription.(
         0:fieldcount(T)-1,
         binding,
-        VkFormat.(fieldtypes(T)),
+        Format.(fieldtypes(T)),
         fieldoffset.(T, 1:fieldcount(T)),
     )
 
@@ -31,7 +31,7 @@ function invert_y_axis(p::Point)
     typeof(p)(coords)
 end
 
-function vk.VkFormat(::Type{T}) where {T}
+function Vulkan.Format(::Type{T}) where {T}
     @match T begin
         &Point1f => FORMAT_R32_SFLOAT
         &Point2f => FORMAT_R32G32_SFLOAT

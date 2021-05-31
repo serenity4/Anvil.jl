@@ -1,6 +1,7 @@
 module Givre
 
 using Vulkan
+using VulkanShaders
 using XCB
 using MLStyle
 using UnPack
@@ -24,6 +25,7 @@ include("utils.jl")
 include("widgets.jl")
 include("app.jl")
 include("noise.jl")
+include("texture.jl")
 include("render.jl")
 
 export

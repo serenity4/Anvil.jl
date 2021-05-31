@@ -1,14 +1,15 @@
 mutable struct ApplicationState
     resolution::NTuple{2,Int}
     scale::NTuple{2,Int}
+    position::NTuple{2,Int}
     noise::Matrix{Float64}
-    gpu::GPUState
+    gpu::GPUState # mostly for compute shaders
 end
 
-ApplicationState(resolution, scale) = ApplicationState(resolution, scale, zeros(resolution...), GPUState())
+ApplicationState(resolution, scale, position) = ApplicationState(resolution, scale, position, zeros(resolution...), GPUState())
 
-function ApplicationState()
-    app = ApplicationState((512, 512), (4, 4))
+function ApplicationState(position=(0,0))
+    app = ApplicationState((512, 512), (4, 4), position)
     update!(app)
     app
 end
@@ -20,13 +21,20 @@ struct Application{WH<:AbstractWindowHandler}
     wm::WH
     widgets::Vector{<:Widget}
     state::ApplicationState
-    rdr::Optional{BasicRenderer}
 end
 
-function Base.run(app::Application, mode::ExecutionMode = Synchronous())#, r::Renderer)
-    run(app.wm, mode)#; on_iter_last = () -> execute_draws(r))
-    gpu = app.state.gpu
-    GC.@preserve gpu device_wait_idle(app.rdr.device)
+function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=true)
+    if render
+        rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], app.wm)
+        rstate = render_state(rdr)
+        initialize!(rdr, app.state)
+        rdr.gpu.pipelines[:perlin] = create_pipeline(rdr, rstate, app.state)
+        run(app.wm, mode; on_iter_last = () -> next_frame!(rstate.frame, rdr, app.state))
+        gpu = app.state.gpu
+        GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)
+    else
+        run(app.wm, mode)
+    end
 end
 
 function on_button_pressed(details::EventDetails)
@@ -42,7 +50,7 @@ const key_mappings = Dict{KeyCombination,Any}(
     key"ctrl+q" => (ev, _) -> throw(CloseWindow(ev.win, "Received closing request from user input")),
 )
 
-function Application(; render=true)
+function Application()
     connection = Connection()
     setup = Setup(connection)
     iter = XCB.xcb_setup_roots_iterator(setup)
@@ -52,14 +60,6 @@ function Application(; render=true)
 
     wh = XWindowHandler(connection, [win])
     app_state = ApplicationState()
-
-    if render
-        rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], wh)
-        state = render_state(rdr)
-        initialize!(rdr, app_state)
-    else
-        rdr = nothing
-    end
 
     function on_key_pressed(details::EventDetails)
         @unpack win, data = details
@@ -73,7 +73,8 @@ function Application(; render=true)
 
     set_callbacks!(wh, win, WindowCallbacks(;
         on_key_pressed,
+        on_mouse_button_pressed = ed::EventDetails -> app_state.position = ed.location
     ))
 
-    Application(wh, Widget[], app_state, rdr)
+    Application(wh, Widget[], app_state)
 end

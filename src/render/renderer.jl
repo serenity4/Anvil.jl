@@ -10,6 +10,7 @@ struct BasicRenderer <: AbstractRenderer
     queue::DeviceQueueInfo2
     wh::XWindowHandler
     gpu::GPUState
+    shaders::Dict{Symbol,Shader}
 end
 
 require_feature(r, feature) = getproperty(r.device_ci.enabled_features, feature) || error("Feature '$feature' required but not enabled.")
@@ -31,7 +32,7 @@ function BasicRenderer(
     surface = unwrap(create_xcb_surface_khr(device.physical_device.instance, XcbSurfaceCreateInfoKHR(wh.conn.h, wh.windows[1].id)))
 
     gpu = GPUState(command_pools = Dict(:primary => CommandPool(device, 0)))
-    r = BasicRenderer(device, device_ci, surface, DeviceQueueInfo2(first(device_ci.queue_create_infos).queue_family_index, 0), wh, gpu)
+    r = BasicRenderer(device, device_ci, surface, DeviceQueueInfo2(first(device_ci.queue_create_infos).queue_family_index, 0), wh, gpu, Dict())
     can_present(r) || error("Presentation not supported for physical device $physical_device")
     r
 end

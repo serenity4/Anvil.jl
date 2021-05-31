@@ -26,7 +26,12 @@ export
 
     WindowState,
     FrameState,
-    RenderState
+    RenderState,
+    command_buffers,
+    next_frame!,
+
+    PosColor,
+    PosUV
 
 
 

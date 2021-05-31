@@ -1,11 +1,13 @@
 """
 Application-owned resource hosted in-memory on the GPU.
 """
-mutable struct GPUResource{R<:Handle,I}
+mutable struct GPUResource{R<:Handle,M,I}
     resource::R
-    memory::DeviceMemory
+    memory::M
     info::I
 end
+
+GPUResource(resource, memory) = GPUResource(resource, memory, nothing)
 
 Base.@kwdef struct GPUState
     images::Dict{Symbol,GPUResource{Image}} = Dict()
@@ -18,6 +20,7 @@ Base.@kwdef struct GPUState
     descriptor_set_layouts::Dict{Symbol,DescriptorSetLayout} = Dict()
     image_views::Dict{Symbol,ImageView} = Dict()
     samplers::Dict{Symbol,Sampler} = Dict()
+    pipelines::Dict{Symbol,GPUResource{Pipeline}} = Dict()
 end
 
 function Base.show(io::IO, gpu::GPUState)

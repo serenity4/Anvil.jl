@@ -50,7 +50,18 @@ function initialize!(rdr::BasicRenderer, app::ApplicationState)
         BORDER_COLOR_FLOAT_OPAQUE_BLACK,
         false,
     )
-    initialize_descriptor_sets!(rdr, app)
+    # prepare shaders
+    rdr.shaders[:vert] = Shader(rdr.device, ShaderFile(joinpath(@__DIR__, "shaders", "texture_2d.vert"), FormatGLSL()), DescriptorBinding[])
+    rdr.shaders[:frag] = Shader(
+        rdr.device,
+        ShaderFile(joinpath(@__DIR__, "shaders", "texture_2d.frag"), FormatGLSL()),
+        [DescriptorBinding(DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, 1)],
+    )
+
+    initialize_descriptor_sets!(rdr)
+    tex = Texture2D()
+    rdr.gpu.buffers[:vertex] = vertex_buffer(tex, rdr)
+
     upload!(rdr, app)
 end
 
@@ -110,7 +121,25 @@ function render_state(rdr::BasicRenderer)
     RenderState(rdr, render_pass, swapchain_ci)
 end
 
-function initialize_descriptor_sets!(rdr::BasicRenderer, app::ApplicationState)
+function initialize_descriptor_sets!(rdr::BasicRenderer)
+    dset_layouts = create_descriptor_set_layouts([rdr.shaders[:vert], rdr.shaders[:frag]])
+    dsets = unwrap(allocate_descriptor_sets(rdr.device, DescriptorSetAllocateInfo(rdr.gpu.descriptor_pools[:sampler], dset_layouts)))
+    update_descriptor_sets(
+        rdr.device,
+        [
+            WriteDescriptorSet(
+                first(dsets),
+                1,
+                0,
+                DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                [DescriptorImageInfo(rdr.gpu.samplers[:perlin], rdr.gpu.image_views[:perlin], IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)],
+                [],
+                [],
+            ),
+        ],
+        [],
+    )
+    rdr.gpu.descriptor_sets[:perlin] = first(dsets)
 end
 
 function upload!(rdr::BasicRenderer, app::ApplicationState)
@@ -129,7 +158,6 @@ function upload!(rdr::BasicRenderer, app::ApplicationState)
     app.gpu.buffers[:staging] = local_resource
 
     # upload
-    app.gpu.semaphores[:is_uploaded] = Semaphore(rdr.device)
     image = rdr.gpu.images[:perlin].resource
     cbuffer, _... = unwrap(
         allocate_command_buffers(rdr.device, CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)),
@@ -190,7 +218,6 @@ function upload!(rdr::BasicRenderer, app::ApplicationState)
     end
 
     transfer = CommandBufferSubmitInfoKHR(cbuffer, 0)
-    upload_signal = SemaphoreSubmitInfoKHR(app.gpu.semaphores[:is_uploaded], 0, 0; stage_mask = PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR)
-    submit(rdr, [SubmitInfo2KHR([], [transfer], [upload_signal])])
+    submit(rdr, [SubmitInfo2KHR([], [transfer], [])])
     @debug "Noise texture transfer submitted"
 end

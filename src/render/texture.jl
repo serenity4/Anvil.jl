@@ -12,50 +12,10 @@ function render_texture(r::BasicRenderer, points, texture; width = 1000, height 
     VertexType = PosUV{eltype(points),eltype(uv_coords)}
     format = FORMAT_R16G16B16A16_SFLOAT
 
-    # define render pass
-    target_attachment = AttachmentDescription(
-        format,
-        SAMPLE_COUNT_1_BIT,
-        ATTACHMENT_LOAD_OP_CLEAR,
-        ATTACHMENT_STORE_OP_STORE,
-        ATTACHMENT_LOAD_OP_DONT_CARE,
-        ATTACHMENT_STORE_OP_DONT_CARE,
-        IMAGE_LAYOUT_UNDEFINED,
-        IMAGE_LAYOUT_PRESENT_SRC_KHR,
-    )
-    render_pass = RenderPass(
-        device,
-        [target_attachment],
-        [
-            SubpassDescription(
-                PIPELINE_BIND_POINT_GRAPHICS,
-                [],
-                [AttachmentReference(0, IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR)],
-                [],
-            ),
-        ],
-        [
-            SubpassDependency(
-                vk.VK_SUBPASS_EXTERNAL,
-                0;
-                src_stage_mask = PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                dst_stage_mask = PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                dst_access_mask = ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-            ),
-        ],
-    )
-
-    ws = WindowState(swapchain, render_pass)
-
     # prepare vertex and index data
     p = PolyArea(Meshes.CircularVector(points))
     mesh = discretize(p, FIST())
     vdata = VertexType.(points, uv_coords)
-
-    # prepare vertex buffer
-    vbuffer = Buffer(device, buffer_size(vdata), BUFFER_USAGE_VERTEX_BUFFER_BIT, SHARING_MODE_EXCLUSIVE, [0])
-    vmemory = DeviceMemory(vbuffer, vdata)
-    vresource = GPUResource(vbuffer, vmemory)
 
     # prepare shaders
     vert_shader = Shader(device, ShaderFile(joinpath(@__DIR__, "texture_2d.vert"), FormatGLSL()), DescriptorBinding[])
@@ -129,54 +89,8 @@ function render_texture(r::BasicRenderer, points, texture; width = 1000, height 
         ),
     )
 
-    timage_view = ImageView(
-        timage.device,
-        timage,
-        IMAGE_VIEW_TYPE_2D,
-        format,
-        ComponentMapping(fill(COMPONENT_SWIZZLE_IDENTITY, 4)...),
-        ImageSubresourceRange(IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-    )
-
-    tsampler = Sampler(
-        device,
-        FILTER_LINEAR,
-        FILTER_LINEAR,
-        SAMPLER_MIPMAP_MODE_LINEAR,
-        SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        0,
-        true,
-        props.limits.max_sampler_anisotropy,
-        false,
-        COMPARE_OP_ALWAYS,
-        0,
-        0,
-        BORDER_COLOR_FLOAT_OPAQUE_BLACK,
-        false,
-    )
-
     command_buffer, _... = unwrap(
         allocate_command_buffers(device, CommandBufferAllocateInfo(command_pool, COMMAND_BUFFER_LEVEL_PRIMARY, 1)),
-    )
-
-    descriptor_pool = DescriptorPool(device, 1, [DescriptorPoolSize(DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)])
-    dsets = unwrap(allocate_descriptor_sets(device, DescriptorSetAllocateInfo(descriptor_pool, dset_layouts)))
-    update_descriptor_sets(
-        device,
-        [
-            WriteDescriptorSet(
-                first(dsets),
-                1,
-                0,
-                DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                [DescriptorImageInfo(tsampler, timage_view, IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)],
-                [],
-                [],
-            ),
-        ],
-        [],
     )
 
     begin_command_buffer(command_buffer, CommandBufferBeginInfo())
