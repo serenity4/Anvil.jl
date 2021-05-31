@@ -28,8 +28,8 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=
         rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], app.wm)
         rstate = render_state(rdr)
         initialize!(rdr, app.state)
-        rdr.gpu.pipelines[:perlin] = create_pipeline(rdr, rstate, app.state)
-        run(app.wm, mode; on_iter_last = () -> next_frame!(rstate.frame, rdr, app.state))
+        rdr.gpu.pipelines[:perlin] = create_pipeline(rdr, rstate, app)
+        run(app.wm, mode; on_iter_last = () -> next_frame!(rstate.frame, rdr, app))
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)
     else
