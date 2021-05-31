@@ -55,18 +55,8 @@ function Application(; render=true)
 
     if render
         rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], wh)
-        attachment = AttachmentDescription(
-            FORMAT_R16G16B16A16_SFLOAT,
-            SAMPLE_COUNT_1_BIT,
-            ATTACHMENT_LOAD_OP_CLEAR,
-            ATTACHMENT_STORE_OP_STORE,
-            ATTACHMENT_LOAD_OP_DONT_CARE,
-            ATTACHMENT_STORE_OP_DONT_CARE,
-            IMAGE_LAYOUT_UNDEFINED,
-            IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        )
-        state = render_state(rdr, attachment)
-        initialize!(rdr, app_state, attachment)
+        state = render_state(rdr)
+        initialize!(rdr, app_state)
     else
         rdr = nothing
     end

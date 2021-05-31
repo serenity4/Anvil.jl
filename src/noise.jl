@@ -1,13 +1,13 @@
 update!(app::ApplicationState) = app.noise = perlin(app.resolution, app.scale)
 
-function initialize!(rdr::BasicRenderer, app::ApplicationState, attachment::AttachmentDescription)
+function initialize!(rdr::BasicRenderer, app::ApplicationState)
     # quick checks
     require_feature(rdr, :sampler_anisotropy)
     require_extension(rdr, "VK_KHR_swapchain")
 
     info = ImageCreateInfo(
         IMAGE_TYPE_2D,
-        attachment.format,
+        FORMAT_R16G16B16A16_SFLOAT,
         Extent3D(app.resolution..., 1),
         1,
         1,
@@ -54,10 +54,20 @@ function initialize!(rdr::BasicRenderer, app::ApplicationState, attachment::Atta
     upload!(rdr, app)
 end
 
-function render_state(rdr::BasicRenderer, attachment::AttachmentDescription)
+function render_state(rdr::BasicRenderer)
     SurfaceFormatKHR
     surface_formats = unwrap(get_physical_device_surface_formats_khr(rdr.device.physical_device, rdr.surface))
     format = first(surface_formats)
+    attachment = AttachmentDescription(
+        format.format,
+        SAMPLE_COUNT_1_BIT,
+        ATTACHMENT_LOAD_OP_CLEAR,
+        ATTACHMENT_STORE_OP_STORE,
+        ATTACHMENT_LOAD_OP_DONT_CARE,
+        ATTACHMENT_STORE_OP_DONT_CARE,
+        IMAGE_LAYOUT_UNDEFINED,
+        IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    )
     capabilities = unwrap(get_physical_device_surface_capabilities_khr(rdr.device.physical_device, rdr.surface))
     swapchain_ci = SwapchainCreateInfoKHR(
         rdr.surface,
