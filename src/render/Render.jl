@@ -29,6 +29,7 @@ export
     RenderState,
     command_buffers,
     next_frame!,
+    wait_hasrendered,
 
     PosColor,
     PosUV

@@ -61,6 +61,7 @@ mutable struct FrameState
     img_idx::Int
     img_rendered::Vector{Semaphore}
     img_acquired::Vector{Semaphore}
+    hasrendered::Vector{Fence}
     max_in_flight::Int
 end
 
@@ -73,7 +74,8 @@ function FrameState(device::Device, ws::WindowState)
         1,
         map(x -> Semaphore(device), 1:max_in_flight),
         map(x -> Semaphore(device), 1:max_in_flight),
-        max_in_flight
+        map(x -> Fence(device; flags=FENCE_CREATE_SIGNALED_BIT), 1:max_in_flight),
+        max_in_flight,
     )
 end
 
@@ -101,7 +103,9 @@ function next_frame!(fs::FrameState, rdr::BasicRenderer, app)
         img_acquired_info = SemaphoreSubmitInfoKHR(fs.img_acquired[old_idx], 0, 0; stage_mask=PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
         img_rendered_info = SemaphoreSubmitInfoKHR(fs.img_rendered[fs.img_idx], 0, 0; stage_mask=PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
         render_info = SubmitInfo2KHR([img_acquired_info], CommandBufferSubmitInfoKHR.(cbuffs, 0), [img_rendered_info])
-        submit(rdr, [render_info])
+        wait_for_fences(fs.device, [fs.hasrendered[fs.img_idx]], false, 10_000_000_000)
+        reset_fences(fs.device, [fs.hasrendered[fs.img_idx]])
+        submit(rdr, [render_info]; fence = fs.hasrendered[fs.img_idx])
 
         # submit presentation commands
         present_info = PresentInfoKHR([fs.img_rendered[fs.img_idx]], [swapchain], [fs.img_idx - 1])
@@ -118,4 +122,8 @@ function next_frame!(fs::FrameState, rdr::BasicRenderer, app)
             next_frame!(fs, rdr, app)
         end
     end
+end
+
+function wait_hasrendered(fs::FrameState)
+    wait_for_fences(fs.device, fs.hasrendered, true, 10_000_000_000)
 end

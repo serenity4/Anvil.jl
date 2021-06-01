@@ -4,10 +4,10 @@ mutable struct ApplicationState
     position::NTuple{2,Int}
     noise::Matrix{Float64}
     gpu::GPUState # mostly for compute shaders
-    update_rdr::Function
+    haschanged::Bool
 end
 
-ApplicationState(resolution, scale, position) = ApplicationState(resolution, scale, position, zeros(resolution...), GPUState(), identity)
+ApplicationState(resolution, scale, position) = ApplicationState(resolution, scale, position, zeros(resolution...), GPUState(), false)
 
 function ApplicationState(position=(0,0))
     app = ApplicationState((512, 512), (4, 4), position)
@@ -30,8 +30,14 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=
         rstate = render_state(rdr)
         initialize!(rdr, app.state)
         rdr.gpu.pipelines[:perlin] = create_pipeline(rdr, rstate, app)
-        app.state.update_rdr = () -> update_texture_resources!(rdr, app.state)
-        run(app.wm, mode; on_iter_last = () -> next_frame!(rstate.frame, rdr, app))
+        run(app.wm, mode; on_iter_last = () -> begin
+            if app.state.haschanged
+                wait_hasrendered(rstate.frame)
+                update_texture_resources!(rdr, app.state)
+                app.state.haschanged = false
+            end
+            next_frame!(rstate.frame, rdr, app)
+        end)
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)
     else
@@ -59,13 +65,25 @@ function Application()
     wh = XWindowHandler(connection, [win])
     app_state = ApplicationState()
 
+    _update! = app_state -> begin
+        update!(app_state)
+        app_state.haschanged = true
+    end
+
     key_mappings = Dict{KeyCombination,Any}(
         key"ctrl+q" => (ev, _) -> throw(CloseWindow(ev.win, "Received closing request from user input")),
         key"s" => (_, _) -> begin
             app_state.scale = app_state.scale .+ 2
-            update!(app_state)
-            app_state.update_rdr()
-        end
+            _update!(app_state)
+        end,
+        key"j" => (_, _) -> begin
+            app_state.resolution = app_state.resolution .+ 50
+            _update!(app_state)
+        end,
+        key"k" => (_, _) -> begin
+            app_state.resolution = app_state.resolution .- 50
+            _update!(app_state)
+        end,
     )
 
     function on_key_pressed(details::EventDetails)
