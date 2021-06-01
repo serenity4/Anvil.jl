@@ -4,9 +4,10 @@ mutable struct ApplicationState
     position::NTuple{2,Int}
     noise::Matrix{Float64}
     gpu::GPUState # mostly for compute shaders
+    update_rdr::Function
 end
 
-ApplicationState(resolution, scale, position) = ApplicationState(resolution, scale, position, zeros(resolution...), GPUState())
+ApplicationState(resolution, scale, position) = ApplicationState(resolution, scale, position, zeros(resolution...), GPUState(), identity)
 
 function ApplicationState(position=(0,0))
     app = ApplicationState((512, 512), (4, 4), position)
@@ -29,6 +30,7 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=
         rstate = render_state(rdr)
         initialize!(rdr, app.state)
         rdr.gpu.pipelines[:perlin] = create_pipeline(rdr, rstate, app)
+        app.state.update_rdr = () -> update_texture_resources!(rdr, app.state)
         run(app.wm, mode; on_iter_last = () -> next_frame!(rstate.frame, rdr, app))
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)
@@ -46,10 +48,6 @@ function on_button_pressed(details::EventDetails)
     @info "$click at $x, $y $printed_state"
 end
 
-const key_mappings = Dict{KeyCombination,Any}(
-    key"ctrl+q" => (ev, _) -> throw(CloseWindow(ev.win, "Received closing request from user input")),
-)
-
 function Application()
     connection = Connection()
     setup = Setup(connection)
@@ -60,6 +58,15 @@ function Application()
 
     wh = XWindowHandler(connection, [win])
     app_state = ApplicationState()
+
+    key_mappings = Dict{KeyCombination,Any}(
+        key"ctrl+q" => (ev, _) -> throw(CloseWindow(ev.win, "Received closing request from user input")),
+        key"s" => (_, _) -> begin
+            app_state.scale = app_state.scale .+ 2
+            update!(app_state)
+            app_state.update_rdr()
+        end
+    )
 
     function on_key_pressed(details::EventDetails)
         @unpack win, data = details

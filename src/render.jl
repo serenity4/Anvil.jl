@@ -4,7 +4,7 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
     )
     @record command_buffer begin
         cmd_bind_vertex_buffers([rdr.gpu.buffers[:vertex].resource], [0])
-        cmd_bind_descriptor_sets(PIPELINE_BIND_POINT_GRAPHICS, rdr.gpu.pipelines[:perlin].info.layout, 0, [rdr.gpu.descriptor_sets[:perlin]], Int[])
+        cmd_bind_descriptor_sets(PIPELINE_BIND_POINT_GRAPHICS, rdr.gpu.pipelines[:perlin].info.layout, 0, [rdr.gpu.descriptor_sets[:perlin_sampler]], Int[])
         cmd_bind_pipeline(PIPELINE_BIND_POINT_GRAPHICS, rdr.gpu.pipelines[:perlin].resource)
         cmd_set_viewport([Viewport(app.state.position..., app.state.resolution..., 0, 1)])
         cmd_begin_render_pass(
@@ -67,7 +67,7 @@ function create_pipeline(rdr::BasicRenderer, rstate::RenderState, app::Applicati
         Float32.((0.0, 0.0, 0.0, 0.0)),
     )
     dynamic_state = PipelineDynamicStateCreateInfo([DYNAMIC_STATE_VIEWPORT])
-    pipeline_layout = PipelineLayout(device, create_descriptor_set_layouts(shaders), [])
+    pipeline_layout = PipelineLayout(device, [rdr.gpu.descriptor_set_layouts[:perlin_sampler]], [])
     info = GraphicsPipelineCreateInfo(
         shader_stage_cis,
         rasterizer,

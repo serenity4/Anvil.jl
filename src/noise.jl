@@ -1,55 +1,33 @@
-update!(app::ApplicationState) = app.noise = perlin(app.resolution, app.scale)
+function update!(app::ApplicationState)
+    app.noise = perlin(app.resolution, app.scale)
+end
+
+function texture_data(app::ApplicationState)
+    noise_data = remap(app.noise, (0., 1.))
+    RGBA{Float16}.(noise_data, noise_data, noise_data, 1.)
+end
+
+function create_staging_buffer!(app::ApplicationState, rdr::AbstractRenderer)
+    # initialize local buffer
+    info = BufferCreateInfo(
+        buffer_size(app.noise),
+        BUFFER_USAGE_TRANSFER_DST_BIT | BUFFER_USAGE_TRANSFER_SRC_BIT,
+        SHARING_MODE_EXCLUSIVE,
+        [0],
+    )
+    local_buffer = unwrap(create_buffer(rdr.device, info))
+    local_memory = DeviceMemory(local_buffer, texture_data(app))
+    local_resource = GPUResource(local_buffer, local_memory, info)
+    app.gpu.buffers[:staging] = local_resource
+end
 
 function initialize!(rdr::BasicRenderer, app::ApplicationState)
     # quick checks
     require_feature(rdr, :sampler_anisotropy)
     require_extension(rdr, "VK_KHR_swapchain")
 
-    info = ImageCreateInfo(
-        IMAGE_TYPE_2D,
-        FORMAT_R16G16B16A16_SFLOAT,
-        Extent3D(app.resolution..., 1),
-        1,
-        1,
-        SAMPLE_COUNT_1_BIT,
-        IMAGE_TILING_OPTIMAL,
-        IMAGE_USAGE_TRANSFER_DST_BIT | IMAGE_USAGE_SAMPLED_BIT,
-        SHARING_MODE_EXCLUSIVE,
-        [0],
-        IMAGE_LAYOUT_UNDEFINED,
-    )
-    image = unwrap(create_image(rdr.device, info))
-    memory = DeviceMemory(image, MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-    perlin = GPUResource(image, memory, info)
-    rdr.gpu.images[:perlin] = perlin
     rdr.gpu.descriptor_pools[:sampler] = DescriptorPool(rdr.device, 1, [DescriptorPoolSize(DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)])
-    rdr.gpu.image_views[:perlin] = ImageView(
-        rdr.device,
-        image,
-        IMAGE_VIEW_TYPE_2D,
-        info.format,
-        ComponentMapping(fill(COMPONENT_SWIZZLE_IDENTITY, 4)...),
-        ImageSubresourceRange(IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
-    )
-    props = get_physical_device_properties(rdr.device.physical_device)
-    rdr.gpu.samplers[:perlin] = Sampler(
-        rdr.device,
-        FILTER_LINEAR,
-        FILTER_LINEAR,
-        SAMPLER_MIPMAP_MODE_LINEAR,
-        SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
-        0,
-        true,
-        props.limits.max_sampler_anisotropy,
-        false,
-        COMPARE_OP_ALWAYS,
-        0,
-        0,
-        BORDER_COLOR_FLOAT_OPAQUE_BLACK,
-        false,
-    )
+
     # prepare shaders
     rdr.shaders[:vert] = Shader(rdr.device, ShaderFile(joinpath(@__DIR__, "shaders", "texture_2d.vert"), FormatGLSL()), DescriptorBinding[])
     rdr.shaders[:frag] = Shader(
@@ -58,11 +36,10 @@ function initialize!(rdr::BasicRenderer, app::ApplicationState)
         [DescriptorBinding(DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, 1)],
     )
 
-    initialize_descriptor_sets!(rdr)
+    create_descriptor_sets!(rdr)
+    update_texture_resources!(rdr, app)
     tex = Texture2D()
     rdr.gpu.buffers[:vertex] = vertex_buffer(tex, rdr)
-
-    upload!(rdr, app)
 end
 
 function render_state(rdr::BasicRenderer)
@@ -121,14 +98,19 @@ function render_state(rdr::BasicRenderer)
     RenderState(rdr, render_pass, swapchain_ci)
 end
 
-function initialize_descriptor_sets!(rdr::BasicRenderer)
-    dset_layouts = create_descriptor_set_layouts([rdr.shaders[:vert], rdr.shaders[:frag]])
-    dsets = unwrap(allocate_descriptor_sets(rdr.device, DescriptorSetAllocateInfo(rdr.gpu.descriptor_pools[:sampler], dset_layouts)))
+function create_descriptor_sets!(rdr::BasicRenderer)
+    dset_layout, _... = create_descriptor_set_layouts([rdr.shaders[:vert], rdr.shaders[:frag]])
+    rdr.gpu.descriptor_set_layouts[:perlin_sampler] = dset_layout
+    dset, _... = unwrap(allocate_descriptor_sets(rdr.device, DescriptorSetAllocateInfo(rdr.gpu.descriptor_pools[:sampler], [dset_layout])))
+    rdr.gpu.descriptor_sets[:perlin_sampler] = dset
+end
+
+function Vulkan.update_descriptor_sets(rdr::BasicRenderer)
     update_descriptor_sets(
         rdr.device,
         [
             WriteDescriptorSet(
-                first(dsets),
+                rdr.gpu.descriptor_sets[:perlin_sampler],
                 1,
                 0,
                 DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -139,25 +121,66 @@ function initialize_descriptor_sets!(rdr::BasicRenderer)
         ],
         [],
     )
-    rdr.gpu.descriptor_sets[:perlin] = first(dsets)
+end
+
+function update_texture_resources!(rdr::BasicRenderer, app::ApplicationState)
+    # upload texture data to host-visible device memory
+    if !haskey(app.gpu.buffers, :staging) || buffer_size(app.noise) ≠ app.gpu.buffers[:staging].info.size
+        create_staging_buffer!(app, rdr)
+
+        info = ImageCreateInfo(
+            IMAGE_TYPE_2D,
+            FORMAT_R16G16B16A16_SFLOAT,
+            Extent3D(app.resolution..., 1),
+            1,
+            1,
+            SAMPLE_COUNT_1_BIT,
+            IMAGE_TILING_OPTIMAL,
+            IMAGE_USAGE_TRANSFER_DST_BIT | IMAGE_USAGE_SAMPLED_BIT,
+            SHARING_MODE_EXCLUSIVE,
+            [0],
+            IMAGE_LAYOUT_UNDEFINED,
+        )
+        image = unwrap(create_image(rdr.device, info))
+        memory = DeviceMemory(image, MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+        perlin = GPUResource(image, memory, info)
+        rdr.gpu.images[:perlin] = perlin
+        rdr.gpu.image_views[:perlin] = ImageView(
+            rdr.device,
+            image,
+            IMAGE_VIEW_TYPE_2D,
+            info.format,
+            ComponentMapping(fill(COMPONENT_SWIZZLE_IDENTITY, 4)...),
+            ImageSubresourceRange(IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
+        )
+        props = get_physical_device_properties(rdr.device.physical_device)
+        rdr.gpu.samplers[:perlin] = Sampler(
+            rdr.device,
+            FILTER_LINEAR,
+            FILTER_LINEAR,
+            SAMPLER_MIPMAP_MODE_LINEAR,
+            SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+            SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+            SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+            0,
+            true,
+            props.limits.max_sampler_anisotropy,
+            false,
+            COMPARE_OP_ALWAYS,
+            0,
+            0,
+            BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+            false,
+        )
+        update_descriptor_sets(rdr)
+    else
+        upload_data(app.gpu.buffers[:staging].memory, texture_data(app))
+    end
+    upload!(rdr, app)
 end
 
 function upload!(rdr::BasicRenderer, app::ApplicationState)
-    # create local buffer
-    local_buffer = Buffer(
-        rdr.device,
-        buffer_size(app.noise),
-        BUFFER_USAGE_TRANSFER_DST_BIT | BUFFER_USAGE_TRANSFER_SRC_BIT,
-        SHARING_MODE_EXCLUSIVE,
-        [0],
-    )
-    noise_data = remap(app.noise, (0., 1.))
-    local_data = RGBA{Float16}.(noise_data, noise_data, noise_data, 1.)
-    local_memory = DeviceMemory(local_buffer, local_data)
-    local_resource = GPUResource(local_buffer, local_memory, nothing)
-    app.gpu.buffers[:staging] = local_resource
-
-    # upload
+    # transfer host-visible memory to device-local image
     image = rdr.gpu.images[:perlin].resource
     cbuffer, _... = unwrap(
         allocate_command_buffers(rdr.device, CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)),
@@ -183,7 +206,7 @@ function upload!(rdr::BasicRenderer, app::ApplicationState)
             ],
         )
         cmd_copy_buffer_to_image(
-            local_buffer,
+            app.gpu.buffers[:staging].resource,
             image,
             IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             [
@@ -219,5 +242,4 @@ function upload!(rdr::BasicRenderer, app::ApplicationState)
 
     transfer = CommandBufferSubmitInfoKHR(cbuffer, 0)
     submit(rdr, [SubmitInfo2KHR([], [transfer], [])])
-    @debug "Noise texture transfer submitted"
 end
