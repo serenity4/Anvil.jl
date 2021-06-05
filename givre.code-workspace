@@ -4,6 +4,9 @@
             "path": ".",
         },
         {
+            "path": "../AbstractGUI"
+        },
+        {
             "path": "../VulkanExamples"
         }
     ],
