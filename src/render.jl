@@ -6,7 +6,6 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
         cmd_bind_vertex_buffers([rdr.gpu.buffers[:vertex].resource], [0])
         cmd_bind_descriptor_sets(PIPELINE_BIND_POINT_GRAPHICS, rdr.gpu.pipelines[:perlin].info.layout, 0, [rdr.gpu.descriptor_sets[:perlin_sampler]], Int[])
         cmd_bind_pipeline(PIPELINE_BIND_POINT_GRAPHICS, rdr.gpu.pipelines[:perlin].resource)
-        cmd_set_viewport([Viewport(app.state.position..., app.state.resolution..., 0, 1)])
         cmd_begin_render_pass(
             RenderPassBeginInfo(
                 frame.ws.render_pass,
@@ -34,7 +33,7 @@ function create_pipeline(rdr::BasicRenderer, rstate::RenderState, app::Applicati
     )
     input_assembly_state = PipelineInputAssemblyStateCreateInfo(PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false)
     viewport_state = PipelineViewportStateCreateInfo(
-        viewports = [Viewport(app.state.position..., app.state.resolution..., 0, 1)],
+        viewports = [Viewport(0, 0, extent(app.wm.windows[1])..., 0, 1)],
         scissors = [Rect2D(Offset2D(0, 0), Extent2D(extent(app.wm.windows[1])...))],
     )
     rasterizer = PipelineRasterizationStateCreateInfo(
@@ -66,7 +65,6 @@ function create_pipeline(rdr::BasicRenderer, rstate::RenderState, app::Applicati
         [color_blend_attachment],
         Float32.((0.0, 0.0, 0.0, 0.0)),
     )
-    dynamic_state = PipelineDynamicStateCreateInfo([DYNAMIC_STATE_VIEWPORT])
     pipeline_layout = PipelineLayout(device, [rdr.gpu.descriptor_set_layouts[:perlin_sampler]], [])
     info = GraphicsPipelineCreateInfo(
         shader_stage_cis,
@@ -80,7 +78,6 @@ function create_pipeline(rdr::BasicRenderer, rstate::RenderState, app::Applicati
         color_blend_state,
         input_assembly_state,
         viewport_state,
-        dynamic_state,
     )
     (pipeline, _...), _ = unwrap(
         create_graphics_pipelines(

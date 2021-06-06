@@ -6,10 +6,12 @@ using XCB
 using MLStyle
 using UnPack
 using AbstractGUI
-using Meshes
 using SignedDistanceFunctions
 using ColorTypes
 using ProceduralNoise
+using GeometryExperiments
+
+const Point2f = Point{2,Float32}
 
 import AbstractGUI: callbacks, vertex_data
 
@@ -25,7 +27,6 @@ include("utils.jl")
 include("widgets.jl")
 include("app.jl")
 include("noise.jl")
-include("texture.jl")
 include("render.jl")
 
 export

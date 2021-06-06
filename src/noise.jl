@@ -1,5 +1,6 @@
 function update!(app::ApplicationState)
     app.noise = perlin(app.resolution, app.scale)
+    app.haschanged = true
 end
 
 function texture_data(app::ApplicationState)
@@ -21,7 +22,7 @@ function create_staging_buffer!(app::ApplicationState, rdr::AbstractRenderer)
     app.gpu.buffers[:staging] = local_resource
 end
 
-function initialize!(rdr::BasicRenderer, app::ApplicationState)
+function initialize!(rdr::BasicRenderer, app::Application)
     # quick checks
     require_feature(rdr, :sampler_anisotropy)
     require_extension(rdr, "VK_KHR_swapchain")
@@ -37,9 +38,8 @@ function initialize!(rdr::BasicRenderer, app::ApplicationState)
     )
 
     create_descriptor_sets!(rdr)
-    update_texture_resources!(rdr, app)
-    tex = Texture2D()
-    rdr.gpu.buffers[:vertex] = vertex_buffer(tex, rdr)
+    update_texture_resources!(rdr, app.state)
+    recreate_widgets!(rdr, app)
 end
 
 function render_state(rdr::BasicRenderer)

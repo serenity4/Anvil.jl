@@ -1,7 +1,7 @@
 mutable struct ApplicationState
     resolution::NTuple{2,Int}
     scale::NTuple{2,Int}
-    position::NTuple{2,Int}
+    position::Point{2,Int}
     noise::Matrix{Float64}
     gpu::GPUState # mostly for compute shaders
     haschanged::Bool
@@ -9,7 +9,9 @@ end
 
 ApplicationState(resolution, scale, position) = ApplicationState(resolution, scale, position, zeros(resolution...), GPUState(), false)
 
-function ApplicationState(position=(0,0))
+haschanged(app::ApplicationState) = app.haschanged
+
+function ApplicationState(position=(1920/2,1080/2))
     app = ApplicationState((512, 512), (4, 4), position)
     update!(app)
     app
@@ -24,20 +26,37 @@ struct Application{WH<:AbstractWindowHandler}
     state::ApplicationState
 end
 
+"""
+Should I put widgets in some global state? What would it be then, a vector, dict?
+Also, it won't be very efficient, since all widgets will basically have a different type...
+"""
+function recreate_widgets!(rdr::BasicRenderer, app::Application)
+    empty!(app.widgets)
+    img = ImageWidget(app.state.position, (512, 512), (1., 1.))
+    if !haskey(rdr.gpu.buffers, :vertex)
+        rdr.gpu.buffers[:vertex] = vertex_buffer(img, rdr)
+    else
+        upload_data(rdr.gpu.buffers[:vertex].memory, vertex_data(img))
+    end
+    push!(app.widgets, img)
+end
+
 function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=true)
     if render
         rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], app.wm)
         rstate = render_state(rdr)
-        initialize!(rdr, app.state)
+        initialize!(rdr, app)
         rdr.gpu.pipelines[:perlin] = create_pipeline(rdr, rstate, app)
-        run(app.wm, mode; on_iter_last = () -> begin
-            if app.state.haschanged
-                wait_hasrendered(rstate.frame)
-                update_texture_resources!(rdr, app.state)
-                app.state.haschanged = false
-            end
-            next_frame!(rstate.frame, rdr, app)
-        end)
+        run(app.wm, mode;
+        on_iter_last = () -> begin
+                recreate_widgets!(rdr, app)
+                if haschanged(app.state)
+                    wait_hasrendered(rstate.frame)
+                    update_texture_resources!(rdr, app.state)
+                    app.state.haschanged = false
+                end
+                next_frame!(rstate.frame, rdr, app)
+            end)
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)
     else
@@ -98,7 +117,7 @@ function Application()
 
     set_callbacks!(wh, win, WindowCallbacks(;
         on_key_pressed,
-        on_mouse_button_pressed = ed::EventDetails -> app_state.position = ed.location
+        on_mouse_button_pressed = ed::EventDetails -> app_state.position = Point(ed.location)
     ))
 
     Application(wh, Widget[], app_state)

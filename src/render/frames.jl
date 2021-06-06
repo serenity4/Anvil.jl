@@ -21,7 +21,7 @@ function update!(ws::WindowState)
 
     if new_extent ≠ ws.swapchain_ci.image_extent # regenerate swapchain
         ws.swapchain_ci = setproperties(ws.swapchain_ci, old_swapchain=swapchain, image_extent=new_extent)
-        swapchain = unwrap(create_swapchain_khr(device, ws.swapchain_ci))
+        ws.swapchain = unwrap(create_swapchain_khr(device, ws.swapchain_ci))
     end
 
     fb_imgs = unwrap(get_swapchain_images_khr(device, swapchain))
@@ -41,7 +41,7 @@ function update!(ws::WindowState)
         Framebuffer(device, ws.render_pass, [view], new_extent.width, new_extent.height, 1)
     end
 
-    @pack! ws = swapchain, fb_imgs, fb_views, fbs
+    @pack! ws = fb_imgs, fb_views, fbs
 end
 
 function WindowState(swapchain::SwapchainKHR, swapchain_ci::SwapchainCreateInfoKHR, render_pass::RenderPass)

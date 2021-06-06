@@ -15,3 +15,4 @@ function vertex_data(w::SDFWidget{T}) where {T}
 end
 
 include("widgets/roundedbox.jl")
+include("widgets/image.jl")
