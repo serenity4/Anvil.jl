@@ -17,11 +17,11 @@ function ApplicationState(position=(1920/2,1080/2))
     app
 end
 
-struct Application{WH<:AbstractWindowHandler}
+struct Application{WM<:AbstractWindowManager}
     """
     Window manager. Only XCB is supported for now.
     """
-    wm::WH
+    wm::WM
     widgets::Vector{<:Widget}
     state::ApplicationState
 end
@@ -81,8 +81,9 @@ function Application()
 
     win = XCBWindow(connection, screen; x=20, y=20, width=1920, height=1080, border_width=50, window_title="Givre", icon_title="Givre", attributes=[XCB.XCB_CW_BACK_PIXEL], values=[screen.black_pixel])
 
-    wh = XWindowHandler(connection, [win])
+    wm = XWindowManager(connection, [win])
     app_state = ApplicationState()
+    app = Application(wm, Widget[], app_state)
 
     _update! = app_state -> begin
         update!(app_state)
@@ -107,7 +108,7 @@ function Application()
 
     function on_key_pressed(details::EventDetails)
         @unpack win, data = details
-        @info keystroke_info(wh.keymap, details)
+        @info keystroke_info(wm.keymap, details)
         @unpack key, modifiers = data
         kc = KeyCombination(key, modifiers)
         if haskey(key_mappings, kc)
@@ -115,10 +116,10 @@ function Application()
         end
     end
 
-    set_callbacks!(wh, win, WindowCallbacks(;
+    set_callbacks!(wm, win, WindowCallbacks(;
         on_key_pressed,
         on_mouse_button_pressed = ed::EventDetails -> app_state.position = Point(ed.location)
     ))
 
-    Application(wh, Widget[], app_state)
+    app
 end

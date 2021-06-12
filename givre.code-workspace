@@ -10,6 +10,12 @@
             "path": "../AbstractGUI"
         },
         {
+            "path": "../WindowAbstractions"
+        },
+        {
+            "path": "../XCB"
+        },
+        {
             "path": "../VulkanExamples"
         }
     ],

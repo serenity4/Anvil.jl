@@ -8,7 +8,7 @@ struct BasicRenderer <: AbstractRenderer
     device_ci::DeviceCreateInfo
     surface::SurfaceKHR
     queue::DeviceQueueInfo2
-    wh::XWindowHandler
+    wm::XWindowManager
     gpu::GPUState
     shaders::Dict{Symbol,Shader}
 end
@@ -20,7 +20,7 @@ function BasicRenderer(
         instance_extensions,
         device_features::PhysicalDeviceFeatures,
         device_extensions,
-        wh::XWindowHandler
+        wm::XWindowManager
     )
 
     device, device_ci = init(;
@@ -29,10 +29,10 @@ function BasicRenderer(
         enabled_features = device_features,
         nqueues = 1
     )
-    surface = unwrap(create_xcb_surface_khr(device.physical_device.instance, XcbSurfaceCreateInfoKHR(wh.conn.h, wh.windows[1].id)))
+    surface = unwrap(create_xcb_surface_khr(device.physical_device.instance, XcbSurfaceCreateInfoKHR(wm.conn.h, first(keys(wm.windows)))))
 
     gpu = GPUState(command_pools = Dict(:primary => CommandPool(device, 0)))
-    r = BasicRenderer(device, device_ci, surface, DeviceQueueInfo2(first(device_ci.queue_create_infos).queue_family_index, 0), wh, gpu, Dict())
+    r = BasicRenderer(device, device_ci, surface, DeviceQueueInfo2(first(device_ci.queue_create_infos).queue_family_index, 0), wm, gpu, Dict())
     can_present(r) || error("Presentation not supported for physical device $physical_device")
     r
 end
