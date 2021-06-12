@@ -22,39 +22,54 @@ struct Application{WM<:AbstractWindowManager}
     Window manager. Only XCB is supported for now.
     """
     wm::WM
-    widgets::Vector{<:Widget}
+    gui::GUIManager
     state::ApplicationState
 end
+
+main_window(wm::WindowManager) = first(values(wm.impl.windows))
 
 """
 Should I put widgets in some global state? What would it be then, a vector, dict?
 Also, it won't be very efficient, since all widgets will basically have a different type...
 """
 function recreate_widgets!(rdr::BasicRenderer, app::Application)
-    empty!(app.widgets)
-    img = ImageWidget(app.state.position, (512, 512), (1., 1.), WidgetCallbacks(on_pointer_move = (ed::EventDetails) -> begin
-        if ed.data.state.left
-            app.state.position = Point(ed.location)
-        end
-    end))
+    img = ImageWidget(
+        app.state.position,
+        (512, 512),
+        (1., 1.),
+    )
     if !haskey(rdr.gpu.buffers, :vertex)
         rdr.gpu.buffers[:vertex] = vertex_buffer(img, rdr)
     else
         upload_data(rdr.gpu.buffers[:vertex].memory, vertex_data(img))
     end
-    push!(app.widgets, img)
+    app.gui.widgets[:perlin_texture] = img
+    app.gui.callbacks[img] = WidgetCallbacks(
+        on_drag = (src_w::ImageWidget, src_ed::EventDetails, _, ed::EventDetails) -> begin
+            Δloc = Point(ed.location) - Point(src_ed.location)
+            new_img = @set src_w.center = src_w.center + Δloc
+            upload_data(rdr.gpu.buffers[:vertex].memory, vertex_data(new_img))
+        end,
+        on_drop = (src_w::ImageWidget, src_ed::EventDetails, _, dst_ed::EventDetails) -> begin
+            Δloc = Point(dst_ed.location) - Point(src_ed.location)
+            app.state.position = src_w.center + Δloc
+            recreate_widgets!(rdr, app)
+        end
+    )
 end
 
 function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=true)
     if render
-        rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], app.wm)
+        rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], main_window(app.wm))
         rstate = render_state(rdr)
         initialize!(rdr, app)
         rdr.gpu.pipelines[:perlin] = create_pipeline(rdr, rstate, app)
-        run(app.wm, mode;
-        on_iter_last = () -> begin
-                recreate_widgets!(rdr, app)
-                if haschanged(app.state)
+        recreate_widgets!(rdr, app)
+        run(app.gui,
+            mode;
+            on_iter_last = () -> begin
+            if haschanged(app.state)
+                    recreate_widgets!(rdr, app)
                     wait_hasrendered(rstate.frame)
                     update_texture_resources!(rdr, app.state)
                     app.state.haschanged = false
@@ -64,7 +79,7 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)
     else
-        run(app.wm, mode)
+        run(app.gui, mode)
     end
 end
 
@@ -81,9 +96,11 @@ function Application()
     connection = Connection()
     win = XCBWindow(connection; x=20, y=20, width=1920, height=1080, border_width=50, window_title="Givre", icon_title="Givre", attributes=[XCB.XCB_CW_BACK_PIXEL], values=[0])
     wm = XWindowManager(connection, [win])
+    wwm = WindowManager(wm)
+    gm = GUIManager(wwm)
 
     app_state = ApplicationState()
-    app = Application(wm, Widget[], app_state)
+    app = Application(wwm, gm, app_state)
 
     _update! = app_state -> begin
         update!(app_state)
@@ -118,12 +135,10 @@ function Application()
 
     set_callbacks!(wm, win, WindowCallbacks(;
         on_key_pressed,
-        on_pointer_move = (ed::EventDetails) -> begin
-            widget = find_target(app.widgets, ed)
-            if !isnothing(widget)
-                execute_callback(widget, ed)
-            end
-        end
+        on_key_released = identity,
+        on_pointer_move = identity,
+        on_mouse_button_pressed = identity,
+        on_mouse_button_released = identity,
     ))
 
     app

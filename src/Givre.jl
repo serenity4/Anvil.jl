@@ -10,11 +10,11 @@ using SignedDistanceFunctions
 using ColorTypes
 using ProceduralNoise
 using GeometryExperiments
-
-const Point2f = Point{2,Float32}
+using Setfield
 
 import AbstractGUI: callbacks, vertex_data
 
+const Point2f = Point{2,Float32}
 const Optional{T} = Union{T,Nothing}
 
 include("gpu/GPU.jl")

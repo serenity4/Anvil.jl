@@ -10,7 +10,7 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
             RenderPassBeginInfo(
                 frame.ws.render_pass,
                 frame.ws.fbs[frame.img_idx],
-                Rect2D(Offset2D(0, 0), Extent2D(extent(first(values(app.wm.windows)))...)),
+                Rect2D(Offset2D(0, 0), Extent2D(extent(main_window(app.wm))...)),
                 [vk.VkClearValue(vk.VkClearColorValue((0.05, 0.01, 0.1, 0.1)))]
             ),
             SUBPASS_CONTENTS_INLINE
@@ -32,7 +32,7 @@ function create_pipeline(rdr::BasicRenderer, rstate::RenderState, app::Applicati
         VertexInputAttributeDescription(PosUV{Point2f,Point2f}, 0),
     )
     input_assembly_state = PipelineInputAssemblyStateCreateInfo(PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false)
-    win_extent = extent(first(values(app.wm.windows)))
+    win_extent = extent(main_window(app.wm))
     viewport_state = PipelineViewportStateCreateInfo(
         viewports = [Viewport(0, 0, win_extent..., 0, 1)],
         scissors = [Rect2D(Offset2D(0, 0), Extent2D(win_extent...))],

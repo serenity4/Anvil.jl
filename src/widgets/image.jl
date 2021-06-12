@@ -2,12 +2,10 @@ struct ImageWidget <: Widget
     center::Point{2,Float64}
     dims::Point{2,Float64}
     uv_scale::Point{2,Float64}
-    cb::WidgetCallbacks
 end
 
 Base.show(io::IO, w::ImageWidget) = print(io, "Image(width=", w.dims[1], ", height=", w.dims[2], ")")
 
-AbstractGUI.callbacks(img::ImageWidget) = img.cb
 AbstractGUI.zindex(img::ImageWidget) = 0
 
 function GeometryExperiments.PointSet(img::ImageWidget)
