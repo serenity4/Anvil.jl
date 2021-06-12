@@ -32,7 +32,11 @@ Also, it won't be very efficient, since all widgets will basically have a differ
 """
 function recreate_widgets!(rdr::BasicRenderer, app::Application)
     empty!(app.widgets)
-    img = ImageWidget(app.state.position, (512, 512), (1., 1.))
+    img = ImageWidget(app.state.position, (512, 512), (1., 1.), WidgetCallbacks(on_pointer_move = (ed::EventDetails) -> begin
+        if ed.data.state.left
+            app.state.position = Point(ed.location)
+        end
+    end))
     if !haskey(rdr.gpu.buffers, :vertex)
         rdr.gpu.buffers[:vertex] = vertex_buffer(img, rdr)
     else
@@ -75,13 +79,9 @@ end
 
 function Application()
     connection = Connection()
-    setup = Setup(connection)
-    iter = XCB.xcb_setup_roots_iterator(setup)
-    screen = unsafe_load(iter.data)
-
-    win = XCBWindow(connection, screen; x=20, y=20, width=1920, height=1080, border_width=50, window_title="Givre", icon_title="Givre", attributes=[XCB.XCB_CW_BACK_PIXEL], values=[screen.black_pixel])
-
+    win = XCBWindow(connection; x=20, y=20, width=1920, height=1080, border_width=50, window_title="Givre", icon_title="Givre", attributes=[XCB.XCB_CW_BACK_PIXEL], values=[0])
     wm = XWindowManager(connection, [win])
+
     app_state = ApplicationState()
     app = Application(wm, Widget[], app_state)
 
@@ -118,7 +118,12 @@ function Application()
 
     set_callbacks!(wm, win, WindowCallbacks(;
         on_key_pressed,
-        on_mouse_button_pressed = ed::EventDetails -> app_state.position = Point(ed.location)
+        on_pointer_move = (ed::EventDetails) -> begin
+            widget = find_target(app.widgets, ed)
+            if !isnothing(widget)
+                execute_callback(widget, ed)
+            end
+        end
     ))
 
     app

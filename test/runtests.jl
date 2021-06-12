@@ -11,3 +11,5 @@ function main()
 end
 
 main()
+
+GC.gc()

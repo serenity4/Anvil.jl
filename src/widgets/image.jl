@@ -2,16 +2,21 @@ struct ImageWidget <: Widget
     center::Point{2,Float64}
     dims::Point{2,Float64}
     uv_scale::Point{2,Float64}
+    cb::WidgetCallbacks
 end
+
+Base.show(io::IO, w::ImageWidget) = print(io, "Image(width=", w.dims[1], ", height=", w.dims[2], ")")
+
+AbstractGUI.callbacks(img::ImageWidget) = img.cb
+AbstractGUI.zindex(img::ImageWidget) = 0
 
 function GeometryExperiments.PointSet(img::ImageWidget)
     base_points = PointSet(HyperCube, GeometryExperiments.Point{2,Float32})
-    loc = (Translation(-1., -1.) ∘ inv(Scaling(1920/2, 1080/2)))(img.center)
-    PointSet(map(Translation(loc) ∘ inv(Scaling(1920, 1080)) ∘ Scaling(img.dims), base_points.points))
+    PointSet(map(Translation(img.center) ∘ Scaling(img.dims) ∘ Scaling(1/2, 1/2), base_points.points))
 end
 
 function AbstractGUI.vertex_data(img::ImageWidget)
-    pos = PointSet(img).points
+    pos = map(Translation(-1., -1.) ∘ inv(Scaling(1920/2, 1080/2)), PointSet(img).points)
     uv = map(Scaling(img.uv_scale) ∘ Scaling(0.5, 0.5) ∘ Translation(1., 1.), PointSet(HyperCube, GeometryExperiments.Point{2,Float32}).points)
     [PosUV{Point2f,Point2f}.(pos, uv)...]
 end
