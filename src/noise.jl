@@ -1,5 +1,5 @@
 function update!(app::ApplicationState)
-    app.noise = perlin(app.resolution, app.scale)
+    @timeit to "Generate noise" app.noise = perlin(app.resolution, app.scale)
     app.haschanged = true
 end
 
@@ -176,7 +176,7 @@ function update_texture_resources!(rdr::BasicRenderer, app::ApplicationState)
     else
         upload_data(app.gpu.buffers[:staging].memory, texture_data(app))
     end
-    upload!(rdr, app)
+    @timeit to "Upload texture to GPU" upload!(rdr, app)
 end
 
 function upload!(rdr::BasicRenderer, app::ApplicationState)
