@@ -68,13 +68,13 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=
         run(app.gui,
             mode;
             on_iter_last = () -> begin
-            if haschanged(app.state)
-                    recreate_widgets!(rdr, app)
-                    wait_hasrendered(rstate.frame)
-                    update_texture_resources!(rdr, app.state)
+            @timeit to "Update application" if haschanged(app.state)
+                    @timeit to "Recreate widgets" recreate_widgets!(rdr, app)
+                    @timeit to "Wait render ends" wait_hasrendered(rstate.frame)
+                    @timeit to "Update texture resources" update_texture_resources!(rdr, app.state)
                     app.state.haschanged = false
                 end
-                next_frame!(rstate.frame, rdr, app)
+                @timeit to "Draw next frame" next_frame!(rstate.frame, rdr, app)
             end)
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)

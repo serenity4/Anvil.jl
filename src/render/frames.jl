@@ -91,7 +91,7 @@ function next_frame!(fs::FrameState, rdr::BasicRenderer, app)
 
     # acquire next image
     old_idx = fs.img_idx
-    status = acquire_next_image_khr(fs.device, fs.ws.swapchain, typemax(UInt64); semaphore=fs.img_acquired[old_idx])
+    @timeit to "Acquire next image" status = acquire_next_image_khr(fs.device, fs.ws.swapchain, typemax(UInt64); semaphore=fs.img_acquired[old_idx])
     if !iserror(status)
         idx, result = unwrap(status)
         @assert result in (SUCCESS, SUBOPTIMAL_KHR) "$result: Could not retrieve next swapchain image"
@@ -99,27 +99,33 @@ function next_frame!(fs::FrameState, rdr::BasicRenderer, app)
         fs.img_idx = idx + 1
 
         # submit rendering commands
-        cbuffs = command_buffers(rdr, fs, app)
-        img_acquired_info = SemaphoreSubmitInfoKHR(fs.img_acquired[old_idx], 0, 0; stage_mask=PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
-        img_rendered_info = SemaphoreSubmitInfoKHR(fs.img_rendered[fs.img_idx], 0, 0; stage_mask=PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
-        render_info = SubmitInfo2KHR([img_acquired_info], CommandBufferSubmitInfoKHR.(cbuffs, 0), [img_rendered_info])
-        wait_for_fences(fs.device, [fs.hasrendered[fs.img_idx]], false, 10_000_000_000)
-        reset_fences(fs.device, [fs.hasrendered[fs.img_idx]])
-        submit(rdr, [render_info]; fence = fs.hasrendered[fs.img_idx])
+        @timeit to "Submit rendering commands" begin
+            @timeit to "Create command buffers" cbuffs = command_buffers(rdr, fs, app)
+            img_acquired_info = SemaphoreSubmitInfoKHR(fs.img_acquired[old_idx], 0, 0; stage_mask=PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
+            img_rendered_info = SemaphoreSubmitInfoKHR(fs.img_rendered[fs.img_idx], 0, 0; stage_mask=PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
+            render_info = SubmitInfo2KHR([img_acquired_info], CommandBufferSubmitInfoKHR.(cbuffs, 0), [img_rendered_info])
+            @timeit to "Wait for frame being rendered" wait_for_fences(fs.device, [fs.hasrendered[fs.img_idx]], false, 10_000_000_000)
+            reset_fences(fs.device, [fs.hasrendered[fs.img_idx]])
+            submit(rdr, [render_info]; fence = fs.hasrendered[fs.img_idx])
+        end
 
         # submit presentation commands
-        present_info = PresentInfoKHR([fs.img_rendered[fs.img_idx]], [swapchain], [fs.img_idx - 1])
-        if swapchain == fs.ws.swapchain # no window state changes, present the image
-            present(rdr, present_info)
-        else # start over
-            next_frame!(fs, rdr)
+        @timeit to "Submit presentation commands" begin
+            present_info = PresentInfoKHR([fs.img_rendered[fs.img_idx]], [swapchain], [fs.img_idx - 1])
+            if swapchain == fs.ws.swapchain # no window state changes, present the image
+                @timeit to "Present frame" present(rdr, present_info)
+            else # start over
+                next_frame!(fs, rdr)
+            end
         end
     else
-        err = unwrap_error(status)
-        if err.code == vk.VK_ERROR_OUT_OF_DATE_KHR
-            # recreate swapchain and start over
-            update!(fs.ws)
-            next_frame!(fs, rdr, app)
+        @timeit to "Recreate swapchain" begin
+            err = unwrap_error(status)
+            if err.code == vk.VK_ERROR_OUT_OF_DATE_KHR
+                # recreate swapchain and start over
+                update!(fs.ws)
+                next_frame!(fs, rdr, app)
+            end
         end
     end
 end

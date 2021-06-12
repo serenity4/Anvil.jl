@@ -8,8 +8,10 @@ using GeometryExperiments
 using MLStyle
 using XCB
 using Setfield
+using TimerOutputs
 
 using ..GPU
+using ..Givre: to
 
 include("vertex.jl")
 include("renderer.jl")

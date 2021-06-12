@@ -6,13 +6,15 @@ using XCB
 using MLStyle
 using UnPack
 using AbstractGUI
-using SignedDistanceFunctions
 using ColorTypes
 using ProceduralNoise
 using GeometryExperiments
 using Setfield
+using TimerOutputs
 
 import AbstractGUI: callbacks, vertex_data
+
+const to = TimerOutput()
 
 const Point2f = Point{2,Float32}
 const Optional{T} = Union{T,Nothing}
