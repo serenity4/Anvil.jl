@@ -1,10 +1,6 @@
 function find_memory_type(physical_device::PhysicalDevice, type_flag, properties::MemoryPropertyFlag)
     mem_props = get_physical_device_memory_properties(physical_device)
-    indices =
-        findall(
-            x -> properties in x.property_flags,
-            mem_props.memory_types[1:mem_props.memory_type_count],
-        ) .- 1
+    indices = findall(x -> properties in x.property_flags, mem_props.memory_types[1:mem_props.memory_type_count]) .- 1
     if isempty(indices)
         error("Could not find memory with properties $properties")
     else
@@ -18,11 +14,7 @@ function find_memory_type(physical_device::PhysicalDevice, type_flag, properties
 end
 
 function Vulkan.DeviceMemory(device::Device, memory_requirements::MemoryRequirements, properties)
-    DeviceMemory(
-        device,
-        memory_requirements.size,
-        find_memory_type(device.physical_device, memory_requirements.memory_type_bits, properties),
-    )
+    DeviceMemory(device, memory_requirements.size, find_memory_type(device.physical_device, memory_requirements.memory_type_bits, properties))
 end
 
 buffer_size(data::AbstractVector{T}) where {T} = sizeof(T) * length(data)
@@ -45,10 +37,10 @@ Download data from the specified memory to an `Array`.
 
 If `copy` if set to true, then all the data mapped from `memory` will be copied. If not, care should be taken to preserve the `memory` mapped and valid as long as the returned data is in use.
 """
-function download_data(::Type{<:DenseArray{T}}, memory::DeviceMemory, dims; offset=0, copy=true, unmap=true) where {T}
+function download_data(::Type{<:DenseArray{T}}, memory::DeviceMemory, dims; offset = 0, copy = true, unmap = true) where {T}
     size = sizeof(T) * prod(dims)
     memptr = unwrap(map_memory(memory.device, memory, offset, size))
-    data = unsafe_wrap(Array, convert(Ptr{T}, memptr), dims; own=false)
+    data = unsafe_wrap(Array, convert(Ptr{T}, memptr), dims; own = false)
     if unmap
         unwrap(unmap_memory(memory.device, memory))
     end

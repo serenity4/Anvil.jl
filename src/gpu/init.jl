@@ -7,11 +7,7 @@ function init_debug(instance::Instance)
             DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT,
             DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
         ),
-        |(
-            DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT,
-            DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-            DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT,
-        ),
+        |(DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT, DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT, DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT),
         debug_callback_c[],
         function_pointer(instance, "vkCreateDebugUtilsMessengerEXT"),
         function_pointer(instance, "vkDestroyDebugUtilsMessengerEXT"),

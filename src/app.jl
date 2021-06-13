@@ -11,7 +11,7 @@ ApplicationState(resolution, scale, position) = ApplicationState(resolution, sca
 
 haschanged(app::ApplicationState) = app.haschanged
 
-function ApplicationState(position=(1920/2,1080/2))
+function ApplicationState(position = (1920 / 2, 1080 / 2))
     app = ApplicationState((512, 512), (4, 4), position)
     update!(app)
     app
@@ -33,11 +33,7 @@ Also, it won't be very efficient, since all widgets will basically have a differ
 """
 function add_perlin_image!(app::Application)
     wname = :perlin
-    img = ImageWidget(
-        app.state.position,
-        (512, 512),
-        (1., 1.),
-    )
+    img = ImageWidget(app.state.position, (512, 512), (1.0, 1.0))
     app.gui.widgets[wname] = img
 
     rdr = app.rdr
@@ -52,7 +48,7 @@ function add_perlin_image!(app::Application)
             Δloc = Point(dst_ed.location) - Point(src_ed.location)
             app.state.position = src_w.center + Δloc
             add_perlin_image!(app)
-        end
+        end,
     )
 
     update_vertex_buffer!(rdr.device, rdr.gpu, wname, img)
@@ -60,7 +56,7 @@ end
 
 render_infos(app::Application) = (RenderInfo(app.gr, wname, w) for (wname, w) in app.gui.widgets)
 
-function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=true)
+function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render = true)
     if render
         rdr = app.rdr
         gr = app.gr
@@ -96,11 +92,7 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=
             app.gui.widgets[:perlin],
             ShaderInfo(
                 Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "texture_2d.vert"), FormatGLSL()), DescriptorBinding[]),
-                Shader(
-                    device,
-                    ShaderFile(joinpath(@__DIR__, "shaders", "texture_2d.frag"), FormatGLSL()),
-                    [DescriptorBinding(DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, 1)],
-                ),
+                Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "texture_2d.frag"), FormatGLSL()), [DescriptorBinding(DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, 1)]),
             ),
             (
                 (resource) -> begin
@@ -114,12 +106,8 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=
                     view_info = resource.view.info
                     view_info = @set view_info.image = image
                     view = unwrap(create_image_view(device, view_info))
-                    (SampledImage(
-                        GPUResource(image, memory, image_info),
-                        GPUResource(view, nothing, view_info),
-                        resource.sampler,
-                    ),)
-                end
+                    (SampledImage(GPUResource(image, memory, image_info), GPUResource(view, nothing, view_info), resource.sampler),)
+                end,
             ),
             SampledImage(
                 GPUResource(image, memory, image_info),
@@ -142,26 +130,24 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=
                     BORDER_COLOR_FLOAT_OPAQUE_BLACK,
                     false,
                 ),
-            )
+            ),
         )
         transfer_texture!(gr, app.state)
         recreate_pipelines!(gr, app.gui, rstate)
-        run(app.gui,
-            mode;
-            on_iter_last = () -> begin
-                frame = rstate.frame
-                if needs_resource_update(gr)
-                    @timeit to "Update resources" begin
-                        wait_hasrendered(frame)
-                        update_resources(gr)
-                    end
+        run(app.gui, mode; on_iter_last = () -> begin
+            frame = rstate.frame
+            if needs_resource_update(gr)
+                @timeit to "Update resources" begin
+                    wait_hasrendered(frame)
+                    update_resources(gr)
                 end
-                if haschanged(app.state)
-                    @timeit to "Transfer texture" transfer_texture!(gr, app.state)
-                    app.state.haschanged = false
-                end
-                @timeit to "Draw next frame" next_frame!(frame, rdr, app)
-            end)
+            end
+            if haschanged(app.state)
+                @timeit to "Transfer texture" transfer_texture!(gr, app.state)
+                app.state.haschanged = false
+            end
+            @timeit to "Draw next frame" next_frame!(frame, rdr, app)
+        end)
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)
     else
@@ -181,7 +167,18 @@ end
 function Application()
     app_state = ApplicationState()
     connection = Connection()
-    win = XCBWindow(connection; x=20, y=20, width=1920, height=1080, border_width=50, window_title="Givre", icon_title="Givre", attributes=[XCB.XCB_CW_BACK_PIXEL], values=[0])
+    win = XCBWindow(
+        connection;
+        x = 20,
+        y = 20,
+        width = 1920,
+        height = 1080,
+        border_width = 50,
+        window_title = "Givre",
+        icon_title = "Givre",
+        attributes = [XCB.XCB_CW_BACK_PIXEL],
+        values = [0],
+    )
     wm = XWindowManager(connection, [win])
     wwm = WindowManager(wm)
     gm = GUIManager(wwm)

@@ -6,9 +6,7 @@ function GPU.DescriptorSetVector(device::Device, pool::GPUResource{DescriptorPoo
 end
 
 function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Application)
-    command_buffer, _... = unwrap(
-        allocate_command_buffers(rdr.device, CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)),
-    )
+    command_buffer, _... = unwrap(allocate_command_buffers(rdr.device, CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)))
 
     @record command_buffer begin
         cmd_begin_render_pass(
@@ -16,9 +14,9 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
                 frame.ws.render_pass,
                 frame.ws.fbs[frame.img_idx],
                 Rect2D(Offset2D(0, 0), Extent2D(extent(main_window(app.wm))...)),
-                [vk.VkClearValue(vk.VkClearColorValue((0.05, 0.01, 0.1, 0.1)))]
+                [vk.VkClearValue(vk.VkClearColorValue((0.05, 0.01, 0.1, 0.1)))],
             ),
-            SUBPASS_CONTENTS_INLINE
+            SUBPASS_CONTENTS_INLINE,
         )
 
         prev_bind_state = nothing
@@ -69,27 +67,10 @@ function GraphicsPipelineCreateInfo(rdr::AbstractRenderer, shaders::ShaderInfo, 
 
     # build graphics pipeline
     shader_stages = PipelineShaderStageCreateInfo.([shaders.vertex, shaders.fragment])
-    vertex_input_state = PipelineVertexInputStateCreateInfo(
-        [VertexInputBindingDescription(vtype, 0)],
-        VertexInputAttributeDescription(vtype, 0),
-    )
+    vertex_input_state = PipelineVertexInputStateCreateInfo([VertexInputBindingDescription(vtype, 0)], VertexInputAttributeDescription(vtype, 0))
     input_assembly_state = PipelineInputAssemblyStateCreateInfo(PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false)
-    viewport_state = PipelineViewportStateCreateInfo(
-        viewports = [Viewport(0, 0, extent..., 0, 1)],
-        scissors = [Rect2D(Offset2D(0, 0), Extent2D(extent...))],
-    )
-    rasterizer = PipelineRasterizationStateCreateInfo(
-        false,
-        false,
-        POLYGON_MODE_FILL,
-        FRONT_FACE_CLOCKWISE,
-        false,
-        0.0,
-        0.0,
-        0.0,
-        1.0,
-        cull_mode = CULL_MODE_BACK_BIT,
-    )
+    viewport_state = PipelineViewportStateCreateInfo(viewports = [Viewport(0, 0, extent..., 0, 1)], scissors = [Rect2D(Offset2D(0, 0), Extent2D(extent...))])
+    rasterizer = PipelineRasterizationStateCreateInfo(false, false, POLYGON_MODE_FILL, FRONT_FACE_CLOCKWISE, false, 0.0, 0.0, 0.0, 1.0, cull_mode = CULL_MODE_BACK_BIT)
     multisample_state = PipelineMultisampleStateCreateInfo(SAMPLE_COUNT_1_BIT, false, 1.0, false, false)
     color_blend_attachment = PipelineColorBlendAttachmentState(
         true,
@@ -101,12 +82,7 @@ function GraphicsPipelineCreateInfo(rdr::AbstractRenderer, shaders::ShaderInfo, 
         BLEND_OP_ADD;
         color_write_mask = COLOR_COMPONENT_R_BIT | COLOR_COMPONENT_G_BIT | COLOR_COMPONENT_B_BIT,
     )
-    color_blend_state = PipelineColorBlendStateCreateInfo(
-        false,
-        LOGIC_OP_CLEAR,
-        [color_blend_attachment],
-        Float32.((0.0, 0.0, 0.0, 0.0)),
-    )
+    color_blend_state = PipelineColorBlendStateCreateInfo(false, LOGIC_OP_CLEAR, [color_blend_attachment], Float32.((0.0, 0.0, 0.0, 0.0)))
     pipeline_layout = PipelineLayout(rdr.device, descriptors.info.set_layouts, [])
     GraphicsPipelineCreateInfo(
         shader_stages,

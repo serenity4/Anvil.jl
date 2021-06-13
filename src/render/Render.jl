@@ -19,6 +19,7 @@ include("frames.jl")
 include("state.jl")
 
 export
+    # renderer
     AbstractRenderer,
     BasicRenderer,
     require_extension,
@@ -26,6 +27,7 @@ export
     submit,
     present,
 
+    # state
     WindowState,
     FrameState,
     RenderState,
@@ -33,6 +35,7 @@ export
     next_frame!,
     wait_hasrendered,
 
+    # vertex data
     VertexData,
     PosColor,
     PosUV

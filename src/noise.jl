@@ -1,21 +1,16 @@
 function update!(app::ApplicationState)
-    @timeit to "Generate noise" app.noise = perlin(app.resolution, app.scale)
+    app.noise = @timeit to "Generate noise" perlin(app.resolution, app.scale)
     app.haschanged = true
 end
 
 function texture_data(app::ApplicationState)
-    noise_data = remap(app.noise, (0., 1.))
-    RGBA{Float16}.(noise_data, noise_data, noise_data, 1.)
+    noise_data = remap(app.noise, (0.0, 1.0))
+    RGBA{Float16}.(noise_data, noise_data, noise_data, 1.0)
 end
 
 function create_staging_buffer!(app::ApplicationState, device::Device)
     # initialize local buffer
-    info = BufferCreateInfo(
-        buffer_size(app.noise),
-        BUFFER_USAGE_TRANSFER_DST_BIT | BUFFER_USAGE_TRANSFER_SRC_BIT,
-        SHARING_MODE_EXCLUSIVE,
-        [0],
-    )
+    info = BufferCreateInfo(buffer_size(app.noise), BUFFER_USAGE_TRANSFER_DST_BIT | BUFFER_USAGE_TRANSFER_SRC_BIT, SHARING_MODE_EXCLUSIVE, [0])
     local_buffer = unwrap(create_buffer(device, info))
     local_memory = DeviceMemory(local_buffer, texture_data(app))
     local_resource = GPUResource(local_buffer, local_memory, info)
@@ -33,9 +28,7 @@ function transfer_texture!(gr::GUIRenderer, app::ApplicationState)
 
     # transfer host-visible memory to device-local image
     image = gr.resources[:perlin][1].image.resource
-    cbuffer, _... = unwrap(
-        allocate_command_buffers(rdr.device, CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)),
-    )
+    cbuffer, _... = unwrap(allocate_command_buffers(rdr.device, CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)))
     @record cbuffer begin
         # transition layout to transfer destination
         cmd_pipeline_barrier(
@@ -60,15 +53,7 @@ function transfer_texture!(gr::GUIRenderer, app::ApplicationState)
             app.gpu.buffers[:staging].resource,
             image,
             IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            [
-                BufferImageCopy(
-                    0,
-                    app.resolution...,
-                    ImageSubresourceLayers(IMAGE_ASPECT_COLOR_BIT, 0, 0, 1),
-                    Offset3D(0, 0, 0),
-                    Extent3D(app.resolution..., 1),
-                ),
-            ],
+            [BufferImageCopy(0, app.resolution..., ImageSubresourceLayers(IMAGE_ASPECT_COLOR_BIT, 0, 0, 1), Offset3D(0, 0, 0), Extent3D(app.resolution..., 1))],
         )
         # transition to final layout
         cmd_pipeline_barrier(

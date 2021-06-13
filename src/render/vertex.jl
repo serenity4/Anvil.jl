@@ -7,7 +7,7 @@ struct PosColor{P<:Point,C<:RGBA} <: VertexData
     color::C
 end
 
-struct PosUV{P<:Point, UV<:Point{2}} <: VertexData
+struct PosUV{P<:Point,UV<:Point{2}} <: VertexData
     position::P
     uv::UV
 end
@@ -20,11 +20,8 @@ Vulkan.VertexInputAttributeDescription(::Type{T}, binding) where {T<:VertexData}
         fieldoffset.(T, 1:fieldcount(T)),
     )
 
-Vulkan.VertexInputBindingDescription(
-    ::Type{T},
-    binding;
-    input_rate = VERTEX_INPUT_RATE_VERTEX,
-) where {T<:VertexData} = VertexInputBindingDescription(binding, sizeof(T), input_rate)
+Vulkan.VertexInputBindingDescription(::Type{T}, binding; input_rate = VERTEX_INPUT_RATE_VERTEX) where {T<:VertexData} =
+    VertexInputBindingDescription(binding, sizeof(T), input_rate)
 
 function Vulkan.Format(::Type{T}) where {T}
     @match T begin

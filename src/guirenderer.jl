@@ -93,7 +93,8 @@ function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderI
     update_descriptor_sets(gr, wname)
 end
 
-add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo, update_resources, resources...) = add_widget!(gr, wname, w, shaders, update_resources, tuple(resources...))
+add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo, update_resources, resources...) =
+    add_widget!(gr, wname, w, shaders, update_resources, tuple(resources...))
 
 function check_resources(w, resources)
     @assert Set(map(typeof, resources)) == Set(resource_types(w)) "Shader resources do not match the widget type $(typeof(w))"

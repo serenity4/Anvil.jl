@@ -20,7 +20,7 @@ function update!(ws::WindowState)
     new_extent = Extent2D(_extent.width, _extent.height)
 
     if new_extent ≠ ws.swapchain_ci.image_extent # regenerate swapchain
-        ws.swapchain_ci = setproperties(ws.swapchain_ci, old_swapchain=swapchain, image_extent=new_extent)
+        ws.swapchain_ci = setproperties(ws.swapchain_ci, old_swapchain = swapchain, image_extent = new_extent)
         ws.swapchain = unwrap(create_swapchain_khr(device, ws.swapchain_ci))
     end
 
@@ -74,7 +74,7 @@ function FrameState(device::Device, ws::WindowState)
         1,
         map(x -> Semaphore(device), 1:max_in_flight),
         map(x -> Semaphore(device), 1:max_in_flight),
-        map(x -> Fence(device; flags=FENCE_CREATE_SIGNALED_BIT), 1:max_in_flight),
+        map(x -> Fence(device; flags = FENCE_CREATE_SIGNALED_BIT), 1:max_in_flight),
         max_in_flight,
     )
 end
@@ -91,7 +91,7 @@ function next_frame!(fs::FrameState, rdr::BasicRenderer, app)
 
     # acquire next image
     old_idx = fs.img_idx
-    @timeit to "Acquire next image" status = acquire_next_image_khr(fs.device, fs.ws.swapchain, typemax(UInt64); semaphore=fs.img_acquired[old_idx])
+    status = @timeit to "Acquire next image" acquire_next_image_khr(fs.device, fs.ws.swapchain, typemax(UInt64); semaphore = fs.img_acquired[old_idx])
     if !iserror(status)
         idx, result = unwrap(status)
         @assert result in (SUCCESS, SUBOPTIMAL_KHR) "$result: Could not retrieve next swapchain image"
@@ -100,9 +100,9 @@ function next_frame!(fs::FrameState, rdr::BasicRenderer, app)
 
         # submit rendering commands
         @timeit to "Submit rendering commands" begin
-            @timeit to "Create command buffers" cbuffs = command_buffers(rdr, fs, app)
-            img_acquired_info = SemaphoreSubmitInfoKHR(fs.img_acquired[old_idx], 0, 0; stage_mask=PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
-            img_rendered_info = SemaphoreSubmitInfoKHR(fs.img_rendered[fs.img_idx], 0, 0; stage_mask=PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
+            cbuffs = @timeit to "Create command buffers" command_buffers(rdr, fs, app)
+            img_acquired_info = SemaphoreSubmitInfoKHR(fs.img_acquired[old_idx], 0, 0; stage_mask = PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
+            img_rendered_info = SemaphoreSubmitInfoKHR(fs.img_rendered[fs.img_idx], 0, 0; stage_mask = PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
             render_info = SubmitInfo2KHR([img_acquired_info], CommandBufferSubmitInfoKHR.(cbuffs, 0), [img_rendered_info])
             @timeit to "Wait for frame being rendered" wait_for_fences(fs.device, [fs.hasrendered[fs.img_idx]], false, 10_000_000_000)
             reset_fences(fs.device, [fs.hasrendered[fs.img_idx]])

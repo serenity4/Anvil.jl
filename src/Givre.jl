@@ -32,9 +32,7 @@ include("app.jl")
 include("noise.jl")
 include("render.jl")
 
-export
-    Application,
-    ApplicationState
+export Application, ApplicationState
 
 
 end

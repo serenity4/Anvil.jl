@@ -6,7 +6,7 @@ function remap(value, low1, high1, low2, high2)
 end
 
 remap(value, from, to) = remap(value, from..., to...)
-remap(values::AbstractArray, to; from=extrema(values)) = remap.(values, Ref(from), Ref(to))
+remap(values::AbstractArray, to; from = extrema(values)) = remap.(values, Ref(from), Ref(to))
 
 remap(low1, high1, low2, high2) = x -> remap(x, low1, high1, low2, high2)
 
