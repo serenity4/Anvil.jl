@@ -33,6 +33,7 @@ export
     next_frame!,
     wait_hasrendered,
 
+    VertexData,
     PosColor,
     PosUV
 

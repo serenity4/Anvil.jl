@@ -17,13 +17,12 @@ function ApplicationState(position=(1920/2,1080/2))
     app
 end
 
-struct Application{WM<:AbstractWindowManager}
-    """
-    Window manager. Only XCB is supported for now.
-    """
-    wm::WM
-    gui::GUIManager
+struct Application{WM<:AbstractWindowManager,R<:AbstractRenderer}
     state::ApplicationState
+    wm::WM
+    gui::GUIManager{WM}
+    rdr::R
+    gr::GUIRenderer
 end
 
 main_window(wm::WindowManager) = first(values(wm.impl.windows))
@@ -32,49 +31,136 @@ main_window(wm::WindowManager) = first(values(wm.impl.windows))
 Should I put widgets in some global state? What would it be then, a vector, dict?
 Also, it won't be very efficient, since all widgets will basically have a different type...
 """
-function recreate_widgets!(rdr::BasicRenderer, app::Application)
+function add_perlin_image!(app::Application)
+    wname = :perlin
     img = ImageWidget(
         app.state.position,
         (512, 512),
         (1., 1.),
     )
-    if !haskey(rdr.gpu.buffers, :vertex)
-        rdr.gpu.buffers[:vertex] = vertex_buffer(img, rdr)
-    else
-        upload_data(rdr.gpu.buffers[:vertex].memory, vertex_data(img))
-    end
-    app.gui.widgets[:perlin_texture] = img
+    app.gui.widgets[wname] = img
+
+    rdr = app.rdr
+
     app.gui.callbacks[img] = WidgetCallbacks(
         on_drag = (src_w::ImageWidget, src_ed::EventDetails, _, ed::EventDetails) -> begin
             Δloc = Point(ed.location) - Point(src_ed.location)
             new_img = @set src_w.center = src_w.center + Δloc
-            upload_data(rdr.gpu.buffers[:vertex].memory, vertex_data(new_img))
+            update_vertex_buffer!(rdr.device, rdr.gpu, wname, new_img)
         end,
         on_drop = (src_w::ImageWidget, src_ed::EventDetails, _, dst_ed::EventDetails) -> begin
             Δloc = Point(dst_ed.location) - Point(src_ed.location)
             app.state.position = src_w.center + Δloc
-            recreate_widgets!(rdr, app)
+            add_perlin_image!(app)
         end
     )
+
+    update_vertex_buffer!(rdr.device, rdr.gpu, wname, img)
 end
+
+render_infos(app::Application) = (RenderInfo(app.gr, wname, w) for (wname, w) in app.gui.widgets)
 
 function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render=true)
     if render
-        rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], main_window(app.wm))
+        rdr = app.rdr
+        gr = app.gr
+        device = rdr.device
         rstate = render_state(rdr)
-        initialize!(rdr, app)
-        rdr.gpu.pipelines[:perlin] = create_pipeline(rdr, rstate, app)
-        recreate_widgets!(rdr, app)
+        add_perlin_image!(app)
+        image_info = ImageCreateInfo(
+            IMAGE_TYPE_2D,
+            FORMAT_R16G16B16A16_SFLOAT,
+            Extent3D(app.state.resolution..., 1),
+            1,
+            1,
+            SAMPLE_COUNT_1_BIT,
+            IMAGE_TILING_OPTIMAL,
+            IMAGE_USAGE_TRANSFER_DST_BIT | IMAGE_USAGE_SAMPLED_BIT,
+            SHARING_MODE_EXCLUSIVE,
+            [0],
+            IMAGE_LAYOUT_UNDEFINED,
+        )
+        image = unwrap(create_image(device, image_info))
+        memory = DeviceMemory(image, MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+        view_info = ImageViewCreateInfo(
+            image,
+            IMAGE_VIEW_TYPE_2D,
+            image_info.format,
+            ComponentMapping(fill(COMPONENT_SWIZZLE_IDENTITY, 4)...),
+            ImageSubresourceRange(IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1),
+        )
+        view = unwrap(create_image_view(device, view_info))
+        add_widget!(
+            gr,
+            :perlin,
+            app.gui.widgets[:perlin],
+            ShaderInfo(
+                Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "texture_2d.vert"), FormatGLSL()), DescriptorBinding[]),
+                Shader(
+                    device,
+                    ShaderFile(joinpath(@__DIR__, "shaders", "texture_2d.frag"), FormatGLSL()),
+                    [DescriptorBinding(DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, 1)],
+                ),
+            ),
+            (
+                (resource) -> begin
+                    Extent3D(app.state.resolution..., 1) ≠ resource.image.info.extent
+                end,
+                (resource) -> begin
+                    image_info = resource.image.info
+                    image_info = @set image_info.extent = Extent3D(app.state.resolution..., 1)
+                    image = unwrap(create_image(device, image_info))
+                    memory = DeviceMemory(image, MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+                    view_info = resource.view.info
+                    view_info = @set view_info.image = image
+                    view = unwrap(create_image_view(device, view_info))
+                    (SampledImage(
+                        GPUResource(image, memory, image_info),
+                        GPUResource(view, nothing, view_info),
+                        resource.sampler,
+                    ),)
+                end
+            ),
+            SampledImage(
+                GPUResource(image, memory, image_info),
+                GPUResource(view, nothing, view_info),
+                Sampler(
+                    device,
+                    FILTER_LINEAR,
+                    FILTER_LINEAR,
+                    SAMPLER_MIPMAP_MODE_LINEAR,
+                    SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                    SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                    SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER,
+                    0,
+                    true,
+                    get_physical_device_properties(device.physical_device).limits.max_sampler_anisotropy,
+                    false,
+                    COMPARE_OP_ALWAYS,
+                    0,
+                    0,
+                    BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+                    false,
+                ),
+            )
+        )
+        transfer_texture!(gr, app.state)
+        recreate_pipelines!(gr, app.gui, rstate)
         run(app.gui,
             mode;
             on_iter_last = () -> begin
-            @timeit to "Update application" if haschanged(app.state)
-                    @timeit to "Recreate widgets" recreate_widgets!(rdr, app)
-                    @timeit to "Wait render ends" wait_hasrendered(rstate.frame)
-                    @timeit to "Update texture resources" update_texture_resources!(rdr, app.state)
+                frame = rstate.frame
+                if needs_resource_update(gr)
+                    @timeit to "Update resources" begin
+                        wait_hasrendered(frame)
+                        update_resources(gr)
+                    end
+                end
+                if haschanged(app.state)
+                    @timeit to "Transfer texture" transfer_texture!(gr, app.state)
                     app.state.haschanged = false
                 end
-                @timeit to "Draw next frame" next_frame!(rstate.frame, rdr, app)
+                @timeit to "Draw next frame" next_frame!(frame, rdr, app)
             end)
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)
@@ -93,14 +179,14 @@ function on_button_pressed(details::EventDetails)
 end
 
 function Application()
+    app_state = ApplicationState()
     connection = Connection()
     win = XCBWindow(connection; x=20, y=20, width=1920, height=1080, border_width=50, window_title="Givre", icon_title="Givre", attributes=[XCB.XCB_CW_BACK_PIXEL], values=[0])
     wm = XWindowManager(connection, [win])
     wwm = WindowManager(wm)
     gm = GUIManager(wwm)
-
-    app_state = ApplicationState()
-    app = Application(wwm, gm, app_state)
+    rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], main_window(wwm))
+    app = Application(app_state, wwm, gm, rdr, GUIRenderer(rdr))
 
     _update! = app_state -> begin
         update!(app_state)

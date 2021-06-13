@@ -18,27 +18,20 @@ All calls to API commands have `cbuff` inserted as their first argument, and are
 The two-argument version of this macro simply passes in a default `CommandBufferBeginInfo()`.
 """
 macro record(cbuff, info, cmds)
-    cmds = @match cmds begin
-        Expr(:block, args...) => args
-        _ => [cmds]
-    end
-    _cbuff, _info = esc(cbuff), esc(info)
-    api_calls = map(cmds) do cmd
-        postwalk(cmd) do ex
-            @match ex begin
-                :($f($(args...))) => startswith(string(f), "cmd_") ? :($(esc(f))($_cbuff, $(esc.(args)...))) : ex
-                :($f($(args...); $(kwargs...))) => startswith(string(f), "cmd_") ? :($(esc(f))($_cbuff, $(esc.(args)...); $(esc.(kwargs)...))) : ex
-                _ => ex
-            end
+    api_calls = postwalk(cmds) do ex
+        @match ex begin
+            :($f($(args...))) => startswith(string(f), "cmd_") ? :($f($cbuff, $(args...))) : ex
+            :($f($(args...); $(kwargs...))) => startswith(string(f), "cmd_") ? :($f($cbuff, $(args...); $(kwargs...))) : ex
+            _ => ex
         end
     end
-    esc(quote
-        begin_command_buffer($_cbuff, $_info)
-        $(api_calls...)
-        end_command_buffer($_cbuff)
-    end)
+    quote
+        $(esc(:(begin_command_buffer($(esc(cbuff)), $(esc(info))))))
+        $(esc(api_calls))
+        $(esc(:(end_command_buffer($(esc(cbuff))))))
+    end
 end
 
 macro record(cbuff, cmds)
-    :(@record $cbuff CommandBufferBeginInfo() $cmds)
+    :(@record $cbuff CommandBufferBeginInfo() $(esc(cmds)))
 end

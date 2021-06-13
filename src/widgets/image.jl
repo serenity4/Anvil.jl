@@ -8,15 +8,17 @@ Base.show(io::IO, w::ImageWidget) = print(io, "Image(width=", w.dims[1], ", heig
 
 AbstractGUI.zindex(img::ImageWidget) = 0
 
+vertex_data_type(::Type{ImageWidget}) = PosUV{Point2f,Point2f}
+
 function GeometryExperiments.PointSet(img::ImageWidget)
-    base_points = PointSet(HyperCube, GeometryExperiments.Point{2,Float32})
-    PointSet(map(Translation(img.center) ∘ Scaling(img.dims) ∘ Scaling(1/2, 1/2), base_points.points))
+    set = PointSet(HyperCube, Point2f)
+    (Translation(img.center) ∘ Scaling(img.dims) ∘ Scaling(1/2, 1/2))(set)
 end
 
 function AbstractGUI.vertex_data(img::ImageWidget)
-    pos = map(Translation(-1., -1.) ∘ inv(Scaling(1920/2, 1080/2)), PointSet(img).points)
-    uv = map(Scaling(img.uv_scale) ∘ Scaling(0.5, 0.5) ∘ Translation(1., 1.), PointSet(HyperCube, GeometryExperiments.Point{2,Float32}).points)
-    [PosUV{Point2f,Point2f}.(pos, uv)...]
+    pos = (Translation(-1., -1.) ∘ inv(Scaling(1920/2, 1080/2)))(PointSet(img))
+    uv = (Scaling(img.uv_scale) ∘ Scaling(0.5, 0.5) ∘ Translation(1., 1.))(PointSet(HyperCube, Point2f))
+    collect(vertex_data_type(img).(pos.points, uv.points))
 end
 
 function index_data(w::Widget)
@@ -24,9 +26,5 @@ function index_data(w::Widget)
     mesh = discretize(p, FIST())
 end
 
-function vertex_buffer(w::Widget, rdr::BasicRenderer)
-    vdata = vertex_data(w)
-    vbuffer = Buffer(rdr.device, buffer_size(vdata), BUFFER_USAGE_VERTEX_BUFFER_BIT, SHARING_MODE_EXCLUSIVE, [0])
-    vmemory = DeviceMemory(vbuffer, vdata)
-    GPUResource(vbuffer, vmemory)
-end
+nvertices(::Type{ImageWidget}) = 4
+resource_types(::Type{ImageWidget}) = (SampledImage,)

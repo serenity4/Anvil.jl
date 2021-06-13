@@ -1,5 +1,6 @@
 using Givre
 using Test
+using Base.GC: gc
 
 ENV["JULIA_DEBUG"] = "all"
 
@@ -13,5 +14,3 @@ function main()
 end
 
 main()
-
-GC.gc()

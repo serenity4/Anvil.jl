@@ -1,7 +1,7 @@
 """
 Application-owned resource hosted in-memory on the GPU.
 """
-mutable struct GPUResource{R<:Handle,M,I}
+mutable struct GPUResource{R<:Union{<:Handle,<:AbstractVector{<:Handle}},M,I}
     resource::R
     memory::M
     info::I
@@ -15,12 +15,24 @@ Base.@kwdef struct GPUState
     semaphores::Dict{Symbol,Semaphore} = Dict()
     fences::Dict{Symbol,Fence} = Dict()
     command_pools::Dict{Symbol,CommandPool} = Dict()
-    descriptor_pools::Dict{Symbol,DescriptorPool} = Dict()
+    descriptor_pools::Dict{Symbol,GPUResource{DescriptorPool}} = Dict()
     descriptor_sets::Dict{Symbol,DescriptorSet} = Dict()
     descriptor_set_layouts::Dict{Symbol,DescriptorSetLayout} = Dict()
     image_views::Dict{Symbol,ImageView} = Dict()
     samplers::Dict{Symbol,Sampler} = Dict()
     pipelines::Dict{Symbol,GPUResource{Pipeline}} = Dict()
+end
+
+const VertexBuffer = GPUResource{Buffer,DeviceMemory,Nothing}
+const IndexBuffer = GPUResource{Buffer,DeviceMemory,Nothing}
+const DescriptorSetVector = GPUResource{Vector{DescriptorSet},Nothing,DescriptorSetAllocateInfo}
+
+abstract type ShaderResource end
+
+struct SampledImage <: ShaderResource
+    image::GPUResource{Image}
+    view::GPUResource{ImageView}
+    sampler::Sampler
 end
 
 function Base.show(io::IO, gpu::GPUState)

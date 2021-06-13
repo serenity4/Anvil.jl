@@ -33,6 +33,11 @@ export
         # resources
         GPUResource,
         GPUState,
+        VertexBuffer,
+        IndexBuffer,
+        DescriptorSetVector,
+        ShaderResource,
+        SampledImage,
 
         # memory
         buffer_size,
