@@ -6,8 +6,6 @@ end
 
 Base.show(io::IO, w::ImageWidget) = print(io, "Image(width=", w.dims[1], ", height=", w.dims[2], ")")
 
-AbstractGUI.zindex(img::ImageWidget) = 0
-
 vertex_data_type(::Type{ImageWidget}) = PosUV{Point2f,Point2f}
 
 function GeometryExperiments.PointSet(img::ImageWidget)

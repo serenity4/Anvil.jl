@@ -4,7 +4,7 @@ Describes how the pipeline needs to be bound.
 struct BindState
     vbuffer::VertexBuffer
     ibuffer::Union{Nothing,IndexBuffer}
-    descriptors::DescriptorSetVector
+    descriptors::Union{Nothing,DescriptorSetVector}
     pipeline::GPUResource{Pipeline,Nothing,GraphicsPipelineCreateInfo}
 end
 
@@ -14,7 +14,7 @@ Describes data that an object needs to be drawn, but without having a pipeline c
 struct PreRenderInfo
     vbuffer::VertexBuffer
     ibuffer::Union{Nothing,IndexBuffer}
-    descriptors::DescriptorSetVector
+    descriptors::Union{Nothing,DescriptorSetVector}
 end
 
 """
@@ -84,6 +84,7 @@ function find_descriptor_pool!(rdr::BasicRenderer, wname::Symbol, shaders::Shade
 end
 
 function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo, update_resources, resources::Tuple)
+    !isempty(resources) || error("Empty resources provided for widget $wname")
     pool = find_descriptor_pool!(gr.rdr, wname, shaders)
     gr.prerender_infos[wname] = PreRenderInfo(gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], nothing, DescriptorSetVector(gr.rdr.device, pool, shaders))
     check_resources(w, resources)
@@ -93,11 +94,17 @@ function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderI
     update_descriptor_sets(gr, wname)
 end
 
+function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo)
+    gr.prerender_infos[wname] = PreRenderInfo(gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], nothing, nothing)
+    check_resources(w, ())
+    gr.shaders[wname] = shaders
+end
+
 add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo, update_resources, resources...) =
     add_widget!(gr, wname, w, shaders, update_resources, tuple(resources...))
 
 function check_resources(w, resources)
-    @assert Set(map(typeof, resources)) == Set(resource_types(w)) "Shader resources do not match the widget type $(typeof(w))"
+    @assert Set(map(typeof, resources)) == Set(resource_types(w)) "Shader resources do not match the widget type $(nameof(typeof(w)))"
 end
 
 function Vulkan.WriteDescriptorSet(gr::GUIRenderer, wname::Symbol, resource::SampledImage)

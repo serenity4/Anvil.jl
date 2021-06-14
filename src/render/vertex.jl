@@ -2,7 +2,7 @@ const Point4f = Point{4,Float32}
 
 abstract type VertexData end
 
-struct PosColor{P<:Point,C<:RGBA} <: VertexData
+struct PosColor{P<:Point,C<:Colorant} <: VertexData
     position::P
     color::C
 end
@@ -30,5 +30,6 @@ function Vulkan.Format(::Type{T}) where {T}
         &Point{3,Float32} || &RGB{Float32} => FORMAT_R32G32B32_SFLOAT
         &Point{4,Float32} || &RGBA{Float32} => FORMAT_R32G32B32A32_SFLOAT
         &RGBA{Float16} => FORMAT_R16G16B16A16_SFLOAT
+        &RGB{Float16} => FORMAT_R16G16B16_SFLOAT
     end
 end

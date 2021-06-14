@@ -27,31 +27,28 @@ end
 
 main_window(wm::WindowManager) = first(values(wm.impl.windows))
 
-"""
-Should I put widgets in some global state? What would it be then, a vector, dict?
-Also, it won't be very efficient, since all widgets will basically have a different type...
-"""
+function add_widget!(app::Application, wname::Symbol, w::Widget, callbacks=WindowCallbacks())
+    app.gui.widgets[wname] = w
+    app.gui.callbacks[w] = callbacks
+    update_vertex_buffer!(app.rdr.device, app.rdr.gpu, wname, w)
+end
+
 function add_perlin_image!(app::Application)
-    wname = :perlin
-    img = ImageWidget(app.state.position, (512, 512), (1.0, 1.0))
-    app.gui.widgets[wname] = img
-
     rdr = app.rdr
-
-    app.gui.callbacks[img] = WidgetCallbacks(
+    add_widget!(app, :perlin, ImageWidget(app.state.position, (512, 512), (1.0, 1.0)),
+        WidgetCallbacks(
         on_drag = (src_w::ImageWidget, src_ed::EventDetails, _, ed::EventDetails) -> begin
             Δloc = Point(ed.location) - Point(src_ed.location)
             new_img = @set src_w.center = src_w.center + Δloc
-            update_vertex_buffer!(rdr.device, rdr.gpu, wname, new_img)
+            update_vertex_buffer!(rdr.device, rdr.gpu, :perlin, new_img)
         end,
         on_drop = (src_w::ImageWidget, src_ed::EventDetails, _, dst_ed::EventDetails) -> begin
             Δloc = Point(dst_ed.location) - Point(src_ed.location)
             app.state.position = src_w.center + Δloc
+            new_img = @set src_w.center = src_w.center + Δloc
             add_perlin_image!(app)
-        end,
+        end)
     )
-
-    update_vertex_buffer!(rdr.device, rdr.gpu, wname, img)
 end
 
 render_infos(app::Application) = (RenderInfo(app.gr, wname, w) for (wname, w) in app.gui.widgets)
@@ -132,21 +129,38 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render 
                 ),
             ),
         )
+        box1 = Box((1500., 540.), (100., 20.), RGB(0.,0.7,0.5))
+        app.gui.widgets[:box1] = box1
+        app.gui.callbacks[box1] = WidgetCallbacks(
+            on_double_click = (_...) -> update!(app.state)
+        )
+        update_vertex_buffer!(device, rdr.gpu, :box1, box1)
+        add_widget!(
+            gr,
+            :box1,
+            box1,
+            ShaderInfo(
+                Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "box.vert"), FormatGLSL()), DescriptorBinding[]),
+                Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "box.frag"), FormatGLSL()), DescriptorBinding[]),
+            ),
+        )
         transfer_texture!(gr, app.state)
         recreate_pipelines!(gr, app.gui, rstate)
         run(app.gui, mode; on_iter_last = () -> begin
-            frame = rstate.frame
-            if needs_resource_update(gr)
-                @timeit to "Update resources" begin
-                    wait_hasrendered(frame)
-                    update_resources(gr)
+            @timeit to "Main loop" begin
+                frame = rstate.frame
+                if needs_resource_update(gr)
+                    @timeit to "Update resources" begin
+                        wait_hasrendered(frame)
+                        update_resources(gr)
+                    end
                 end
+                if haschanged(app.state)
+                    @timeit to "Transfer texture" transfer_texture!(gr, app.state)
+                    app.state.haschanged = false
+                end
+                @timeit to "Draw next frame" next_frame!(frame, rdr, app)
             end
-            if haschanged(app.state)
-                @timeit to "Transfer texture" transfer_texture!(gr, app.state)
-                app.state.haschanged = false
-            end
-            @timeit to "Draw next frame" next_frame!(frame, rdr, app)
         end)
         gpu = app.state.gpu
         GC.@preserve gpu rdr rstate device_wait_idle(rdr.device)

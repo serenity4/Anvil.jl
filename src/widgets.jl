@@ -24,6 +24,7 @@ vertex_buffer_symbol(wname::Symbol) = Symbol(wname, :_vertex)
 vertex_data_type(w::Widget) = vertex_data_type(typeof(w))
 nvertices(T::Type{<:Widget}) = not_implemented_for(T)
 nvertices(w::Widget) = nvertices(typeof(w))
+AbstractGUI.zindex(w::Widget) = 0
 resource_types(w::Widget) = resource_types(typeof(w))
 
 include("widgets/image.jl")

@@ -29,7 +29,7 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
                 if !isnothing(ibuffer)
                     cmd_bind_index_buffer(ibuffer, INDEX_TYPE_UINT32)
                 end
-                cmd_bind_descriptor_sets(PIPELINE_BIND_POINT_GRAPHICS, pipeline.info.layout, 0, descriptors.resource, Int[])
+                !isnothing(descriptors) && cmd_bind_descriptor_sets(PIPELINE_BIND_POINT_GRAPHICS, pipeline.info.layout, 0, descriptors.resource, Int[])
                 cmd_bind_pipeline(PIPELINE_BIND_POINT_GRAPHICS, pipeline.resource)
             else
                 vbuffer ≠ prev_bind_state.vbuffer && cmd_bind_vertex_buffers([vbuffer.resource], [0])
@@ -40,12 +40,12 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
                         ibuffer = prev_bind_state.ibuffer
                     end
                 end
-                if !isempty(descriptors.resource)
+                if !isnothing(descriptors)
                     descriptors ≠ prev_bind_state.descriptors && cmd_bind_descriptor_sets(PIPELINE_BIND_POINT_GRAPHICS, pipeline.info.layout, 0, descriptors.resource, Int[])
                 else
                     descriptors = prev_bind_state.descriptors
                 end
-                pipeline ≠ prev_bind_state.pipeline && cmd_bind_pipeline(PIPELINE_BIND_PINT_GRAPHICS, pipeline.resource)
+                pipeline ≠ prev_bind_state.pipeline && cmd_bind_pipeline(PIPELINE_BIND_POINT_GRAPHICS, pipeline.resource)
             end
             prev_bind_state = BindState(vbuffer, ibuffer, descriptors, pipeline)
 
@@ -62,7 +62,7 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
     [command_buffer]
 end
 
-function GraphicsPipelineCreateInfo(rdr::AbstractRenderer, shaders::ShaderInfo, vtype::Type{<:VertexData}, render_pass::RenderPass, extent, descriptors::DescriptorSetVector)
+function GraphicsPipelineCreateInfo(rdr::AbstractRenderer, shaders::ShaderInfo, vtype::Type{<:VertexData}, render_pass::RenderPass, extent, descriptors)
     require_feature(rdr, :sampler_anisotropy)
 
     # build graphics pipeline
@@ -83,7 +83,7 @@ function GraphicsPipelineCreateInfo(rdr::AbstractRenderer, shaders::ShaderInfo, 
         color_write_mask = COLOR_COMPONENT_R_BIT | COLOR_COMPONENT_G_BIT | COLOR_COMPONENT_B_BIT,
     )
     color_blend_state = PipelineColorBlendStateCreateInfo(false, LOGIC_OP_CLEAR, [color_blend_attachment], Float32.((0.0, 0.0, 0.0, 0.0)))
-    pipeline_layout = PipelineLayout(rdr.device, descriptors.info.set_layouts, [])
+    pipeline_layout = PipelineLayout(rdr.device, !isnothing(descriptors) ? descriptors.info.set_layouts : [], [])
     GraphicsPipelineCreateInfo(
         shader_stages,
         rasterizer,
