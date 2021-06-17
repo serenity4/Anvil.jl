@@ -121,7 +121,7 @@ function next_frame!(fs::FrameState, rdr::BasicRenderer, app)
     else
         @timeit to "Recreate swapchain" begin
             err = unwrap_error(status)
-            if err.code == vk.VK_ERROR_OUT_OF_DATE_KHR
+            if err.code == ERROR_OUT_OF_DATE_KHR
                 # recreate swapchain and start over
                 update!(fs.ws)
                 next_frame!(fs, rdr, app)
