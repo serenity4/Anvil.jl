@@ -14,7 +14,7 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
                 frame.ws.render_pass,
                 frame.ws.fbs[frame.img_idx],
                 Rect2D(Offset2D(0, 0), Extent2D(extent(main_window(app.wm))...)),
-                [vk.VkClearValue(vk.VkClearColorValue((0.05, 0.01, 0.1, 0.1)))],
+                [ClearValue(ClearColorValue((0.05f0, 0.01f0, 0.1f0, 0.1f0)))],
             ),
             SUBPASS_CONTENTS_INLINE,
         )
