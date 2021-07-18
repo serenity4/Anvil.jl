@@ -1,24 +1,31 @@
 using OpenType
 using GeometryExperiments
+using Infiltrator
 
 function intensity(curve_points, pixel_per_em)
     @assert length(curve_points) == 3
     res = 0.
     for coord in 1:2
         (x̄₁, x̄₂, x̄₃) = getindex.(curve_points, 3 - coord)
-        if maximum(getindex.(curve_points, coord)) ≤ -0.5
+        if maximum(getindex.(curve_points, coord)) * pixel_per_em ≤ -0.5
             continue
         end
-        rshift = sum(((i, x̄),) -> x̄ ≥ 0 ? (1 << i) : 0, enumerate((x̄₁, x̄₂, x̄₃)))
+        rshift = sum(((i, x̄),) -> x̄ > 0 ? (1 << i) : 0, enumerate((x̄₁, x̄₂, x̄₃)))
         code = (0x2e74 >> rshift) & 0x0003
         if code ≠ 0
             a = x̄₁ - 2x̄₂ + x̄₃
             b = x̄₁ - x̄₂
             c = x̄₁
-            if isapprox(a, 0, atol=1e-3)
+            Δ = b ^ 2 - a * c
+            if Δ < 0
+                # in classes C and F, only x̄₂ is of the opposite sign
+                # and there may be no real roots.
+                continue
+            end
+            if isapprox(a, 0, atol=1e-7)
                 t₁ = t₂ = c / 2b
             else
-                δ = sqrt(b ^ 2 - a * c)
+                δ = sqrt(Δ)
                 t₁ = (b - δ) / a
                 t₂ = (b + δ) / a
             end
@@ -200,5 +207,9 @@ plot_outline(glyph)
 render_glyph(font, glyph, 12)
 
 glyph = font.glyphs[350]
+plot_outline(glyph)
+render_glyph(font, glyph, 12)
+
+glyph = font.glyphs[13]
 plot_outline(glyph)
 render_glyph(font, glyph, 12)
