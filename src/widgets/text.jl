@@ -74,68 +74,68 @@ end
 
 function uncompress(glyph::OpenType.Glyph)
     data = glyph.data
-    ranges = UnitRange{Int}[]
-    points = Point{2,Float64}[]
 
-    start = 1
-    prev_end = 1
-    for contour in data.contour_indices
-        contour_points = Point{2,Float64}[]
-        data_points = data.points[start:contour]
+    contour_indices = [0; data.contour_indices]
+    ranges = map(zip(contour_indices[begin:end-1], contour_indices[begin+1:end])) do (i, j)
+        (i+1):j
+    end
+
+    contour_points = Vector{Point{2,Float64}}[]
+    for data_points in map(Base.Fix1(getindex, data.points), ranges)
+        points = Point{2,Float64}[]
+
+        # make sure data points define a closed contour
         while !(first(data_points).on_curve)
             push!(data_points, popfirst!(data_points))
         end
         if last(data_points) ≠ first(data_points)
             # terminate with a linear segment
-            midpoint = (last(data_points).coords .+ first(data_points).coords) ./ 2
-            # push!(data_points, last(data_points), first(data_points))
-            push!(data_points, OpenType.GlyphPoint(midpoint, true), first(data_points))
-            contour += 2
+            # midpoint = (last(data_points).coords .+ first(data_points).coords) ./ 2
+            push!(data_points, first(data_points))
+            # push!(data_points, OpenType.GlyphPoint(midpoint, true), first(data_points))
         end
+
+        # gather contour points including implicit ones
         on_curve = false
         for point in data_points
             coords = Point(point.coords)
             if !on_curve && !point.on_curve || on_curve && point.on_curve
                 # there is an implicit on-curve point halfway
-                push!(contour_points, (coords + contour_points[end]) / 2)
+                push!(points, (coords + points[end]) / 2)
             end
-            push!(contour_points, coords)
+            push!(points, coords)
             on_curve = point.on_curve
         end
 
-        start = contour + 1
-        range = prev_end:length(points)
-        prev_end = length(points) + 1
-        npoints = 1 + range.stop - range.start
-        @assert isodd(npoints) "Expected an odd number of curve points."
-        @assert first(contour_points) == last(contour_points) contour_points
-        append!(points, contour_points)
-        push!(ranges, range)
+        @assert isodd(length(points)) "Expected an odd number of curve points."
+        @assert first(points) == last(points) points
+        push!(contour_points, points)
         on_curve = true
     end
 
     # rescale to [0., 1.]
     min = Point(glyph.header.xmin, glyph.header.ymin)
     max = Point(glyph.header.xmax, glyph.header.ymax)
-    @assert all(min[1] ≤ minimum(getindex.(points, 1)))
-    @assert all(min[2] ≤ minimum(getindex.(points, 2)))
-    @assert all(max[1] ≥ maximum(getindex.(points, 1)))
-    @assert all(max[2] ≥ maximum(getindex.(points, 2)))
     sc = inv(Scaling(max - min))
     transf = sc ∘ Translation(-min)
-    points = transf.(points)
-    @assert all(p -> all(0 .≤ p .≤ 1), points)
-    ranges, points
+    contour_points = map(contour_points) do points
+        @assert all(min[1] ≤ minimum(getindex.(points, 1)))
+        @assert all(min[2] ≤ minimum(getindex.(points, 2)))
+        @assert all(max[1] ≥ maximum(getindex.(points, 1)))
+        @assert all(max[2] ≥ maximum(getindex.(points, 2)))
+        res = transf.(points)
+        @assert all(p -> all(0 .≤ p .≤ 1), res)
+        res
+    end
+
+    contour_points
 end
 
 function curves(glyph::OpenType.Glyph)
-    ranges, points = uncompress(glyph)
+    contour_points = uncompress(glyph)
     patch = Patch(BezierCurve(), 3)
-    points_per_patch = map(ranges) do range
-        points[range]
-    end
 
-    [map(Base.Fix2(split, patch), points_per_patch)...;]
+    [map(Base.Fix2(split, patch), contour_points)...;]
 end
 
 function plot_outline(glyph)
