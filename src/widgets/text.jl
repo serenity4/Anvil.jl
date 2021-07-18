@@ -42,35 +42,6 @@ function intensity(curve_points, pixel_per_em)
     res
 end
 
-function intensity2(point, glyph::OpenType.Glyph)
-    ranges, points = uncompress(glyph)
-    # get nearest two points
-    points_on_curve = [(points[r][1:2:end] for r in ranges)...;]
-    (a, b) = sort_nearest(PointSet(points_on_curve), point)[1:2]
-    (idx_a, idx_b) = (findfirst(==(a), points_on_curve), findfirst(==(b), points_on_curve))
-    @assert idx_b ≠ idx_a
-
-    # get patch
-    patch_idx_a = findfirst(Base.Fix1(in, idx_a), ranges)
-    patch_idx_b = findfirst(Base.Fix1(in, idx_b), ranges)
-    if patch_idx_a ≠ patch_idx_b
-        
-    end
-    range = ranges[patch_idx_a]
-
-    # get curve on patch
-    idx_a_rel = idx_a - (range.start - 1)
-    idx_b_rel = idx_b - (range.start - 1)
-    patch_points = CircularVector(points[range])
-    if isodd(idx_a_rel) # a is on-curve
-        if isodd(idx_b_rel) # b is on-curve
-            if abs(idx_a_rel - idx_b_rel) == 2
-                curve = getindex.(Ref(patch_points), min(idx_a_rel, idx_b_rel):max(idx_a_rel, idx_b_rel))
-            end
-        end
-    end
-end
-
 function intensity(point, glyph::OpenType.Glyph, units_per_em; font_size=12)
     res = sum(curves(glyph)) do p
         poffset = map(Translation(-point), p)
