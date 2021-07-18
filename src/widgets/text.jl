@@ -1,6 +1,5 @@
 using OpenType
 using GeometryExperiments
-using Infiltrator
 
 function intensity(curve_points, pixel_per_em)
     @assert length(curve_points) == 3
@@ -16,15 +15,15 @@ function intensity(curve_points, pixel_per_em)
             a = x̄₁ - 2x̄₂ + x̄₃
             b = x̄₁ - x̄₂
             c = x̄₁
-            Δ = b ^ 2 - a * c
-            if Δ < 0
-                # in classes C and F, only x̄₂ is of the opposite sign
-                # and there may be no real roots.
-                continue
-            end
             if isapprox(a, 0, atol=1e-7)
                 t₁ = t₂ = c / 2b
             else
+                Δ = b ^ 2 - a * c
+                if Δ < 0
+                    # in classes C and F, only x̄₂ is of the opposite sign
+                    # and there may be no real roots.
+                    continue
+                end
                 δ = sqrt(Δ)
                 t₁ = (b - δ) / a
                 t₂ = (b + δ) / a
@@ -68,9 +67,7 @@ function uncompress(glyph::OpenType.Glyph)
         end
         if last(data_points) ≠ first(data_points)
             # terminate with a linear segment
-            # midpoint = (last(data_points).coords .+ first(data_points).coords) ./ 2
             push!(data_points, first(data_points))
-            # push!(data_points, OpenType.GlyphPoint(midpoint, true), first(data_points))
         end
 
         # gather contour points including implicit ones
