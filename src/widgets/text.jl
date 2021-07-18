@@ -80,23 +80,26 @@ function uncompress(glyph::OpenType.Glyph)
     start = 1
     prev_end = 1
     for contour in data.contour_indices
-        data_points = copy(data.points)
-        while !(first(data_points).on_curve) || !(last(data_points).on_curve)
+        contour_points = Point{2,Float64}[]
+        data_points = data.points[start:contour]
+        while !(first(data_points).on_curve)
             push!(data_points, popfirst!(data_points))
         end
         if last(data_points) ≠ first(data_points)
             # terminate with a linear segment
-            push!(data_points, last(data_points), first(data_points))
+            midpoint = (last(data_points).coords .+ first(data_points).coords) ./ 2
+            # push!(data_points, last(data_points), first(data_points))
+            push!(data_points, OpenType.GlyphPoint(midpoint, true), first(data_points))
             contour += 2
         end
         on_curve = false
-        for point in data_points[start:contour]
+        for point in data_points
             coords = Point(point.coords)
             if !on_curve && !point.on_curve || on_curve && point.on_curve
                 # there is an implicit on-curve point halfway
-                push!(points, (coords + points[end]) / 2)
+                push!(contour_points, (coords + contour_points[end]) / 2)
             end
-            push!(points, coords)
+            push!(contour_points, coords)
             on_curve = point.on_curve
         end
 
@@ -105,6 +108,8 @@ function uncompress(glyph::OpenType.Glyph)
         prev_end = length(points) + 1
         npoints = 1 + range.stop - range.start
         @assert isodd(npoints) "Expected an odd number of curve points."
+        @assert first(contour_points) == last(contour_points) contour_points
+        append!(points, contour_points)
         push!(ranges, range)
         on_curve = true
     end
@@ -132,12 +137,6 @@ function curves(glyph::OpenType.Glyph)
 
     [map(Base.Fix2(split, patch), points_per_patch)...;]
 end
-
-font = OpenTypeFont(joinpath(dirname(@__DIR__), "shaders", "JuliaMono-Regular.ttf"))
-
-glyph = font.glyphs[64] # should be a C
-
-intensity(Point(0.3, 0.4), glyph, font.head.units_per_em)
 
 function plot_outline(glyph)
     cs = curves(glyph)
@@ -187,6 +186,10 @@ function render_glyph(font, glyph, font_size)
 end
 
 using Plots
+
+const BezierCurve = GeometryExperiments.BezierCurve
+
+font = OpenTypeFont(joinpath(dirname(@__DIR__), "shaders", "JuliaMono-Regular.ttf"))
 
 glyph = font.glyphs[64]
 plot_outline(glyph)
