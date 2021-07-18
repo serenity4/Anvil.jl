@@ -49,6 +49,22 @@ function intensity(point, glyph::OpenType.Glyph, units_per_em; font_size=12)
     sqrt(abs(res))
 end
 
+function normalize(curves, glyph::OpenType.Glyph)
+    min = Point(glyph.header.xmin, glyph.header.ymin)
+    max = Point(glyph.header.xmax, glyph.header.ymax)
+    sc = inv(Scaling(max - min))
+    transf = sc ∘ Translation(-min)
+    map(curves) do points
+        @assert all(min[1] ≤ minimum(getindex.(points, 1)))
+        @assert all(min[2] ≤ minimum(getindex.(points, 2)))
+        @assert all(max[1] ≥ maximum(getindex.(points, 1)))
+        @assert all(max[2] ≥ maximum(getindex.(points, 2)))
+        res = transf.(points)
+        @assert all(p -> all(0 .≤ p .≤ 1), res)
+        res
+    end
+end
+
 function uncompress(glyph::OpenType.Glyph)
     data = glyph.data
 
@@ -57,7 +73,7 @@ function uncompress(glyph::OpenType.Glyph)
         (i+1):j
     end
 
-    contour_points = Vector{Point{2,Float64}}[]
+    curves = Vector{Point{2,Float64}}[]
     for data_points in map(Base.Fix1(getindex, data.points), ranges)
         points = Point{2,Float64}[]
 
@@ -83,34 +99,18 @@ function uncompress(glyph::OpenType.Glyph)
         end
 
         @assert isodd(length(points)) "Expected an odd number of curve points."
-        @assert first(points) == last(points) points
-        push!(contour_points, points)
+        @assert first(points) == last(points) "Contour is not closed."
+        push!(curves, points)
         on_curve = true
     end
 
-    # rescale to [0., 1.]
-    min = Point(glyph.header.xmin, glyph.header.ymin)
-    max = Point(glyph.header.xmax, glyph.header.ymax)
-    sc = inv(Scaling(max - min))
-    transf = sc ∘ Translation(-min)
-    contour_points = map(contour_points) do points
-        @assert all(min[1] ≤ minimum(getindex.(points, 1)))
-        @assert all(min[2] ≤ minimum(getindex.(points, 2)))
-        @assert all(max[1] ≥ maximum(getindex.(points, 1)))
-        @assert all(max[2] ≥ maximum(getindex.(points, 2)))
-        res = transf.(points)
-        @assert all(p -> all(0 .≤ p .≤ 1), res)
-        res
-    end
-
-    contour_points
+    curves
 end
 
 function curves(glyph::OpenType.Glyph)
-    contour_points = uncompress(glyph)
     patch = Patch(BezierCurve(), 3)
-
-    [map(Base.Fix2(split, patch), contour_points)...;]
+    curves = normalize(uncompress(glyph), glyph)
+    [map(Base.Fix2(split, patch), curves)...;]
 end
 
 function plot_outline(glyph)
