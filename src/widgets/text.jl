@@ -3,27 +3,33 @@ using GeometryExperiments
 
 function intensity(curve_points, pixel_per_em)
     @assert length(curve_points) == 3
-    (y₁, y₂, y₃) = getindex.(curve_points, 2)
-    rshift = sum(((i, y),) -> y ≥ 0 ? (1 << i) : 0, enumerate((y₁, y₂, y₃)))
-    code = (0x2e74 >> rshift) & 0x0003
     res = 0.
-    if code ≠ 0
-        a = y₁ - 2y₂ + y₃
-        b = y₁ - y₂
-        c = y₁
-        if a ≈ 0
-            t₁ = t₂ = c / 2b
-        else
-            δ = sqrt(b ^ 2 - a * c)
-            t₁ = (b - δ) / a
-            t₂ = (b + δ) / a
+    for coord in 1:2
+        (x̄₁, x̄₂, x̄₃) = getindex.(curve_points, 3 - coord)
+        if maximum(getindex.(curve_points, coord)) ≤ -0.5
+            continue
         end
-        bezier = BezierCurve()
-        if code & 0x0001 == 0x0001
-            res += clamp(pixel_per_em * bezier(t₁, curve_points)[1] + 0.5, 0, 1)
-        end
-        if code > 0x0001
-            res -= clamp(pixel_per_em * bezier(t₂, curve_points)[1] + 0.5, 0, 1)
+        rshift = sum(((i, x̄),) -> x̄ ≥ 0 ? (1 << i) : 0, enumerate((x̄₁, x̄₂, x̄₃)))
+        code = (0x2e74 >> rshift) & 0x0003
+        if code ≠ 0
+            a = x̄₁ - 2x̄₂ + x̄₃
+            b = x̄₁ - x̄₂
+            c = x̄₁
+            if isapprox(a, 0, atol=1e-3)
+                t₁ = t₂ = c / 2b
+            else
+                δ = sqrt(b ^ 2 - a * c)
+                t₁ = (b - δ) / a
+                t₂ = (b + δ) / a
+            end
+            bezier = BezierCurve()
+            if code & 0x0001 == 0x0001
+                val = clamp(pixel_per_em * bezier(t₁, curve_points)[coord] + 0.5, 0, 1)
+            end
+            if code > 0x0001
+                val = -clamp(pixel_per_em * bezier(t₂, curve_points)[coord] + 0.5, 0, 1)
+            end
+            res += val * (coord == 1 ? 1 : -1)
         end
     end
     res
@@ -106,9 +112,15 @@ function uncompress(glyph::OpenType.Glyph)
     # rescale to [0., 1.]
     min = Point(glyph.header.xmin, glyph.header.ymin)
     max = Point(glyph.header.xmax, glyph.header.ymax)
+    @assert all(min[1] ≤ minimum(getindex.(points, 1)))
+    @assert all(min[2] ≤ minimum(getindex.(points, 2)))
+    @assert all(max[1] ≥ maximum(getindex.(points, 1)))
+    @assert all(max[2] ≥ maximum(getindex.(points, 2)))
     sc = inv(Scaling(max - min))
     transf = sc ∘ Translation(-min)
-    ranges, transf.(points)
+    points = transf.(points)
+    @assert all(p -> all(0 .≤ p .≤ 1), points)
+    ranges, points
 end
 
 function curves(glyph::OpenType.Glyph)
@@ -142,7 +154,7 @@ function plot_outline(glyph)
     p
 end
 
-function render_glyph(font, glyph)
+function render_glyph(font, glyph, font_size)
     step = 0.01
     n = Int(inv(step))
     xs = 0:step:1
@@ -156,7 +168,17 @@ function render_glyph(font, glyph)
 
     grid = hcat(grid...)
 
-    is = intensity.(grid, Ref(glyph), font.head.units_per_em)
+    is = map(grid) do p
+        try
+            intensity(p, glyph, font.head.units_per_em; font_size)
+        catch e
+            if e isa DomainError
+                NaN
+            else
+                rethrow(e)
+            end
+        end
+    end
     @assert !all(iszero, is)
 
     p = heatmap(is)
@@ -166,5 +188,14 @@ end
 
 using Plots
 
+glyph = font.glyphs[64]
 plot_outline(glyph)
-render_glyph(font, glyph)
+render_glyph(font, glyph, 12)
+
+glyph = font.glyphs[75]
+plot_outline(glyph)
+render_glyph(font, glyph, 12)
+
+glyph = font.glyphs[350]
+plot_outline(glyph)
+render_glyph(font, glyph, 12)
