@@ -98,6 +98,8 @@ function render_glyph(font, glyph, font_size)
     yticks!(p, 1:n ÷ 10:n, string.(ys[1:n ÷ 10:n]))
 end
 
+render_glyph(font, char::Char, font_size) = render_glyph(font, font[char], font_size)
+
 using Plots
 
 const BezierCurve = GeometryExperiments.BezierCurve
@@ -119,3 +121,5 @@ render_glyph(font, glyph, 12)
 glyph = font.glyphs[13]
 plot_outline(glyph)
 render_glyph(font, glyph, 12)
+
+render_glyph(font, '€', 12)
