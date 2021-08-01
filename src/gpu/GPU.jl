@@ -1,6 +1,7 @@
 module GPU
 
 using Vulkan
+using Dictionaries
 using MLStyle
 
 const debug_callback_c = Ref{Ptr{Cvoid}}(C_NULL)
@@ -30,6 +31,7 @@ export
     DescriptorSetVector,
     ShaderResource,
     SampledImage,
+    StorageBuffer,
 
     # memory
     buffer_size,

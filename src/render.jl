@@ -62,13 +62,20 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
     [command_buffer]
 end
 
-function GraphicsPipelineCreateInfo(rdr::AbstractRenderer, shaders::ShaderInfo, vtype::Type{<:VertexData}, render_pass::RenderPass, extent, descriptors)
+# warning: this is type piracy.
+Vulkan.PrimitiveTopology(::Type{<:IndexList{Line}}) = PRIMITIVE_TOPOLOGY_LINE_LIST
+Vulkan.PrimitiveTopology(::Type{<:Strip{Line}}) = PRIMITIVE_TOPOLOGY_LINE_STRIP
+Vulkan.PrimitiveTopology(::Type{<:IndexList{Triangle}}) = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
+Vulkan.PrimitiveTopology(::Type{<:Strip{Triangle}}) = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+Vulkan.PrimitiveTopology(::Type{<:Fan{Triangle}}) = PRIMITIVE_TOPOLOGY_TRIANGLE_FAN
+
+function GraphicsPipelineCreateInfo(rdr::AbstractRenderer, shaders::ShaderInfo, mesh::Type{MeshVertexEncoding{I,T}}, render_pass::RenderPass, extent, descriptors) where {I,T}
     require_feature(rdr, :sampler_anisotropy)
 
     # build graphics pipeline
     shader_stages = PipelineShaderStageCreateInfo.([shaders.vertex, shaders.fragment])
-    vertex_input_state = PipelineVertexInputStateCreateInfo([VertexInputBindingDescription(vtype, 0)], VertexInputAttributeDescription(vtype, 0))
-    input_assembly_state = PipelineInputAssemblyStateCreateInfo(PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP, false)
+    vertex_input_state = PipelineVertexInputStateCreateInfo([VertexInputBindingDescription(T, 0)], VertexInputAttributeDescription(T, 0))
+    input_assembly_state = PipelineInputAssemblyStateCreateInfo(PrimitiveTopology(I), false)
     viewport_state = PipelineViewportStateCreateInfo(viewports = [Viewport(0, 0, extent..., 0, 1)], scissors = [Rect2D(Offset2D(0, 0), Extent2D(extent...))])
     rasterizer = PipelineRasterizationStateCreateInfo(false, false, POLYGON_MODE_FILL, FRONT_FACE_CLOCKWISE, false, 0.0, 0.0, 0.0, 1.0, cull_mode = CULL_MODE_BACK_BIT)
     multisample_state = PipelineMultisampleStateCreateInfo(SAMPLE_COUNT_1_BIT, false, 1.0, false, false)

@@ -26,11 +26,13 @@ Upload data to the specified memory.
 !!! warning
     The `memory` must be host coherent and host visible, otherwise the operation will fail.
 """
-function upload_data(memory::DeviceMemory, data::DenseArray{T}) where {T}
-    memptr = unwrap(map_memory(memory.device, memory, 0, buffer_size(data)))
+function upload_data(memory::DeviceMemory, data::DenseArray{T}; offset=0) where {T}
+    memptr = unwrap(map_memory(memory.device, memory, offset, buffer_size(data)))
     GC.@preserve data unsafe_copyto!(Ptr{T}(memptr), pointer(data), length(data))
     unwrap(unmap_memory(memory.device, memory))
 end
+
+upload_data(resource::GPUResource, data; offset=0) = upload_data(resource.memory, data; offset)
 
 """
 Download data from the specified memory to an `Array`.

@@ -30,7 +30,7 @@ main_window(wm::WindowManager) = first(values(wm.impl.windows))
 function add_widget!(app::Application, wname::Symbol, w::Widget, callbacks=WindowCallbacks())
     app.gui.widgets[wname] = w
     app.gui.callbacks[w] = callbacks
-    update_vertex_buffer!(app.rdr.device, app.rdr.gpu, wname, w)
+    update_buffers!(app.rdr.gpu, app.rdr.device, wname, w)
 end
 
 function add_perlin_image!(app::Application)
@@ -40,7 +40,7 @@ function add_perlin_image!(app::Application)
         on_drag = (src_w::ImageWidget, src_ed::EventDetails, _, ed::EventDetails) -> begin
             Δloc = Point(ed.location) - Point(src_ed.location)
             new_img = @set src_w.center = src_w.center + Δloc
-            update_vertex_buffer!(rdr.device, rdr.gpu, :perlin, new_img)
+            update_buffers!(rdr.gpu, rdr.device, :perlin, new_img)
         end,
         on_drop = (src_w::ImageWidget, src_ed::EventDetails, _, dst_ed::EventDetails) -> begin
             Δloc = Point(dst_ed.location) - Point(src_ed.location)
@@ -134,7 +134,7 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render 
         app.gui.callbacks[box1] = WidgetCallbacks(
             on_double_click = (_...) -> update!(app.state)
         )
-        update_vertex_buffer!(device, rdr.gpu, :box1, box1)
+        update_buffers!(rdr.gpu, device, :box1, box1)
         add_widget!(
             gr,
             :box1,
@@ -143,6 +143,22 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render 
                 Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "box.vert"), FormatGLSL()), DescriptorBinding[]),
                 Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "box.frag"), FormatGLSL()), DescriptorBinding[]),
             ),
+        )
+        text1 = StaticText(
+            text = "Hello World!",
+            origin = (500., 500.)
+        )
+        add_widget!(
+            gr,
+            :text1,
+            text1,
+            ShaderInfo(
+                Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "box.vert"), FormatGLSL()), DesciptorBinding[]),
+                Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "glyph_minimal_manual.frag"), FormatGLSL()), [DescriptorBinding(DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, 1)]),
+            ),
+            create_buffer_resource(device, text1.properties.indexing.curves) do (device, size)
+                unwrap(create_buffer(device, size, BUFFER_USAGE_STORAGE_BUFFER_BIT, SHARING_MODE_EXCLUSIVE, [0]))
+            end,
         )
         transfer_texture!(gr, app.state)
         recreate_pipelines!(gr, app.gui, rstate)

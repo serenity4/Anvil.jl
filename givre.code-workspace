@@ -20,6 +20,9 @@
         },
         {
             "path": "../VulkanExamples"
+        },
+        {
+            "path": "../VulkanShaders"
         }
     ],
     "settings": {

@@ -11,8 +11,11 @@ using ProceduralNoise
 using GeometryExperiments
 using Setfield
 using TimerOutputs
+using Memoization: @memoize
+using LRUCache: LRU
+using Dictionaries
 
-import AbstractGUI: callbacks, vertex_data
+import AbstractGUI: callbacks
 
 const to = TimerOutput()
 

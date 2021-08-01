@@ -1,125 +1,101 @@
 using OpenType
-using OpenType: curves
-using GeometryExperiments
 
-function intensity(curve_points, pixel_per_em)
-    @assert length(curve_points) == 3
-    res = 0.
-    for coord in 1:2
-        (x̄₁, x̄₂, x̄₃) = getindex.(curve_points, 3 - coord)
-        if maximum(getindex.(curve_points, coord)) * pixel_per_em ≤ -0.5
-            continue
-        end
-        rshift = sum(((i, x̄),) -> x̄ > 0 ? (1 << i) : 0, enumerate((x̄₁, x̄₂, x̄₃)))
-        code = (0x2e74 >> rshift) & 0x0003
-        if code ≠ 0
-            a = x̄₁ - 2x̄₂ + x̄₃
-            b = x̄₁ - x̄₂
-            c = x̄₁
-            if isapprox(a, 0, atol=1e-7)
-                t₁ = t₂ = c / 2b
-            else
-                Δ = b ^ 2 - a * c
-                if Δ < 0
-                    # in classes C and F, only x̄₂ is of the opposite sign
-                    # and there may be no real roots.
-                    continue
-                end
-                δ = sqrt(Δ)
-                t₁ = (b - δ) / a
-                t₂ = (b + δ) / a
-            end
-            bezier = BezierCurve()
-            if code & 0x0001 == 0x0001
-                val = clamp(pixel_per_em * bezier(t₁, curve_points)[coord] + 0.5, 0, 1)
-            end
-            if code > 0x0001
-                val = -clamp(pixel_per_em * bezier(t₂, curve_points)[coord] + 0.5, 0, 1)
-            end
-            res += val * (coord == 1 ? 1 : -1)
+const FONT_LOAD_DIR = joinpath(dirname(dirname((@__DIR__))), "assets", "fonts")
+
+@memoize LRU(maxsize=50) function load_font(font_name::AbstractString)
+    for file in readdir(FONT_LOAD_DIR)
+        if first(splitext(basename(file))) == font_name
+            return OpenTypeFont(joinpath(FONT_LOAD_DIR, file))
         end
     end
-    res
+    error("Could not find a font file for $font_name.")
 end
 
-function intensity(point, glyph::OpenType.Glyph, units_per_em; font_size=12)
-    res = sum(curves(glyph)) do p
-        poffset = map(Translation(-point), p)
-        intensity(poffset, font_size)
-    end
-    sqrt(abs(res))
+abstract type TextWidget <: Widget end
+
+
+struct GlyphCurveIndexing
+    curves::Vector{Point{3, Point{2, Float32}}}
+    curve_ranges::Vector{UnitRange{Int}}
 end
 
-
-function plot_outline(glyph)
-    cs = curves(glyph)
-    p = plot()
-    for (i, curve) in enumerate(cs)
-        for (i, point) in enumerate(curve)
-            color = i == 1 ? :blue : i == 2 ? :cyan : :green
-            scatter!(p, [point[1]], [point[2]], legend=false, color=color)
-        end
-        points = BezierCurve().(0:0.1:1, Ref(curve))
-        curve_color = UInt8[255 - Int(floor(i / length(cs) * 255)), 40, 40]
-        plot!(p, first.(points), last.(points), color=string('#', bytes2hex(curve_color)))
+function GlyphCurveIndexing(font::OpenTypeFont)
+    ranges = UnitRange{Int}[]
+    stop = 0
+    cs = map(filter(!isnothing, font.glyphs)) do glyph
+        glyph_curves = curves(glyph)
+        start = stop + 1
+        stop = start + 3 * length(glyph_curves)
+        push!(ranges, start:stop)
+        glyph_curves
     end
-    p
+    GlyphCurveIndexing([cs...;], ranges)
 end
 
-function render_glyph(font, glyph, font_size)
-    step = 0.01
-    n = Int(inv(step))
-    xs = 0:step:1
-    ys = 0:step:1
-
-    grid = map(xs) do x
-        map(ys) do y
-            Point(x, y)
-        end
-    end
-
-    grid = hcat(grid...)
-
-    is = map(grid) do p
-        try
-            intensity(p, glyph, font.head.units_per_em; font_size)
-        catch e
-            if e isa DomainError
-                NaN
-            else
-                rethrow(e)
-            end
-        end
-    end
-    @assert !all(iszero, is)
-
-    p = heatmap(is)
-    xticks!(p, 1:n ÷ 10:n, string.(xs[1:n ÷ 10:n]))
-    yticks!(p, 1:n ÷ 10:n, string.(ys[1:n ÷ 10:n]))
+struct TextRenderInfo
+    color::RGBA
+    size::Float64
 end
 
-render_glyph(font, char::Char, font_size) = render_glyph(font, font[char], font_size)
+struct TextProperties
+    font::OpenTypeFont
+    render_info::TextRenderInfo
+    indexing::GlyphCurveIndexing
+end
 
-using Plots
+TextProperties(font::OpenTypeFont; render_info = TextRenderInfo(RGBA(1., 1., 1., 1.), 14.)) = TextProperties(font, render_info, GlyphCurveIndexing(font))
 
-const BezierCurve = GeometryExperiments.BezierCurve
+Base.@kwdef struct StaticText <: TextWidget
+    text::String
+    origin::Point2f
+    properties::TextProperties = TextProperties(load_font("juliamono-regular"))
+end
 
-font = OpenTypeFont(joinpath(dirname(@__DIR__), "shaders", "JuliaMono-Regular.ttf"))
+"""
+Vertex data for a character to be rendered.
+"""
+struct CharData <: VertexData
+    "Vertex position."
+    position::Point2f
+    "Character-dependent offset index within the vector of all concatenated glyph curves."
+    offset::UInt32
+    "Character-dependent number of curves."
+    count::UInt32
+end
 
-glyph = font.glyphs[64]
-plot_outline(glyph)
-render_glyph(font, glyph, 12)
+vertex_data_type(::Type{StaticText}) = CharData
+mesh_encoding_type(T::Type{StaticText}) = MeshVertexEncoding{TriangleList, vertex_data_type(T)}
 
-glyph = font.glyphs[75]
-plot_outline(glyph)
-render_glyph(font, glyph, 12)
+function GeometryExperiments.PointSet(w::StaticText, char::Char)
+    glyph = w.properties.font[char]
+    if isnothing(glyph)
+        PointSet(Point{2,Float64}[])
+    else
+        Translation(w.origin)(boundingelement(glyph))
+    end
+end
 
-glyph = font.glyphs[350]
-plot_outline(glyph)
-render_glyph(font, glyph, 12)
+function GeometryExperiments.boundingelement(w::StaticText)
+    points = [map(char -> PointSet(w, char).points, collect(w.text))...;]
+    boundingelement(PointSet(points))
+end
 
-glyph = font.glyphs[13]
-plot_outline(glyph)
-render_glyph(font, glyph, 12)
+function GeometryExperiments.MeshVertexEncoding(w::StaticText)
+    T = vertex_data_type(w)
+    MT = mesh_encoding_type(w)
+    mesh = MT(TriangleList{3,UInt32}([]), T[])
 
-render_glyph(font, '€', 12)
+    foreach(enumerate(w.text)) do (i, char)
+        glyph = w.properties.font[char]
+        idx = findfirst(==(glyph), w.properties.font.glyphs)
+        range = w.properties.indexing.curve_ranges[idx]
+        offset = range.start - 1
+        count = length(range)
+        set = PointSet(w, char)
+        append!(mesh.encoding.indices, collect(TriangleList(TriangleStrip(1 + 4 * (i - 1):4i))))
+        append!(mesh.vertex_data, T.(set.points, offset, count))
+    end
+    mesh
+end
+
+resource_types(::Type{StaticText}) = (GPUResource{Buffer,DeviceMemory,Nothing},)

@@ -86,7 +86,7 @@ end
 function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo, update_resources, resources::Tuple)
     !isempty(resources) || error("Empty resources provided for widget $wname")
     pool = find_descriptor_pool!(gr.rdr, wname, shaders)
-    gr.prerender_infos[wname] = PreRenderInfo(gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], nothing, DescriptorSetVector(gr.rdr.device, pool, shaders))
+    gr.prerender_infos[wname] = PreRenderInfo(gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], gr.rdr.gpu.buffers[index_buffer_symbol(wname)], DescriptorSetVector(gr.rdr.device, pool, shaders))
     check_resources(w, resources)
     gr.resources[wname] = resources
     gr.shaders[wname] = shaders
@@ -95,7 +95,7 @@ function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderI
 end
 
 function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo)
-    gr.prerender_infos[wname] = PreRenderInfo(gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], nothing, nothing)
+    gr.prerender_infos[wname] = PreRenderInfo(gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], nothing)
     check_resources(w, ())
     gr.shaders[wname] = shaders
 end
@@ -132,7 +132,7 @@ end
 function recreate_pipelines!(gr::GUIRenderer, gm::GUIManager, rstate::RenderState)
     device = gr.rdr.device
     infos = map(collect(gm.widgets)) do (wname, w)
-        GraphicsPipelineCreateInfo(gr.rdr, gr.shaders[wname], vertex_data_type(w), rstate.render_pass, extent(main_window(gm.wm)), gr.prerender_infos[wname].descriptors)
+        GraphicsPipelineCreateInfo(gr.rdr, gr.shaders[wname], mesh_encoding_type(w), rstate.render_pass, extent(main_window(gm.wm)), gr.prerender_infos[wname].descriptors)
     end
     pipelines, _ = unwrap(create_graphics_pipelines(device, infos))
     map(enumerate(keys(gm.widgets))) do (i, wname)
@@ -141,8 +141,7 @@ function recreate_pipelines!(gr::GUIRenderer, gm::GUIManager, rstate::RenderStat
 end
 
 function needs_resource_update(gr::GUIRenderer)
-    any(gr.update_resources) do pair
-        (wname, (needs_update, _)) = pair
+    any(gr.update_resources) do (wname, (needs_update, _))
         needs_update(gr.resources[wname]...)
     end
 end

@@ -65,7 +65,7 @@ void main()
     {
         // Fetch the location of the current curve from the index texture.
 
-        ivec2 curveLoc = ivec2(texelFetch(band_tex,
+        ivec2 curve_loc = ivec2(texelFetch(band_tex,
                            ivec2(hbandLoc.x + curve, hbandLoc.y)).xy);
 
         // Fetch the three 2D control points for the current curve from the
@@ -76,8 +76,8 @@ void main()
         //
         //     C(t) = (1 - t)^2 p1 + 2t(1 - t) p2 + t^2 p3
 
-        vec4 p12 = texelFetch(curve_tex, curveLoc) - vec4(texcoord, texcoord);
-        vec2 p3 = texelFetch(curve_tex, ivec2(curveLoc.x + 1, curveLoc.y)).xy
+        vec4 p12 = texelFetch(curve_tex, curve_loc) - vec4(texcoord, texcoord);
+        vec2 p3 = texelFetch(curve_tex, ivec2(curve_loc.x + 1, curve_loc.y)).xy
                     - texcoord;
 
         // If the largest x coordinate among all three control points falls
@@ -152,11 +152,11 @@ void main()
 
     for (uint curve = 0U; curve < vbandData.x; curve++)
     {
-        ivec2 curveLoc = ivec2(texelFetch(band_tex,
+        ivec2 curve_loc = ivec2(texelFetch(band_tex,
                            ivec2(vbandLoc.x + curve, vbandLoc.y)).xy);
 
-        vec4 p12 = texelFetch(curve_tex, curveLoc) - vec4(texcoord, texcoord);
-        vec2 p3 = texelFetch(curve_tex, ivec2(curveLoc.x + 1, curveLoc.y)).xy
+        vec4 p12 = texelFetch(curve_tex, curve_loc) - vec4(texcoord, texcoord);
+        vec2 p3 = texelFetch(curve_tex, ivec2(curve_loc.x + 1, curve_loc.y)).xy
                     - texcoord;
 
         // If the largest y coordinate among all three control points falls
