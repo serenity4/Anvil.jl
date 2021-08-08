@@ -21,14 +21,14 @@ function transfer_texture!(gr::GUIRenderer, app::ApplicationState)
     rdr = gr.rdr
     # (re)create staging buffer if necessary
     if !haskey(app.gpu.buffers, :staging) || buffer_size(app.noise) ≠ app.gpu.buffers[:staging].info.size
-        create_staging_buffer!(app, rdr.device)
+        create_staging_buffer!(app, device(rdr))
     else
-        upload_data(app.gpu.buffers[:staging].memory, texture_data(app))
+        upload_data(memory(app.gpu.buffers[:staging]), texture_data(app))
     end
 
     # transfer host-visible memory to device-local image
     image = gr.resources[:perlin][1].image.resource
-    cbuffer, _... = unwrap(allocate_command_buffers(rdr.device, CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)))
+    cbuffer, _... = unwrap(allocate_command_buffers(device(rdr), CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)))
     @record cbuffer begin
         # transition layout to transfer destination
         cmd_pipeline_barrier(

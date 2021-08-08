@@ -57,7 +57,7 @@ mutable struct FrameState
     device::Device
     ws::WindowState
     frame::Int
-    "1-based indexing"
+    "1-based indexing."
     img_idx::Int
     img_rendered::Vector{Semaphore}
     img_acquired::Vector{Semaphore}

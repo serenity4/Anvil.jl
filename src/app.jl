@@ -3,7 +3,7 @@ mutable struct ApplicationState
     scale::NTuple{2,Int}
     position::Point{2,Int}
     noise::Matrix{Float64}
-    gpu::GPUState # mostly for compute shaders
+    
     haschanged::Bool
 end
 
@@ -30,7 +30,7 @@ main_window(wm::WindowManager) = first(values(wm.impl.windows))
 function add_widget!(app::Application, wname::Symbol, w::Widget, callbacks=WindowCallbacks())
     app.gui.widgets[wname] = w
     app.gui.callbacks[w] = callbacks
-    update_buffers!(app.rdr.gpu, app.rdr.device, wname, w)
+    update_buffers!(app.rdr.gpu, device(app.rdr), wname, w)
 end
 
 function add_perlin_image!(app::Application)
@@ -40,7 +40,7 @@ function add_perlin_image!(app::Application)
         on_drag = (src_w::ImageWidget, src_ed::EventDetails, _, ed::EventDetails) -> begin
             Δloc = Point(ed.location) - Point(src_ed.location)
             new_img = @set src_w.center = src_w.center + Δloc
-            update_buffers!(rdr.gpu, rdr.device, :perlin, new_img)
+            update_buffers!(rdr.gpu, device(rdr), :perlin, new_img)
         end,
         on_drop = (src_w::ImageWidget, src_ed::EventDetails, _, dst_ed::EventDetails) -> begin
             Δloc = Point(dst_ed.location) - Point(src_ed.location)

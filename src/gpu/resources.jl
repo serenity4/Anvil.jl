@@ -7,7 +7,13 @@ handle_type(::Type{<:AbstractHandle{H}}) where {H} = handle_type(H)
 handle_type(T::Type{Handle}) = T
 
 handle(h::Handle) = h
-handle(r::AbstractHandle) = r.handle
+handle(r::AbstractHandle) = handle(r.handle)
+
+Vulkan.device(x::AbstractHandle) = device(handle(x))
+Vulkan.instance(x::AbstractHandle) = instance(handle(x))
+
+Base.unsafe_convert(T::Type{Ptr{Cvoid}}, h::AbstractHandle) = Base.unsafe_convert(T, handle(h))
+Base.convert(::Type{H}, x::AbstractHandle{H}) where {H<:Handle} = handle(x)
 
 """
 Application-owned resource hosted in memory on the GPU.
@@ -20,28 +26,29 @@ struct Allocated{H,M} <: AbstractHandle{H}
     memory::M
 end
 
+memory(a::Allocated) = a.memory
+
 struct Created{H<:Handle,I} <: AbstractHandle{H}
     handle::H
     info::I
 end
 
-Base.@kwdef struct ResourceStorage
-    images::Dictionary{Symbol,Allocated{Image}} = Dictionary()
-    buffers::Dictionary{Symbol,Allocated{Buffer}} = Dictionary()
-    semaphores::Dictionary{Symbol,Semaphore} = Dictionary()
-    fences::Dictionary{Symbol,Fence} = Dictionary()
-    command_pools::Dictionary{Symbol,CommandPool} = Dictionary()
-    descriptor_pools::Dictionary{Symbol,Created{DescriptorPool}} = Dictionary()
-    descriptor_sets::Dictionary{Symbol,DescriptorSet} = Dictionary()
-    descriptor_set_layouts::Dictionary{Symbol,DescriptorSetLayout} = Dictionary()
-    image_views::Dictionary{Symbol,ImageView} = Dictionary()
-    samplers::Dictionary{Symbol,Sampler} = Dictionary()
-    pipelines::Dictionary{Symbol,GPUResource{Pipeline}} = Dictionary()
+info(c::Created) = c.info
+
+function require_feature(device::Created{Device,DeviceCreateInfo}, feature::Symbol)
+    getproperty(info(device).enabled_features, feature) || error("Feature '$feature' required but not enabled.")
+end
+
+function require_extension(inst_or_device::Union{Created{Instance,InstanceCreateInfo},Created{Device,DeviceCreateInfo}}, extension)
+    string(extension) in info(inst_or_device).enabled_extension_names || error("Extension '$extension' required but not enabled.")
+end
+
+function require_layer(instance::Created{Instance,InstanceCreateInfo}, layer)
+    string(layer) in info(instance).enabled_layer_names || error("Layer '$layer' required but not enabled.")
 end
 
 const VertexBuffer = Allocated{Buffer,DeviceMemory}
 const IndexBuffer = Allocated{Buffer,DeviceMemory}
-const DescriptorSetVector = Created{Vector{DescriptorSet},DescriptorSetAllocateInfo}
 
 abstract type ShaderResource end
 
@@ -58,39 +65,3 @@ struct StorageBuffer <: ShaderResource
 end
 
 Vulkan.DescriptorType(::Type{StorageBuffer}) = DESCRIPTOR_TYPE_STORAGE_BUFFER
-
-function Base.show(io::IO, gpu::GPUState)
-    print(io, "GPUState with")
-    fields = fieldnames(GPUState)
-    props = getproperty.(Ref(gpu), fieldnames(GPUState))
-    idxs = findall(!isempty, props)
-    props = props[idxs]
-    fields = fields[idxs]
-    if !isempty(props)
-        lastfield = last(fields)
-        for (field, prop) in zip(fields, props)
-            print(io, ' ', length(prop), ' ', replace(string(field), "_" => " "))
-            field ≠ lastfield && print(io, ',')
-        end
-    else
-        print(io, " no resources")
-    end
-end
-
-function Base.show(io::IO, ::MIME"text/plain", gpu::GPUState)
-    print(io, "GPUState")
-    fields = fieldnames(GPUState)
-    props = getproperty.(Ref(gpu), fieldnames(GPUState))
-    idxs = findall(!isempty, props)
-    props = props[idxs]
-    fields = fields[idxs]
-    if !isempty(props)
-        println(io)
-        lastfield = last(fields)
-        for (field, prop) in zip(fields, props)
-            println(io, "└─ ", length(prop), ' ', replace(string(field), "_" => " "))
-        end
-    else
-        print(io, " no resources")
-    end
-end

@@ -1,60 +1,114 @@
 """
-Describes how the pipeline needs to be bound.
+Binding state that must be set in order for
+drawing commands to render correctly.
+"""
+struct BindRequirements
+    dependencies::ShaderDependencies
+    push_data::Any
+    pipeline::Created{Pipeline,GraphicsPipelineCreateInfo}
+end
+
+"""
+Describes the current binding state.
 """
 struct BindState
-    vbuffer::VertexBuffer
-    ibuffer::Union{Nothing,IndexBuffer}
-    descriptors::Union{Nothing,DescriptorSetVector}
-    pipeline::GPUResource{Pipeline,Nothing,GraphicsPipelineCreateInfo}
+    vertex_buffer::Optional{VertexBuffer}
+    index_buffer::Optional{IndexBuffer}
+    descriptor_sets::Vector{Created{DescriptorSet,DescriptorSetAllocateInfo}}
+    push_data::Any
+    pipeline::Optional{Created{Pipeline,GraphicsPipelineCreateInfo}}
+end
+
+function Base.bind(cbuffer::CommandBuffer, reqs::BindRequirements, state::BindState)
+    @unpack vertex_buffer, index_buffer, descriptor_sets = reqs.dependencies
+    @unpack push_data, pipeline = reqs
+
+    pipeline ≠ state.pipeline && cmd_bind_pipeline(cbuffer, PIPELINE_BIND_POINT_GRAPHICS, pipeline)
+    vertex_buffer ≠ state.vertex_buffer && cmd_bind_vertex_buffers(cbuffer, [vertex_buffer], [0])
+
+    if !isnothing(index_buffer) && index_buffer ≠ state.index_buffer
+        cmd_bind_index_buffer(cbuffer, index_buffer, 0, INDEX_TYPE_UINT32)
+    end
+
+    if !isempty(descriptor_sets) && descriptor_sets ≠ state.descriptor_sets
+        cmd_bind_descriptor_sets(cbuffer, PIPELINE_BIND_POINT_GRAPHICS, pipeline.info.layout, 0, handle.(descriptor_sets), [])
+    end
+
+    if !isnothing(push_data) && push_data ≠ state.push_data
+        cmd_push_constants(cbuffer, pipeline.info.layout, SHADER_STAGE_VERTEX_BIT, 1, Ref(push_data), sizeof(push_data))
+    end
+
+    BindState(vertex_buffer, index_buffer, descriptor_sets, push_data, pipeline)
 end
 
 """
 Describes data that an object needs to be drawn, but without having a pipeline created yet.
 """
-struct PreRenderInfo
-    vbuffer::VertexBuffer
-    ibuffer::Union{Nothing,IndexBuffer}
-    descriptors::Union{Nothing,DescriptorSetVector}
+struct ShaderDependencies
+    vertex_buffer::VertexBuffer
+    index_buffer::Optional{IndexBuffer}
+    descriptor_sets::Vector{Created{DescriptorSet,DescriptorSetAllocateInfo}}
 end
 
 """
 Describes how to generate rendering commands.
 """
 struct RenderInfo
-    bind_state::BindState
+    bind_requirements::BindRequirements
     draw_args::NTuple{4,Int}
 end
 
 struct ShaderInfo
     vertex::Shader
     fragment::Shader
+    specialization_constants::Vector{SpecializationInfo}
+    push_ranges::Vector{PushConstantRange}
 end
+
+ShaderInfo(vertex, fragment) = ShaderInfo(vertex, fragment, [], [])
+
+struct ResourceManagement
+    "External resources used by one or more shaders for a given widget."
+    resources::Vector{Any}
+    "Whether resources needs an update."
+    needs_update::Function
+    "Function that updates resources."
+    update_resources::Function
+end
+
+struct WidgetDependencies
+    shaders::ShaderInfo
+    resource_management::Optional{ResourceManagement}
+end
+
+WidgetDependencies(shaders::ShaderInfo) = WidgetDependencies(shaders, nothing)
 
 """
 Make the link between a description of widgets and rendering.
 """
 struct GUIRenderer <: AbstractRenderer
     rdr::BasicRenderer
-    prerender_infos::Dict{Symbol,PreRenderInfo}
-    pipelines::Dict{Symbol,GPUResource{Pipeline}}
-    resources::Dict{Symbol,Tuple}
-    shaders::Dict{Symbol,ShaderInfo}
-    update_resources::Dict{Symbol,Tuple{Function,Function}}
+    descriptor_allocator::DescriptorAllocator
+    widget_dependencies::Dictionary{Symbol,WidgetDependencies}
+    shader_dependencies::Dictionary{Symbol,ShaderDependencies}
+    push_data::Dictionary{Symbol,Any}
 end
 
-GUIRenderer(rdr::BasicRenderer) = GUIRenderer(rdr, Dict(), Dict(), Dict(), Dict(), Dict())
+device(gr::GUIRenderer) = device(gr.rdr)
+
+GUIRenderer(rdr::BasicRenderer) = GUIRenderer(rdr, DescriptorAllocator(device(rdr)), Dictionary(), Dictionary(), Dictionary())
 
 function Base.delete!(gr::GUIRenderer, wname::Symbol)
-    delete!(gr.pipelines, wname)
-    delete!(gr.prerender_infos, wname)
+    delete!(gr.widget_dependencies, wname)
+    free_descriptor_sets!(gr.descriptor_allocator, gr.shader_dependencies[wname].descriptors)
+    delete!(gr.shader_dependencies, wname)
 end
 
-function BindState(gr::GUIRenderer, wname::Symbol)
-    @unpack vbuffer, ibuffer, descriptors = gr.prerender_infos[wname]
-    BindState(vbuffer, ibuffer, descriptors, gr.pipelines[wname])
+function BindRequirements(gr::GUIRenderer, wname::Symbol)
+    BindRequirements(gr.shader_dependencies[wname], get(gr.push_data, nothing))
 end
 
-RenderInfo(gr::GUIRenderer, wname::Symbol, w::Widget) = RenderInfo(BindState(gr, wname), (nvertices(w), 1, 0, 0))
+RenderInfo(gr::GUIRenderer, wname::Symbol, w::Widget) = RenderInfo(BindRequirements(gr, wname), (nvertices(w), 1, 0, 0))
 
 function Vulkan.DescriptorPoolCreateInfo(shaders::ShaderInfo)
     descriptors = Dict{DescriptorType,Int}()
@@ -71,45 +125,20 @@ function Vulkan.DescriptorPoolCreateInfo(shaders::ShaderInfo)
     DescriptorPoolCreateInfo(sum(values(descriptors)), [DescriptorPoolSize(dtype, n) for (dtype, n) in descriptors])
 end
 
-function find_descriptor_pool!(rdr::BasicRenderer, wname::Symbol, shaders::ShaderInfo)
-    if haskey(rdr.gpu.descriptor_pools, wname)
-        rdr.gpu.descriptor_pools[wname]
-    else
-        info = DescriptorPoolCreateInfo(shaders)
-        pool = unwrap(create_descriptor_pool(rdr.device, info))
-        resource = GPUResource(pool, nothing, info)
-        rdr.gpu.descriptor_pools[wname] = resource
-        resource
-    end
+function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, widget_dependencies::WidgetDependencies, shader_dependencies::ShaderDependencies)
+    dset_layouts = create_descriptor_set_layouts(widget_dependencies.shaders)
+    dsets = allocate_descriptor_sets!(gr.descriptor_allocator, dset_layouts)
+    append!(shader_dependencies.descriptor_sets, dsets)
+    gr.shader_dependencies[wname] = shader_dependencies
+    gr.widget_dependencies[wname] = widget_dependencies
+    resources = widget_dependencies.resource_management.resources
+    !isempty(resources) && update_descriptor_sets(device(gr), resources)
+    nothing
 end
 
-function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo, update_resources, resources::Tuple)
-    !isempty(resources) || error("Empty resources provided for widget $wname")
-    pool = find_descriptor_pool!(gr.rdr, wname, shaders)
-    gr.prerender_infos[wname] = PreRenderInfo(gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], gr.rdr.gpu.buffers[index_buffer_symbol(wname)], DescriptorSetVector(gr.rdr.device, pool, shaders))
-    check_resources(w, resources)
-    gr.resources[wname] = resources
-    gr.shaders[wname] = shaders
-    gr.update_resources[wname] = update_resources
-    update_descriptor_sets(gr, wname)
-end
-
-function add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo)
-    gr.prerender_infos[wname] = PreRenderInfo(gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], gr.rdr.gpu.buffers[vertex_buffer_symbol(wname)], nothing)
-    check_resources(w, ())
-    gr.shaders[wname] = shaders
-end
-
-add_widget!(gr::GUIRenderer, wname::Symbol, w::Widget, shaders::ShaderInfo, update_resources, resources...) =
-    add_widget!(gr, wname, w, shaders, update_resources, tuple(resources...))
-
-function check_resources(w, resources)
-    @assert Set(map(typeof, resources)) == Set(resource_types(w)) "Shader resources do not match the widget type $(nameof(typeof(w)))"
-end
-
-function Vulkan.WriteDescriptorSet(gr::GUIRenderer, wname::Symbol, resource::SampledImage)
+function Vulkan.WriteDescriptorSet(shader_dependencies::ShaderDependencies, resource::SampledImage)
     WriteDescriptorSet(
-        gr.prerender_infos[wname].descriptors.resource[1],
+        first(shader_dependencies.descriptors.resource),
         1,
         0,
         DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -119,39 +148,39 @@ function Vulkan.WriteDescriptorSet(gr::GUIRenderer, wname::Symbol, resource::Sam
     )
 end
 
-function Vulkan.update_descriptor_sets(gr::GUIRenderer, wname::Symbol)
+function Vulkan.update_descriptor_sets(device::Device, shader_dependencies::ShaderDependencies, resources)
     update_descriptor_sets(
-        gr.rdr.device,
-        collect(map(gr.resources[wname]) do resource
-            WriteDescriptorSet(gr, wname, resource)
-        end),
+        device,
+        map(Base.Fix1(WriteDescriptorSet, shader_dependencies), resources),
         [],
     )
 end
 
 function recreate_pipelines!(gr::GUIRenderer, gm::GUIManager, rstate::RenderState)
-    device = gr.rdr.device
     infos = map(collect(gm.widgets)) do (wname, w)
-        GraphicsPipelineCreateInfo(gr.rdr, gr.shaders[wname], mesh_encoding_type(w), rstate.render_pass, extent(main_window(gm.wm)), gr.prerender_infos[wname].descriptors)
+        GraphicsPipelineCreateInfo(device(gr), gr.widget_dependencies[wname].shaders, mesh_encoding_type(w), rstate.render_pass, extent(main_window(gm.wm)), gr.shader_dependencies[wname])
     end
-    pipelines, _ = unwrap(create_graphics_pipelines(device, infos))
+    pipelines, _ = unwrap(create_graphics_pipelines(device(gr), infos))
     map(enumerate(keys(gm.widgets))) do (i, wname)
         gr.pipelines[wname] = GPUResource(pipelines[i], nothing, infos[i])
     end
 end
 
 function needs_resource_update(gr::GUIRenderer)
-    any(gr.update_resources) do (wname, (needs_update, _))
-        needs_update(gr.resources[wname]...)
+    any(gr.widget_dependencies) do deps
+        isnothing(deps.resource_management) && return false
+        rm = deps.resource_management
+        rm.needs_update(rm.resources...)
     end
 end
 
 function update_resources(gr::GUIRenderer)
-    for (wname, (needs_update, update)) in gr.update_resources
-        resources = gr.resources[wname]
-        if needs_update(resources...)
-            gr.resources[wname] = update(resources...)
+    foreach(zip(gr.shader_dependencies, gr.widget_dependencies)) do (sdeps, wdeps)
+        !isnothing(wdeps.resource_management) || continue
+        rm = wdeps.resource_management
+        if rm.needs_update(resources...)
+            rm.resources .= rm.update(resources...)
         end
-        update_descriptor_sets(gr, wname)
+        update_descriptor_sets(device(gr), sdeps)
     end
 end

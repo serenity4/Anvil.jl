@@ -29,6 +29,7 @@ include("render/Render.jl")
 using .Render
 
 include("utils.jl")
+include("descriptor_allocator.jl")
 include("widgets.jl")
 include("guirenderer.jl")
 include("app.jl")

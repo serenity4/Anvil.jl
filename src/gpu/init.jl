@@ -19,6 +19,7 @@ end
 function init(;
     instance_layers = [],
     instance_extensions = [],
+    application_info = ApplicationInfo(v"1", v"1", v"1.2"),
     device_extensions = [],
     enabled_features = PhysicalDeviceFeatures(),
     nqueues = 1,
@@ -46,7 +47,8 @@ function init(;
         error("Requesting unsupported instance extensions: $unsupported_extensions")
     end
 
-    instance = Instance(instance_layers, instance_extensions; application_info = ApplicationInfo(v"1", v"1", v"1.2"))
+    instance_ci = InstanceCreateInfo(instance_layers, instance_extensions)
+    instance = Instance(instance_ci; application_info)
 
     physical_device = first(unwrap(enumerate_physical_devices(instance)))
 
@@ -69,5 +71,5 @@ function init(;
         enabled_features,
     )
     device = unwrap(create_device(physical_device, device_ci))
-    device, device_ci
+    Created(instance, instance_ci), Created(device, device_ci)
 end

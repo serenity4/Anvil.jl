@@ -24,8 +24,14 @@ export
     init,
 
     # resources
-    GPUResource,
-    GPUState,
+    AbstractHandle,
+    handle,
+    memory,
+    Allocated,
+    Created,
+    require_extension,
+    require_layer,
+    require_feature,
     VertexBuffer,
     IndexBuffer,
     DescriptorSetVector,
