@@ -32,7 +32,7 @@ function upload_data(memory::DeviceMemory, data::DenseArray{T}; offset=0) where 
     unwrap(unmap_memory(memory.device, memory))
 end
 
-upload_data(resource::GPUResource, data; offset=0) = upload_data(resource.memory, data; offset)
+upload_data(resource::Allocated, data; offset=0) = upload_data(memory(resource), data; offset)
 
 """
 Download data from the specified memory to an `Array`.

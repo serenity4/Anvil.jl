@@ -53,15 +53,15 @@ const IndexBuffer = Allocated{Buffer,DeviceMemory}
 abstract type ShaderResource end
 
 struct SampledImage <: ShaderResource
-    image::GPUResource{Image}
-    view::GPUResource{ImageView}
+    image::Allocated{Created{Image,ImageCreateInfo}}
+    view::Created{ImageView,ImageViewCreateInfo}
     sampler::Sampler
 end
 
 Vulkan.DescriptorType(::Type{SampledImage}) = DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER
 
 struct StorageBuffer <: ShaderResource
-    buffer::AllocatedResource{Buffer}
+    buffer::Allocated{Buffer}
 end
 
 Vulkan.DescriptorType(::Type{StorageBuffer}) = DESCRIPTOR_TYPE_STORAGE_BUFFER

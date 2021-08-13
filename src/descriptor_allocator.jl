@@ -1,6 +1,6 @@
 struct DescriptorPoolState
     allocated::Dictionary{DescriptorType,Int}
-    limits::DescriptorPoolLimits
+    limits::Dictionary{DescriptorType,Int}
     max::Int
 end
 
@@ -9,7 +9,7 @@ Entity which manages descriptor pools and descriptor sets.
 """
 struct DescriptorAllocator
     device::Device
-    pools::Dictionary{Created{DesciptorPool,DescriptorPoolCreateInfo},DescriptorPoolState}
+    pools::Dictionary{Created{DescriptorPool,DescriptorPoolCreateInfo},DescriptorPoolState}
 end
 
 DescriptorAllocator(device::Device) = DescriptorAllocator(device, Dictionary())
@@ -42,7 +42,7 @@ function compute_allocations(da::DescriptorAllocator, layouts::AbstractVector{Cr
     allocations = Dictionary{DescriptorType,Int}()
     for layout in layouts
         for binding in layout.info.bindings
-            get!(allocations, binding.descriptor_type, 0) += binding.descriptor_count
+            allocations[binding.descriptor_type] = get(allocations, binding.descriptor_type, 0) + binding.descriptor_count
         end
     end
     allocations

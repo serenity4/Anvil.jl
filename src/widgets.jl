@@ -13,7 +13,8 @@ end
 allocate_vertex_buffer(device::Device, size) = allocate_buffer(device, size, BUFFER_USAGE_VERTEX_BUFFER_BIT, MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)
 allocate_index_buffer(device::Device, size) = allocate_buffer(device, size, BUFFER_USAGE_INDEX_BUFFER_BIT, MEMORY_PROPERTY_HOST_VISIBLE_BIT | MEMORY_PROPERTY_HOST_COHERENT_BIT)
 
-function update_buffer!(gpu::GPUState, allocate_buffer, device::Device, key::Symbol, data)
+#TODO: remove GPUState (gpu)
+function update_buffer!(gpu, allocate_buffer, device::Device, key::Symbol, data)
     if !haskey(gpu.buffers, key)
         gpu.buffers[key] = create_buffer_resource(allocate_buffer, device, data)
     else
@@ -21,7 +22,8 @@ function update_buffer!(gpu::GPUState, allocate_buffer, device::Device, key::Sym
     end
 end
 
-function update_buffers!(gpu::GPUState, device::Device, wname::Symbol, w::Widget)
+#TODO: remove GPUState (gpu)
+function update_buffers!(gpu, device::Device, wname::Symbol, w::Widget)
     vkey = vertex_buffer_symbol(wname)
     ikey = index_buffer_symbol(wname)
     mesh = MeshVertexEncoding(w)

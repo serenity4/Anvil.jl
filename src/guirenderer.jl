@@ -1,4 +1,13 @@
 """
+Describes data that an object needs to be drawn, but without having a pipeline created yet.
+"""
+struct ShaderDependencies
+    vertex_buffer::VertexBuffer
+    index_buffer::Optional{IndexBuffer}
+    descriptor_sets::Vector{Created{DescriptorSet,DescriptorSetAllocateInfo}}
+end
+
+"""
 Binding state that must be set in order for
 drawing commands to render correctly.
 """
@@ -39,15 +48,6 @@ function Base.bind(cbuffer::CommandBuffer, reqs::BindRequirements, state::BindSt
     end
 
     BindState(vertex_buffer, index_buffer, descriptor_sets, push_data, pipeline)
-end
-
-"""
-Describes data that an object needs to be drawn, but without having a pipeline created yet.
-"""
-struct ShaderDependencies
-    vertex_buffer::VertexBuffer
-    index_buffer::Optional{IndexBuffer}
-    descriptor_sets::Vector{Created{DescriptorSet,DescriptorSetAllocateInfo}}
 end
 
 """
@@ -176,7 +176,7 @@ end
 
 function update_resources(gr::GUIRenderer)
     foreach(zip(gr.shader_dependencies, gr.widget_dependencies)) do (sdeps, wdeps)
-        !isnothing(wdeps.resource_management) || continue
+        !isnothing(wdeps.resource_management) || return
         rm = wdeps.resource_management
         if rm.needs_update(resources...)
             rm.resources .= rm.update(resources...)
