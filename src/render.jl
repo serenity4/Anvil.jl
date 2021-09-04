@@ -1,21 +1,23 @@
-function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Application)
-    command_buffer, _... = unwrap(allocate_command_buffers(device(rdr), CommandBufferAllocateInfo(rdr.gpu.command_pools[:primary], COMMAND_BUFFER_LEVEL_PRIMARY, 1)))
+function Rhyolite.command_buffers(fstate::FrameState, app::Application, render_set::RenderSet)
+    command_buffer, _... = unwrap(allocate_command_buffers(device(fstate), _CommandBufferAllocateInfo(CommandPool(app.gr.command_pools), COMMAND_BUFFER_LEVEL_PRIMARY, 1)))
 
     @record command_buffer begin
         cmd_begin_render_pass(
             RenderPassBeginInfo(
-                frame.ws.render_pass,
-                frame.ws.fbs[frame.img_idx],
+                fstate.render_pass,
+                fstate.current_frame[].framebuffer,
                 Rect2D(Offset2D(0, 0), Extent2D(extent(main_window(app.wm))...)),
                 [ClearValue(ClearColorValue((0.05f0, 0.01f0, 0.1f0, 0.1f0)))],
             ),
             SUBPASS_CONTENTS_INLINE,
         )
 
-        bind_state = BindState(nothing, nothing, [], nothing, [])
-        for info in render_infos(app)
-            bind_state = bind(command_buffer, info.bind_requirements, bind_state)
-            @unpack bind_state, draw_args = info
+        render_set = app.gr.render_set
+        prepare!(render_set)
+        bind_state = BindState(nothing, nothing, [], nothing, nothing)
+        for render_info in render_set.render_infos
+            bind_state = bind(command_buffer, BindRequirements(render_info), bind_state)
+            draw_args = render_info.draw_args
             if !isnothing(bind_state.index_buffer)
                 cmd_draw_indexed(draw_args[1:3]..., 0, draw_args[4])
             else
@@ -29,19 +31,28 @@ function Render.command_buffers(rdr::BasicRenderer, frame::FrameState, app::Appl
     [command_buffer]
 end
 
-# warning: this is type piracy.
+# type piracy.
+@nospecialize
 Vulkan.PrimitiveTopology(::Type{<:IndexList{Line}}) = PRIMITIVE_TOPOLOGY_LINE_LIST
 Vulkan.PrimitiveTopology(::Type{<:Strip{Line}}) = PRIMITIVE_TOPOLOGY_LINE_STRIP
 Vulkan.PrimitiveTopology(::Type{<:IndexList{Triangle}}) = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
 Vulkan.PrimitiveTopology(::Type{<:Strip{Triangle}}) = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
 Vulkan.PrimitiveTopology(::Type{<:Fan{Triangle}}) = PRIMITIVE_TOPOLOGY_TRIANGLE_FAN
+@specialize
 
-function Vulkan.GraphicsPipelineCreateInfo(device::Device, shaders::ShaderInfo, mesh::Type{MeshVertexEncoding{I,T}}, render_pass::RenderPass, extent, dependencies::ShaderDependencies) where {I,T}
+function Vulkan.GraphicsPipelineCreateInfo(
+        device::Created{Device,DeviceCreateInfo},
+        render_pass::RenderPass,
+        extent,
+        shaders::Vector{Shader},
+        mesh::Type{MeshVertexEncoding{I,T}},
+        pipeline_layout::PipelineLayout,
+    ) where {I,T}
+
     require_feature(device, :sampler_anisotropy)
 
-    # build graphics pipeline
     shader_stages = PipelineShaderStageCreateInfo.([shaders.vertex, shaders.fragment], shaders.specialization_constants)
-    vertex_input_state = PipelineVertexInputStateCreateInfo([VertexInputBindingDescription(T, 0)], VertexInputAttributeDescription(T, 0))
+    vertex_input_state = PipelineVertexInputStateCreateInfo([VertexInputBindingDescription(T, 0)], vertex_input_attribute_descriptions(T, 0))
     input_assembly_state = PipelineInputAssemblyStateCreateInfo(PrimitiveTopology(I), false)
     viewport_state = PipelineViewportStateCreateInfo(viewports = [Viewport(0, 0, extent..., 0, 1)], scissors = [Rect2D(Offset2D(0, 0), Extent2D(extent...))])
     rasterizer = PipelineRasterizationStateCreateInfo(false, false, POLYGON_MODE_FILL, FRONT_FACE_CLOCKWISE, false, 0.0, 0.0, 0.0, 1.0, cull_mode = CULL_MODE_BACK_BIT)
@@ -57,7 +68,6 @@ function Vulkan.GraphicsPipelineCreateInfo(device::Device, shaders::ShaderInfo, 
         color_write_mask = COLOR_COMPONENT_R_BIT | COLOR_COMPONENT_G_BIT | COLOR_COMPONENT_B_BIT,
     )
     color_blend_state = PipelineColorBlendStateCreateInfo(false, LOGIC_OP_CLEAR, [color_blend_attachment], Float32.((0.0, 0.0, 0.0, 0.0)))
-    pipeline_layout = PipelineLayout(device(rdr), !isempty(descriptors) ? first(dependencies.descriptor_sets).info.set_layouts : [], shaders.push_ranges)
     GraphicsPipelineCreateInfo(
         shader_stages,
         rasterizer,
@@ -73,8 +83,8 @@ function Vulkan.GraphicsPipelineCreateInfo(device::Device, shaders::ShaderInfo, 
     )
 end
 
-function render_state(rdr::BasicRenderer)
-    surface_formats = unwrap(get_physical_device_surface_formats_khr(device(rdr).physical_device, rdr.surface))
+function setup_swapchain(device::Device, surface::SurfaceKHR)
+    surface_formats = unwrap(get_physical_device_surface_formats_khr(device.physical_device, surface))
     format = first(surface_formats)
     attachment = AttachmentDescription(
         format.format,
@@ -86,9 +96,9 @@ function render_state(rdr::BasicRenderer)
         IMAGE_LAYOUT_UNDEFINED,
         IMAGE_LAYOUT_PRESENT_SRC_KHR,
     )
-    capabilities = unwrap(get_physical_device_surface_capabilities_khr(device(rdr).physical_device, rdr.surface))
+    capabilities = unwrap(get_physical_device_surface_capabilities_khr(device.physical_device, surface))
     swapchain_ci = SwapchainCreateInfoKHR(
-        rdr.surface,
+        surface,
         3,
         format.format,
         format.color_space,
@@ -102,9 +112,10 @@ function render_state(rdr::BasicRenderer)
         PRESENT_MODE_IMMEDIATE_KHR,
         false,
     )
+    swapchain = Created(unwrap(create_swapchain_khr(device, swapchain_ci)), swapchain_ci)
 
     render_pass = RenderPass(
-        device(rdr),
+        device,
         [attachment],
         [
             SubpassDescription(
@@ -116,7 +127,7 @@ function render_state(rdr::BasicRenderer)
         ],
         [
             SubpassDependency(
-                vk.VK_SUBPASS_EXTERNAL,
+                SUBPASS_EXTERNAL,
                 0;
                 src_stage_mask = PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                 dst_stage_mask = PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -125,5 +136,14 @@ function render_state(rdr::BasicRenderer)
         ],
     )
 
-    RenderState(rdr, render_pass, swapchain_ci)
+    swapchain, render_pass
+end
+
+function Vulkan.GraphicsPipelineCreateInfo(app::Application, widget)
+    spec = gr
+    layout_info = PipelineLayoutCreateInfo()
+    GraphicsPipelineCreateInfo(
+        gr.device,
+        get(gr.pipeline_layout_cache),
+    )
 end

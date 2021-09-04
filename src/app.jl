@@ -3,11 +3,12 @@ mutable struct ApplicationState
     scale::NTuple{2,Int}
     position::Point{2,Int}
     noise::Matrix{Float64}
-    
     haschanged::Bool
 end
 
-ApplicationState(resolution, scale, position) = ApplicationState(resolution, scale, position, zeros(resolution...), GPUState(), false)
+shader_file(filename) = joinpath(@__DIR__, "shaders", filename)
+
+ApplicationState(resolution, scale, position) = ApplicationState(resolution, scale, position, zeros(resolution...), false)
 
 haschanged(app::ApplicationState) = app.haschanged
 
@@ -17,48 +18,62 @@ function ApplicationState(position = (1920 / 2, 1080 / 2))
     app
 end
 
-struct Application{WM<:AbstractWindowManager,R<:AbstractRenderer}
+struct VulkanConfig{S}
+    instance::Created{Instance,InstanceCreateInfo}
+    device::Created{Device,DeviceCreateInfo}
+    surface::Created{SurfaceKHR,S}
+    disp::QueueDispatch
+    command_pools::ThreadedCommandPool
+end
+
+struct Application{WM<:AbstractWindowManager}
     state::ApplicationState
     wm::WM
     gui::GUIManager{WM}
-    rdr::R
+    vk::VulkanConfig
     gr::GUIRenderer
 end
 
 main_window(wm::WindowManager) = first(values(wm.impl.windows))
 
-function add_widget!(app::Application, wname::Symbol, w::Widget, callbacks=WindowCallbacks())
-    app.gui.widgets[wname] = w
-    app.gui.callbacks[w] = callbacks
-    update_buffers!(app.rdr.gpu, device(app.rdr), wname, w)
+function add_widget!(app::Application, w::Widget, widget_dependencies::WidgetDependencies, callbacks=WindowCallbacks())
+    insert!(app.gui.callbacks, w, callbacks)
+    add_widget!(app.gr, w, widget_dependencies)
+end
+
+function update_vertex_buffer(widget::Widget, app::Application, data)
+    upload_data(app.gr.render_set.render_infos[widget].shader_dependencies.vertex_buffer, data)
+end
+
+function update_index_buffer(widget::Widget, app::Application, data)
+    upload_data(app.gr.render_set.render_infos[widget].shader_dependencies.index_buffer, data)
 end
 
 function add_perlin_image!(app::Application)
-    rdr = app.rdr
-    add_widget!(app, :perlin, ImageWidget(app.state.position, (512, 512), (1.0, 1.0)),
+    add_widget!(
+        app,
+        ImageWidget(app.state.position, (512, 512), (1.0, 1.0)),
+        WidgetDependencies(ShaderSpecification.(shader_file.(["texture_2d.vert", "texture_2d.frag"]), GLSL)),
         WidgetCallbacks(
-        on_drag = (src_w::ImageWidget, src_ed::EventDetails, _, ed::EventDetails) -> begin
-            Δloc = Point(ed.location) - Point(src_ed.location)
-            new_img = @set src_w.center = src_w.center + Δloc
-            update_buffers!(rdr.gpu, device(rdr), :perlin, new_img)
-        end,
-        on_drop = (src_w::ImageWidget, src_ed::EventDetails, _, dst_ed::EventDetails) -> begin
-            Δloc = Point(dst_ed.location) - Point(src_ed.location)
-            app.state.position = src_w.center + Δloc
-            new_img = @set src_w.center = src_w.center + Δloc
-            add_perlin_image!(app)
-        end)
+            on_drag = (src_w::ImageWidget, src_ed::EventDetails, _, ed::EventDetails) -> begin
+                Δloc = Point(ed.location) - Point(src_ed.location)
+                new_img = @set src_w.center = src_w.center + Δloc
+                update_vertex_buffer(src_w, app, new_img)
+            end,
+            on_drop = (src_w::ImageWidget, src_ed::EventDetails, _, dst_ed::EventDetails) -> begin
+                Δloc = Point(dst_ed.location) - Point(src_ed.location)
+                app.state.position = src_w.center + Δloc
+                new_img = @set src_w.center = src_w.center + Δloc
+                add_perlin_image!(app)
+            end,
+        )
     )
 end
 
-render_infos(app::Application) = (RenderInfo(app.gr, wname, w) for (wname, w) in app.gui.widgets)
-
 function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render = true)
     if render
-        rdr = app.rdr
-        gr = app.gr
-        device = rdr.device
-        rstate = render_state(rdr)
+        device = app.vk.device
+        fstate = FrameState(setup_swapchain(handle(device), handle(app.vk.surface))...)
         add_perlin_image!(app)
         image_info = ImageCreateInfo(
             IMAGE_TYPE_2D,
@@ -144,24 +159,24 @@ function Base.run(app::Application, mode::ExecutionMode = Synchronous(); render 
                 Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "box.frag"), FormatGLSL()), DescriptorBinding[]),
             ),
         )
-        text1 = StaticText(
-            text = "Hello World!",
-            origin = (500., 500.)
-        )
-        add_widget!(
-            gr,
-            :text1,
-            text1,
-            ShaderInfo(
-                Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "box.vert"), FormatGLSL()), DesciptorBinding[]),
-                Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "glyph_minimal_manual.frag"), FormatGLSL()), [DescriptorBinding(DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, 1)]),
-            ),
-            create_buffer_resource(device, text1.properties.indexing.curves) do (device, size)
-                unwrap(create_buffer(device, size, BUFFER_USAGE_STORAGE_BUFFER_BIT, SHARING_MODE_EXCLUSIVE, [0]))
-            end,
-        )
+        # text1 = StaticText(
+        #     text = "Hello World!",
+        #     origin = (500., 500.)
+        # )
+        # add_widget!(
+        #     gr,
+        #     :text1,
+        #     text1,
+        #     ShaderInfo(
+        #         Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "box.vert"), FormatGLSL()), DesciptorBinding[]),
+        #         Shader(device, ShaderFile(joinpath(@__DIR__, "shaders", "glyph_minimal_manual.frag"), FormatGLSL()), [DescriptorBinding(DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, 1)]),
+        #     ),
+        #     create_buffer_resource(device, text1.properties.indexing.curves) do (device, size)
+        #         unwrap(create_buffer(device, size, BUFFER_USAGE_STORAGE_BUFFER_BIT, SHARING_MODE_EXCLUSIVE, [0]))
+        #     end,
+        # )
         transfer_texture!(gr, app.state)
-        recreate_pipelines!(gr, app.gui, rstate)
+        map_window(main_window(app.wm))
         run(app.gui, mode; on_iter_last = () -> begin
             @timeit to "Main loop" begin
                 frame = rstate.frame
@@ -208,12 +223,23 @@ function Application()
         icon_title = "Givre",
         attributes = [XCB.XCB_CW_BACK_PIXEL],
         values = [0],
+        map = false
     )
     wm = XWindowManager(connection, [win])
     wwm = WindowManager(wm)
     gm = GUIManager(wwm)
-    rdr = BasicRenderer(["VK_KHR_surface", "VK_KHR_xcb_surface"], PhysicalDeviceFeatures(:sampler_anisotropy), ["VK_KHR_swapchain", "VK_KHR_synchronization2"], main_window(wwm))
-    app = Application(app_state, wwm, gm, rdr, GUIRenderer(rdr))
+    queue_config = dictionary([QUEUE_COMPUTE_BIT | QUEUE_GRAPHICS_BIT => 1])
+    instance, device = init(;
+        instance_extensions = ["VK_KHR_surface", "VK_KHR_xcb_surface"],
+        device_extensions = ["VK_KHR_swapchain", "VK_KHR_synchronization2"],
+        enabled_features = PhysicalDeviceFeatures(:sampler_anisotropy),
+        queue_config = queue_config,
+    )
+    surface_ci = XcbSurfaceCreateInfoKHR(connection.h, main_window(wwm).id)
+    surface = Created(unwrap(create_xcb_surface_khr(instance, surface_ci)), surface_ci)
+    queue_dispatch = QueueDispatch(device, queue_config; surface)
+    vk = VulkanConfig(instance, device, surface, queue_dispatch, ThreadedCommandPool(device, queue_dispatch, dictionary([1 => QUEUE_COMPUTE_BIT | QUEUE_GRAPHICS_BIT])))
+    app = Application(app_state, wwm, gm, vk, GUIRenderer(device, queue_dispatch))
 
     _update! = app_state -> begin
         update!(app_state)

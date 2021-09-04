@@ -2,7 +2,7 @@ using Givre
 using Test
 using Base.GC: gc
 
-ENV["JULIA_DEBUG"] = "all"
+# ENV["JULIA_DEBUG"] = "all"
 
 ENV["DISPLAY"] = ":0"
 

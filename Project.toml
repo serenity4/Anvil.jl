@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 AbstractGUI = "796b4d30-d51d-4664-90d1-7cd8560850fa"
+Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
 ColorTypes = "3da002f7-5984-5a60-b8a6-cbb66c0b333f"
 Dictionaries = "85a47980-9c8c-11e8-2b9f-f7ca1fa99fb4"
 FileIO = "5789e2e9-d7fb-5bc7-8068-2c6fae9b9549"
@@ -12,14 +13,12 @@ GeometryExperiments = "1147bd75-18e1-436d-adda-d58e854f897d"
 LRUCache = "8ac3fa9e-de4c-5943-b1dc-09c6b5f20637"
 MLStyle = "d8e11817-5142-5d16-987a-aa16d5891078"
 Memoization = "6fafb56a-5788-4b4e-91ca-c0cea6611c73"
-Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
 OpenType = "e5a4412f-5132-4ec5-841c-0d067f41fa94"
 ProceduralNoise = "3e47a1cc-29f2-4c46-afe0-95fe1d251308"
-Setfield = "efcf1570-3423-57d1-acb7-fd33fddbac46"
+Rhyolite = "0a65dd64-271c-4674-ac69-445078e61614"
 TimerOutputs = "a759f4b9-e2f1-59dc-863e-4aeb61b1ea8f"
 UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 Vulkan = "9f14b124-c50e-4008-a7d4-969b3a6cd68a"
-VulkanShaders = "afc6ba6b-17fe-44ae-937e-3208623195e7"
 XCB = "16167f82-ea26-5cba-b1de-ed6fd5e30a10"
 
 [compat]
