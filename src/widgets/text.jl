@@ -54,7 +54,7 @@ end
 """
 Vertex data for a character to be rendered.
 """
-struct CharData <: VertexData
+struct CharData
     "Vertex position."
     position::Point2f
     "Character-dependent offset index within the vector of all concatenated glyph curves."
