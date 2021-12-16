@@ -104,22 +104,20 @@ using Plots
 
 const BezierCurve = GeometryExperiments.BezierCurve
 
-font = OpenTypeFont(joinpath(dirname(@__DIR__), "shaders", "JuliaMono-Regular.ttf"))
+f = OpenTypeFont(joinpath(dirname(@__DIR__), "assets", "fonts", "juliamono-regular.ttf"))
 
-glyph = font.glyphs[64]
+glyph = f.glyphs[64]
 plot_outline(glyph)
-render_glyph(font, glyph, 12)
+render_glyph(f, glyph, 12)
 
-glyph = font.glyphs[75]
+glyph = f.glyphs[75]
 plot_outline(glyph)
-render_glyph(font, glyph, 12)
+render_glyph(f, glyph, 12)
 
-glyph = font.glyphs[350]
+glyph = f.glyphs[13]
 plot_outline(glyph)
-render_glyph(font, glyph, 12)
+render_glyph(f, glyph, 12)
 
-glyph = font.glyphs[13]
-plot_outline(glyph)
-render_glyph(font, glyph, 12)
+render_glyph(f, '€', 12)
 
-render_glyph(font, '€', 12)
+render_glyph(f, 'A', 12)
