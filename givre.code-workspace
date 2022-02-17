@@ -18,12 +18,6 @@
         {
             "path": "../OpenType"
         },
-        {
-            "path": "../VulkanExamples"
-        },
-        {
-            "path": "../VulkanShaders"
-        }
     ],
     "settings": {
         "julia.environmentPath": "/home/belmant/.julia/dev/Givre"

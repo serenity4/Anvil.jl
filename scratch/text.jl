@@ -1,6 +1,7 @@
 using OpenType
 using OpenType: curves
 using GeometryExperiments
+using GeometryExperiments: BezierCurve
 
 function intensity(curve_points, pixel_per_em)
     @assert length(curve_points) == 3
@@ -101,8 +102,6 @@ end
 render_glyph(font, char::Char, font_size) = render_glyph(font, font[char], font_size)
 
 using Plots
-
-const BezierCurve = GeometryExperiments.BezierCurve
 
 f = OpenTypeFont(joinpath(dirname(@__DIR__), "assets", "fonts", "juliamono-regular.ttf"))
 
