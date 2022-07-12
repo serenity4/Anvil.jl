@@ -4,6 +4,15 @@
             "path": ".",
         },
         {
+            "path": "../Diatone"
+        },
+        {
+            "path": "../Lava",
+        },
+        {
+            "path": "../SPIRV"
+        },
+        {
             "path": "../GeometryExperiments",
         },
         {
@@ -11,7 +20,7 @@
         },
         {
             "path": "../OpenType"
-        },
+        }
     ],
     "settings": {
         "julia.environmentPath": "/home/belmant/.julia/dev/Givre"
