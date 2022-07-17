@@ -4,8 +4,13 @@ using ImageIO
 
 instance, device = init();
 
-rec = Rectangle(Point(0.0, 0.0), Box(Scaling(1f0, 1f0)), (0.5, 0.5, 0.9, 1.0));
-data = render_object(device, rec);
-save("tmp.png", data)
-
-main()
+@testset "Givre.jl" begin
+  @testset "Rendering" begin
+    rect = Rectangle(Point2f(-1.0, -1.0), Point2f(1.0, 1.0), RGBA(1.0, 0.3, 0.3, 1.0))
+    prog = Givre.program(device, rect)
+    @test isa(prog, Program)
+    data = render_to_array(device, rect)
+    save(joinpath(pkgdir(Givre), "test", "renders", "data.png"), data)
+    @test all(≈(RGBA(1.0, 0.3, 0.3, 1.0)), data)
+  end
+end
