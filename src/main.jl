@@ -2,7 +2,7 @@ mutable struct WindowState
   overlay::Vector{InputArea}
   callbacks::WindowCallbacks
   key_bindings::KeyBindings
-  render_components::Dictionary{UUID,RenderComponent}
+  render_nodes::Vector{RenderNode}
 end
 
 struct GivreState

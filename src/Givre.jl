@@ -1,13 +1,15 @@
 module Givre
 
 using Reexport
-@reexport using Diatone
+using Diatone
+using Lava
 using Dictionaries
 using Accessors: @set
-@reexport using GeometryExperiments
-using UUIDs: uuid4, UUID
+using GeometryExperiments
+using UUIDs: uuid1, UUID
+using Accessors
 
-uuid() = uuid4()
+uuid() = uuid1()
 
 const Optional{T} = Union{T,Nothing}
 
@@ -17,7 +19,7 @@ include("render.jl")
 include("rectangle.jl")
 include("main.jl")
 
-export main, Rectangle, render_to_array
+export main
 
 
 end
