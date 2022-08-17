@@ -3,6 +3,7 @@ module Givre
 using Reexport
 using Diatone
 using Lava
+using Lava: Resource
 using Dictionaries
 using Accessors: @set
 using GeometryExperiments
