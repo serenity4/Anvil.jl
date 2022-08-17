@@ -15,5 +15,10 @@ instance, device = init();
     data = render_to_array!(invocation, device)
     save(joinpath(pkgdir(Givre), "test", "renders", "rectangle.png"), data)
     @test all(≈(RGBA(1.0, 0.3, 0.3, 1.0)), data)
+
+    # Make sure the mutation of the invocation is not destructive.
+    data = render_to_array!(invocation, device)
+    save(joinpath(pkgdir(Givre), "test", "renders", "rectangle.png"), data)
+    @test all(≈(RGBA(1.0, 0.3, 0.3, 1.0)), data)
   end
 end;
