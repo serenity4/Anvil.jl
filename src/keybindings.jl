@@ -1,5 +1,7 @@
+const CallableObject = Any
+
 struct KeyBindings
-  bindings::Dictionary{KeyCombination, Any #= Callable =#}
+  bindings::Dictionary{KeyCombination, CallableObject}
 end
 
 KeyBindings(bindings...) = KeyBindings(dictionary(bindings))
@@ -11,7 +13,7 @@ for f in (:merge, :merge!)
 end
 
 function on_key_pressed(kb::KeyBindings, args...)
-  function _on_key_pressed(ed::EventDetails)
+  function on_key_pressed_impl(ed::EventDetails)
     (; data) = ed
     (; key, modifiers) = data
     kc = KeyCombination(key, modifiers)

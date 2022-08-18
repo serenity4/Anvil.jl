@@ -26,15 +26,9 @@ function update!(app::Application, givre::GivreState)
 end
 
 function render_main_window(rg::RenderGraph, image, renderables)
-  color = Attachment(View(image), WRITE)
-  color = PhysicalAttachment(color)
-  graphics = RenderNode(render_area = RenderArea(Lava.dims(color)...)) do rec
-      renderables = get(Vector{Rectangle}, task_local_storage(), :givre_renderables)
-      render_on_color_attachment(rec, rg.device, renderables, color)
-  end
-  @add_resource_dependencies rg begin
-      (color => (0.01, 0.02, 0.05, 1.0))::Color = graphics()
-  end
+  color = attachment_resource(ImageView(image), WRITE)
+  @reset color.id = COLOR_ATTACHMENT.id
+  substitute_color_attachment!
 end
 
 function main()
@@ -49,7 +43,7 @@ function main()
         key"ctrl+q" => (_, app::Application, _...) -> execute(finalize, main_task, app),
       ),
       [
-        Rectangle(Point(0.0, 0.0), Box(Scaling(0.2f0, 0.3f0)), (0.5, 0.5, 0.9, 1.0))
+        Rectangle(Point(0.0, 0.0), Box(Scaling(0.2f0, 0.3f0)), RGBA(0.5, 0.5, 0.9, 1.0))
       ],
     ),
   )
