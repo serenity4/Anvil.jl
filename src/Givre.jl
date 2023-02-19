@@ -1,26 +1,40 @@
+"""
+Threading model:
+- One *application thread* manages the state of the whole application.
+- One *rendering thread* processes and submits rendering commands to the GPU, and is synchronized with the swapchain.
+
+Preferences:
+- `RELEASE`: set to `"true"` to remove debug logging and validation layers for the renderer.
+
+The application thread starts the rendering thread, then monitors it while performing its own work in reaction to window inputs.
+For every new frame, the renderer will ask the application to give it a list of `RenderNode`s to execute for this frame.
+This list is assumed to be owned by the renderer when returned by the application.
+"""
 module Givre
 
-using Reexport
-using Diatone
 using Lava
-using Lava: Resource
-using Dictionaries
-using Accessors: @set
+using Accessors: @set, setproperties
+using ConcurrencyGraph
 using GeometryExperiments
-using UUIDs: uuid1, UUID
 using Accessors
+using XCB
 
-uuid() = uuid1()
+const Window = XCBWindow
+const WindowManager = XWindowManager
+
+reset_mpi_state() = reset_all()
 
 const Optional{T} = Union{T,Nothing}
 
-include("utils.jl")
-include("keybindings.jl")
+include("preferences.jl")
+
+include("inputs.jl")
+include("renderer.jl")
+include("main.jl")
 include("render.jl")
 include("rectangle.jl")
-include("main.jl")
 
-export main
+export main, reset_mpi_state
 
 
 end

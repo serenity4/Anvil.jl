@@ -11,7 +11,7 @@ end
 
 function rectangle_vert(position, index, data_address)
   data = @load data_address::RectangleData
-  pos = @load index data.positions::Vec2
+  pos = @load data.positions[index]::Vec2
   position[] = Vec(pos.x, pos.y, 0F, 1F)
 end
 
@@ -21,22 +21,12 @@ function rectangle_frag(out_color, data_address)
 end
 
 function program(device::Device, ::Type{Rectangle})
-  vert = @vertex device.spirv_features rectangle_vert(::Output{Position}::Vec4, ::Input{VertexIndex}::UInt32, ::PushConstant::DeviceAddressBlock)
-  frag = @fragment device.spirv_features rectangle_frag(::Output::Vec4, ::PushConstant::DeviceAddressBlock)
-
-  Program(device, vert, frag)
+  vert = @vertex device rectangle_vert(::Vec4::Output{Position}, ::UInt32::Input{VertexIndex}, ::DeviceAddressBlock::PushConstant)
+  frag = @fragment device rectangle_frag(::Vec4::Output, ::DeviceAddressBlock::PushConstant)
+  Program(vert, frag)
 end
 
-indices(::Rectangle) = [1, 2, 3, 3, 2, 4]
 vertices(rect::Rectangle) = [Vec2(p...) for p in PointSet(Translated(rect.area, Translation(rect.location)), Point{2,Float32})]
-
-function invocation_data(rect::Rectangle)
-  (; r, g, b, alpha) = rect.color
-  @invocation_data begin
-    b1 = @block vertices(rect)
-    @block RectangleData(@address(b1), Vec4(r, g, b, alpha))
-  end
-end
 
 function Rectangle(bottom_left::Point{2}, top_right::Point{2}, color::RGBA)
   location = centroid(bottom_left, top_right)
@@ -44,4 +34,26 @@ function Rectangle(bottom_left::Point{2}, top_right::Point{2}, color::RGBA)
   Rectangle(location, area, color)
 end
 
-invocation_state(::Type{Rectangle}) = @set ProgramInvocationState().triangle_orientation = Vk.FRONT_FACE_COUNTER_CLOCKWISE
+function draw(rdr::Renderer, rect::Rectangle, color)
+  prog = rdr.programs[:rectangle]
+  (; r, g, b, alpha) = rect.color
+  data = @invocation_data prog begin
+    b1 = @block vertices(rect)
+    @block RectangleData(@address(b1), Vec4(r, g, b, alpha))
+  end
+  graphics_command(
+    DrawIndexed(1:4),
+    prog,
+    data,
+    RenderTargets(color),
+    RenderState(),
+    setproperties(ProgramInvocationState(), (;
+      primitive_topology = Vk.PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+      triangle_orientation = Vk.FRONT_FACE_COUNTER_CLOCKWISE,
+    )),
+    @resource_dependencies begin
+      @write
+      (color => (0.08, 0.05, 0.1, 1.0))::Color
+    end
+  )
+end

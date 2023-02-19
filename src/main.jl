@@ -1,54 +1,53 @@
-mutable struct WindowState
-  overlay::Vector{InputArea}
-  callbacks::WindowCallbacks
-  key_bindings::KeyBindings
-  render_nodes::Vector{RenderNode}
-end
-
-struct GivreState
-  windows::Dictionary{Window, WindowState}
-end
-
-GivreState(pairs...) = GivreState(dictionary(pairs))
-
-function set_key_bindings(app::Application, win::Window, win_state::WindowState)
-  (; callbacks) = win_state
-  set_callbacks(app, win, @set callbacks.on_key_pressed = on_key_pressed(win_state.kb, app))
-end
-
-function update!(app::Application, givre::GivreState)
-  for (win, win_state) in pairs(givre.windows)
-    overlay(app, win, win_state.overlay)
-    set_callbacks(app, win, win_state.callbacks)
-    set_key_bindings(app, win, win_state)
-    execute(Base.Fix1(task_local_storage, :givre_renderables), app.renderer, copy(win_state.renderables))
+struct GivreApplication
+  wm::WindowManager
+  queue::EventQueue{WindowManager}
+  rdr::Renderer
+  # Vulkan devices are freely usable from multiple threads.
+  # Only specific functions require external synchronization, hopefully we don't need those outside of the renderer.
+  device::Device
+  window::Window
+  function GivreApplication()
+    wm = XWindowManager()
+    window = Window(wm, "Givre"; width = 1920, height = 1080, map = false)
+    rdr = Renderer(window)
+    givre = new(wm, EventQueue(wm), rdr, rdr.device, window)
+    start_renderer(givre)
+    map_window(window)
+    givre
   end
 end
 
-function render_main_window(rg::RenderGraph, image, renderables)
-  color = attachment_resource(ImageView(image), WRITE)
-  @reset color.id = COLOR_ATTACHMENT.id
-  substitute_color_attachment!
+struct Exit
+  code::Int
+end
+
+function Base.exit(givre::GivreApplication)
+  shutdown_renderer(givre)
+  wait(givre.device)
+  close(givre.wm, givre.window)
+  @debug "Exiting application"
+  Exit(0)
+end
+
+function (givre::GivreApplication)(event::Event)
+  if event.type == KEY_PRESSED
+    matches(key"ctrl+q", event) && return exit(givre)
+  end
+end
+
+function (givre::GivreApplication)()
+  isempty(givre.queue) && collect_events!(givre.queue)
+  isempty(givre.queue) && return
+  event = popfirst!(givre.queue)
+  ret = givre(event)
+  isa(ret, Exit) && shutdown()
 end
 
 function main()
-  app = Application()
-  main_task = current_task()
-  win = create_window(app, "Givre"; map = false)
-  givre = GivreState(
-    win => WindowState(
-      [],
-      WindowCallbacks(),
-      KeyBindings(
-        key"ctrl+q" => (_, app::Application, _...) -> execute(finalize, main_task, app),
-      ),
-      [
-        Rectangle(Point(0.0, 0.0), Box(Scaling(0.2f0, 0.3f0)), RGBA(0.5, 0.5, 0.9, 1.0))
-      ],
-    ),
-  )
-  update!(app, givre)
-  unwrap(fetch(render((rg, image) -> render_main_window(rg, image, givre.windows[win].render_components), app, win)))
-  map_window(win)
+  reset_mpi_state()
+  application_thread = @spawn begin
+    givre = GivreApplication()
+    LoopExecution(0.002)(givre)()
+  end
   monitor_children()
 end

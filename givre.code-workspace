@@ -13,6 +13,12 @@
             "path": "../SPIRV"
         },
         {
+            "path": "../WindowAbstractions"
+        },
+        {
+            "path": "../XCB"
+        },
+        {
             "path": "../GeometryExperiments",
         },
         {

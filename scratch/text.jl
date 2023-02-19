@@ -1,5 +1,5 @@
 using OpenType
-using OpenType: curves
+using OpenType: curves, curves_normalized
 using GeometryExperiments
 using GeometryExperiments: BezierCurve
 
@@ -43,8 +43,8 @@ function intensity(curve_points, pixel_per_em)
     res
 end
 
-function intensity(point, glyph::OpenType.Glyph, units_per_em; font_size=12)
-    res = sum(curves(glyph)) do p
+function intensity(point, glyph::OpenType.SimpleGlyph, units_per_em; font_size=12)
+    res = sum(curves_normalized(glyph)) do p
         poffset = map(Translation(-point), p)
         intensity(poffset, font_size)
     end
@@ -83,7 +83,7 @@ function render_glyph(font, glyph, font_size)
 
     is = map(grid) do p
         try
-            intensity(p, glyph, font.head.units_per_em; font_size)
+            intensity(p, glyph, font.units_per_em; font_size)
         catch e
             if e isa DomainError
                 NaN
@@ -103,20 +103,22 @@ render_glyph(font, char::Char, font_size) = render_glyph(font, font[char], font_
 
 using Plots
 
-f = OpenTypeFont(joinpath(dirname(@__DIR__), "assets", "fonts", "juliamono-regular.ttf"))
+font = OpenTypeFont(joinpath(dirname(@__DIR__), "assets", "fonts", "juliamono-regular.ttf"));
 
-glyph = f.glyphs[64]
+glyph = font.glyphs[563]
+
+glyph = font.glyphs[64]
 plot_outline(glyph)
-render_glyph(f, glyph, 12)
+render_glyph(font, glyph, 12)
 
-glyph = f.glyphs[75]
+glyph = font.glyphs[75]
 plot_outline(glyph)
-render_glyph(f, glyph, 12)
+render_glyph(font, glyph, 12)
 
-glyph = f.glyphs[13]
+glyph = font.glyphs[13]
 plot_outline(glyph)
-render_glyph(f, glyph, 12)
+render_glyph(font, glyph, 12)
 
-render_glyph(f, '€', 12)
+render_glyph(font, '€', 12)
 
-render_glyph(f, 'A', 12)
+render_glyph(font, 'A', 12)
