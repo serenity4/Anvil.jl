@@ -4,9 +4,6 @@
             "path": ".",
         },
         {
-            "path": "../Diatone"
-        },
-        {
             "path": "../Lava",
         },
         {
@@ -23,9 +20,6 @@
         },
         {
             "path": "../ConcurrencyGraph"
-        },
-        {
-            "path": "../AbstractGUI"
         },
         {
             "path": "../OpenType"
