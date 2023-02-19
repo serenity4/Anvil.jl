@@ -12,6 +12,9 @@ This list is assumed to be owned by the renderer when returned by the applicatio
 """
 module Givre
 
+const APPLICATION_THREADID = 2
+const RENDERER_THREADID = 3
+
 using Lava
 using Accessors: @set, setproperties
 using ConcurrencyGraph

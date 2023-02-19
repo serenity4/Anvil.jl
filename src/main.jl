@@ -17,6 +17,15 @@ struct GivreApplication
   end
 end
 
+function start_renderer(givre::GivreApplication)
+  (; rdr) = givre
+  options = SpawnOptions(start_threadid = RENDERER_THREADID, allow_task_migration = false, execution_mode = LoopExecution(0.005))
+  rdr.task = spawn(() -> render(givre, rdr), options)
+end
+
+# Only call that from the application thread.
+shutdown_renderer(givre::GivreApplication) = wait(shutdown_children())
+
 struct Exit
   code::Int
 end
@@ -45,7 +54,7 @@ end
 
 function main()
   reset_mpi_state()
-  application_thread = @spawn begin
+  application_thread = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
     givre = GivreApplication()
     LoopExecution(0.002)(givre)()
   end
