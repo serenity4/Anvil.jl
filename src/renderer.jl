@@ -33,17 +33,17 @@ mutable struct Renderer
 end
 
 function Lava.render(givre, rdr::Renderer)
-  ret = acquire_next_image(rdr.frame_cycle)
-  if ret === Vk.ERROR_OUT_OF_DATE_KHR
+  next = acquire_next_image(rdr.frame_cycle)
+  if next === Vk.ERROR_OUT_OF_DATE_KHR
     recreate!(rdr.frame_cycle)
     render(givre, rdr)
   else
-    isa(ret, Int) || error("Could not acquire an image from the swapchain (returned $ret)")
-    state = cycle!(rdr.frame_cycle, ret) do image
-      color = Resource(rdr.color)
-      nodes = fetch(execute(() -> frame_nodes(givre, color), task_owner()))::Vector{RenderNode}
-      submission = draw_and_prepare_for_presentation(rdr.device, nodes, color, image)
-    end
+    isa(next, Int) || error("Could not acquire an image from the swapchain (returned $next)")
+    color = Resource(rdr.color)
+    fetched = tryfetch(execute(() -> frame_nodes(givre, color), task_owner()))
+    iserror(fetched) && shutdown_scheduled() && return
+    nodes = unwrap(fetched)::Vector{RenderNode}
+    state = cycle!(image -> draw_and_prepare_for_presentation(rdr.device, nodes, color, image), rdr.frame_cycle, next)
     next!(rdr.frame_diagnostics)
     get(ENV, "GIVRE_LOG_FRAMECOUNT", "true") == "true" && print_framecount(rdr.frame_diagnostics)
     filter!(exec -> !wait(exec, 0), rdr.pending)

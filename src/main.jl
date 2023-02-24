@@ -31,6 +31,7 @@ struct Exit
 end
 
 function Base.exit(givre::GivreApplication)
+  @debug "Shutting down renderer"
   shutdown_renderer(givre)
   wait(givre.device)
   close(givre.wm, givre.window)
@@ -49,14 +50,15 @@ function (givre::GivreApplication)()
   isempty(givre.queue) && return
   event = popfirst!(givre.queue)
   ret = givre(event)
-  isa(ret, Exit) && shutdown()
+  isa(ret, Exit) && schedule_shutdown()
 end
 
 function main()
+  nthreads() ≥ 3 || error("Three threads or more are required to execute the application.")
   reset_mpi_state()
   application_thread = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
     givre = GivreApplication()
-    LoopExecution(0.002)(givre)()
+    LoopExecution(0.002; shutdown = false)(givre)()
   end
   monitor_children()
 end
