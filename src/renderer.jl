@@ -24,7 +24,7 @@ mutable struct Renderer
   programs::Dict{Symbol,Program} # application-managed, not used internally
   frame_diagnostics::FrameDiagnostics
   task::Task
-  function Renderer(window::Window; release = @is_release)
+  function Renderer(window::Window; release = get(ENV, "GIVRE_RELEASE", "false") == "true")
     instance, device = Lava.init(; debug = !release, with_validation = !release, instance_extensions = ["VK_KHR_xcb_surface"])
     programs = compile_programs(device)
     color = LogicalAttachment(RGBA{Float16}, collect(Int, extent(window)))
@@ -45,11 +45,13 @@ function Lava.render(givre, rdr::Renderer)
       submission = draw_and_prepare_for_presentation(rdr.device, nodes, color, image)
     end
     next!(rdr.frame_diagnostics)
-    print("Frame: ", rpad(rdr.frame_diagnostics.count, 5), " (", rpad(rdr.frame_diagnostics.elapsed_ms, 4), " ms)            \r")
+    get(ENV, "GIVRE_LOG_FRAMECOUNT", "true") == "true" && print_framecount(rdr.frame_diagnostics)
     filter!(exec -> !wait(exec, 0), rdr.pending)
     push!(rdr.pending, state)
   end
 end
+
+print_framecount(fd::FrameDiagnostics) = print("Frame: ", rpad(fd.count, 5), " (", rpad(fd.elapsed_ms, 4), " ms)            \r")
 
 function surface(instance, win::XCBWindow)
   handle = unwrap(Vk.create_xcb_surface_khr(instance, Vk.XcbSurfaceCreateInfoKHR(win.conn.h, win.id)))

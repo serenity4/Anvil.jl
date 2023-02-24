@@ -3,12 +3,14 @@ Threading model:
 - One *application thread* manages the state of the whole application.
 - One *rendering thread* processes and submits rendering commands to the GPU, and is synchronized with the swapchain.
 
-Preferences:
-- `RELEASE`: set to `"true"` to remove debug logging and validation layers for the renderer.
-
 The application thread starts the rendering thread, then monitors it while performing its own work in reaction to window inputs.
 For every new frame, the renderer will ask the application to give it a list of `RenderNode`s to execute for this frame.
 This list is assumed to be owned by the renderer when returned by the application.
+
+## Environment variables
+
+- `GIVRE_LOG_FRAMECOUNT = "true"`: When set to `true`, log the current frame and related timings in the REPL while executing `main`.
+- `GIVRE_RELEASE = "false"`: When set to `true`, the renderer will not use validation layers and will not use debugging utilities.
 """
 module Givre
 
@@ -28,8 +30,6 @@ const WindowManager = XWindowManager
 reset_mpi_state() = reset_all()
 
 const Optional{T} = Union{T,Nothing}
-
-include("preferences.jl")
 
 include("inputs.jl")
 include("renderer.jl")
