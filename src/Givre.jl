@@ -17,6 +17,7 @@ module Givre
 const APPLICATION_THREADID = 2
 const RENDERER_THREADID = 3
 
+using CompileTraces
 using Lava
 using Accessors: @set, setproperties
 using ConcurrencyGraph
@@ -27,8 +28,6 @@ using XCB
 const Window = XCBWindow
 const WindowManager = XWindowManager
 
-reset_mpi_state() = reset_all()
-
 const Optional{T} = Union{T,Nothing}
 
 include("inputs.jl")
@@ -36,6 +35,8 @@ include("renderer.jl")
 include("main.jl")
 include("render.jl")
 include("rectangle.jl")
+
+@compile_traces verbose = false joinpath(pkgdir(Givre), "traces", "precompilation_traces.jl")
 
 export main, reset_mpi_state
 
