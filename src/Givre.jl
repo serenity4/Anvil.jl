@@ -36,7 +36,7 @@ include("main.jl")
 include("render.jl")
 include("rectangle.jl")
 
-@compile_traces verbose = false joinpath(pkgdir(Givre), "traces", "precompilation_traces.jl")
+@compile_traces "precompilation_traces.jl"
 
 export main, reset_mpi_state
 
