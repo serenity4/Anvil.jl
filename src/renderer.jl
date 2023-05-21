@@ -16,19 +16,18 @@ function next!(fd::FrameDiagnostics)
 end
 
 mutable struct Renderer
-  instance::Instance
+  instance::Lava.Instance
   device::Device
   frame_cycle::FrameCycle{Window}
-  color::LogicalAttachment
+  color::Resource
   pending::Vector{ExecutionState}
-  programs::Dict{Symbol,Program} # application-managed, not used internally
+  program_cache::ProgramCache
   frame_diagnostics::FrameDiagnostics
   task::Task
   function Renderer(window::Window; release = get(ENV, "GIVRE_RELEASE", "false") == "true")
     instance, device = Lava.init(; debug = !release, with_validation = !release, instance_extensions = ["VK_KHR_xcb_surface"])
-    programs = compile_programs(device)
-    color = LogicalAttachment(RGBA{Float16}, collect(Int, extent(window)))
-    new(instance, device, FrameCycle(device, surface(instance, window)), color, ExecutionState[], programs, FrameDiagnostics())
+    color = attachment_resource(device, zeros(RGBA{Float16}, extent(window)); usage_flags = Vk.IMAGE_USAGE_TRANSFER_SRC_BIT | Vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+    new(instance, device, FrameCycle(device, Surface(instance, window)), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())
   end
 end
 
@@ -39,7 +38,7 @@ function Lava.render(givre, rdr::Renderer)
     render(givre, rdr)
   else
     isa(next, Int) || error("Could not acquire an image from the swapchain (returned $next)")
-    color = Resource(rdr.color)
+    (; color) = rdr
     fetched = tryfetch(execute(() -> frame_nodes(givre, color), task_owner()))
     iserror(fetched) && shutdown_scheduled() && return
     nodes = unwrap(fetched)::Vector{RenderNode}
@@ -52,8 +51,3 @@ function Lava.render(givre, rdr::Renderer)
 end
 
 print_framecount(fd::FrameDiagnostics) = print("Frame: ", rpad(fd.count, 5), " (", rpad(fd.elapsed_ms, 4), " ms)            \r")
-
-function surface(instance, win::XCBWindow)
-  handle = unwrap(Vk.create_xcb_surface_khr(instance, Vk.XcbSurfaceCreateInfoKHR(win.conn.h, win.id)))
-  Surface(handle, win)
-end

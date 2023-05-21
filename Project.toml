@@ -11,12 +11,13 @@ ConcurrencyGraph = "cf8c6370-217a-4736-8ebc-77346b711d73"
 GeometryExperiments = "1147bd75-18e1-436d-adda-d58e854f897d"
 Lava = "8fb73131-e68b-4921-b325-b6dc47707796"
 SPIRV = "84138a67-b342-4d33-8200-33cfcca52eb2"
+ShaderLibrary = "bd6f7047-4356-4127-96e0-7c076db9f2eb"
 WindowAbstractions = "e18202ca-4a7d-4de8-b056-fa6bbd7de157"
 XCB = "16167f82-ea26-5cba-b1de-ed6fd5e30a10"
 
 [compat]
-julia = "1.8"
 CompileTraces = "1"
+julia = "1.8"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

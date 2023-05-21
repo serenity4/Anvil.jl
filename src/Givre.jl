@@ -19,8 +19,11 @@ const RENDERER_THREADID = 3
 
 using CompileTraces
 using Lava
-using Accessors: @set, setproperties
 using ConcurrencyGraph
+using Lava: Command
+using ShaderLibrary
+using ShaderLibrary: Instance
+using Accessors: @set, setproperties
 using GeometryExperiments
 using Accessors
 using XCB
@@ -34,7 +37,6 @@ include("inputs.jl")
 include("renderer.jl")
 include("main.jl")
 include("render.jl")
-include("rectangle.jl")
 
 @compile_traces "precompilation_traces.jl"
 
