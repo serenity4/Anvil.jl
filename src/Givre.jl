@@ -27,6 +27,8 @@ using Accessors: @set, setproperties
 using GeometryExperiments
 using Accessors
 using XCB
+using Entities
+using MLStyle
 
 const Window = XCBWindow
 const WindowManager = XWindowManager

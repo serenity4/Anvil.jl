@@ -4,6 +4,9 @@
             "path": ".",
         },
         {
+            "path": "../Entities"
+        },
+        {
             "path": "../Lava",
         },
         {

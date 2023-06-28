@@ -1,6 +1,10 @@
+const RENDER_COMPONENT_ID = ComponentID(1)
+
 struct GivreApplication
   wm::WindowManager
   queue::EventQueue{WindowManager}
+  entity_pool::EntityPool
+  ecs::ECSDatabase
   rdr::Renderer
   # Vulkan devices are freely usable from multiple threads.
   # Only specific functions require external synchronization, hopefully we don't need those outside of the renderer.
@@ -10,7 +14,8 @@ struct GivreApplication
     wm = XWindowManager()
     window = Window(wm, "Givre"; width = 1920, height = 1080, map = false)
     rdr = Renderer(window)
-    givre = new(wm, EventQueue(wm), rdr, rdr.device, window)
+    givre = new(wm, EventQueue(wm), EntityPool(), ECSDatabase(), rdr, rdr.device, window)
+    initialize_render_commands!(givre)
     start_renderer(givre)
     map_window(window)
     givre
