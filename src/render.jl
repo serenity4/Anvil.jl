@@ -18,17 +18,15 @@ end
 function materialize_render_commands(givre::GivreApplication, target::Resource)
   (; program_cache) = givre.rdr
   commands = Command[]
-  for object in components(givre.ecs, RENDER_COMPONENT_ID, RenderObject)
+  for (object, location) in components(givre.ecs, (RENDER_COMPONENT_ID, LOCATION_COMPONENT_ID), Tuple{RenderObject,Point2})
     command = @match object.type begin
-      &RENDER_OBJECT_RECTANGLE => Command(program_cache, Gradient(target), object.data::Primitive)
+      &RENDER_OBJECT_RECTANGLE => begin
+        primitive = object.data::Primitive
+        z = 1.0 # TODO: Use the ECS for that, as we likely want the z-index to be consistent with that of the `InputArea`.
+        Command(program_cache, Gradient(target), @set primitive.transform.translation = (location..., z))
+      end
     end
     push!(commands, command)
   end
   commands
-end
-
-function initialize_render_commands!(givre::GivreApplication)
-  geometry = Rectangle((0.5, 0.5), (-0.4, -0.4), fill(Vec3(1.0, 0.0, 1.0), 4), nothing) # actually a square
-  rect = RenderObject(RENDER_OBJECT_RECTANGLE, Primitive(geometry))
-  insert!(givre.ecs, Entities.new!(givre.entity_pool), RENDER_COMPONENT_ID, rect)
 end

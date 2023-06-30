@@ -22,20 +22,22 @@ using Lava
 using ConcurrencyGraph
 using Lava: Command
 using ShaderLibrary
-using ShaderLibrary: Instance
+using ShaderLibrary: Instance, aspect_ratio, render_coordinates
 using Accessors: @set, setproperties
 using GeometryExperiments
 using Accessors
 using XCB
 using Entities
+using Entities: new!
 using MLStyle
+using AbstractGUI
+using AbstractGUI: Input
 
 const Window = XCBWindow
 const WindowManager = XWindowManager
 
 const Optional{T} = Union{T,Nothing}
 
-include("inputs.jl")
 include("renderer.jl")
 include("main.jl")
 include("render.jl")
