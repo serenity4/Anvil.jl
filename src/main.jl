@@ -74,10 +74,9 @@ function Base.exit(givre::GivreApplication)
 end
 
 function (givre::GivreApplication)(input::Input)
-  @show input.type
   entity = givre.ui.entities[input.area]
   f = givre.ecs[entity, INPUT_COMPONENT_ID]
-  f()
+  f(input)
   nothing
 end
 
@@ -86,7 +85,11 @@ function (givre::GivreApplication)(event::Event)
     matches(key"ctrl+q", event) && return exit(givre)
   end
   ar = aspect_ratio(extent(event.win))
-  input = react_to_event(givre.ui.overlay, @set event.location = render_coordinates(event.location, ar))
+  xmax, ymax = (max(1.0, ar), max(1.0, 1/ar))
+  x, y = event.location
+  y = 1 - y # make bottom-left at (0, 0) and top-right at (1, 1)
+  location = remap.((x, y), 0, 1, (-xmax, -ymax), (xmax, ymax))
+  input = react_to_event(givre.ui.overlay, @set event.location = location)
   isnothing(input) && return
   givre(input)
 end
@@ -117,16 +120,21 @@ function initialize!(givre::GivreApplication)
   rect_visual = RenderObject(RENDER_OBJECT_RECTANGLE, Primitive(rect_geometry))
   insert!(givre.ecs, rect, RENDER_COMPONENT_ID, rect_visual)
   input_geometry = Translated(rect_geometry.geometry, Translation(location))
-  rect_input = InputArea(input_geometry, 1.0, in(input_geometry), NO_EVENT, DROP)
+  rect_input = InputArea(input_geometry, 1.0, in(input_geometry), BUTTON_PRESSED, DRAG)
   insert!(givre.ui, rect, rect_input)
+  origin = Ref{Point2}()
   on_input = function (input::Input)
-    if input.type === DRAG
+    if input.type === BUTTON_PRESSED
+      origin[] = centroid(input.area.aabb)
+    elseif input.type === DRAG
       target, event = input.dragged
-      givre.ecs[rect, LOCATION_COMPONENT_ID] = event.location
       # XXX: How to propagate that to the input area geometry in a better way?
-      updated_geometry = @set input_geometry = Translated(rect_geometry.geometry, Translation(event.location))
-      rect_input.aabb = boundingelement(updated_geometry)
-      rect_input.contains = in(rect_input.aabb)
+      drag_amount = Point2(event.location) .- Point2(input.source.event.location)
+      new_location = origin[] .+ drag_amount
+      givre.ecs[rect, LOCATION_COMPONENT_ID] = new_location
+      updated_geometry = Translated(rect_geometry.geometry, Translation(new_location))
+      rect_input.aabb = updated_geometry
+      rect_input.contains = in(updated_geometry)
     end
   end
   insert!(givre.ecs, rect, INPUT_COMPONENT_ID, on_input)

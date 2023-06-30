@@ -22,7 +22,7 @@ using Lava
 using ConcurrencyGraph
 using Lava: Command
 using ShaderLibrary
-using ShaderLibrary: Instance, aspect_ratio, render_coordinates
+using ShaderLibrary: Instance, aspect_ratio
 using Accessors: @set, setproperties
 using GeometryExperiments
 using Accessors
