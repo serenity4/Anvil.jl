@@ -15,8 +15,13 @@ function next!(fd::FrameDiagnostics)
   fd
 end
 
+print_framecount(fd::FrameDiagnostics) = print("Frame: ", rpad(fd.count, 5), " (", rpad(fd.elapsed_ms, 4), " ms)            \r")
+
 mutable struct Renderer
   instance::Lava.Instance
+  # In case we'd like to provide access to the device outside of the renderer,
+  # Vulkan devices are freely usable from multiple threads.
+  # Only specific functions require external synchronization, hopefully we don't need those outside of the renderer.
   device::Device
   frame_cycle::FrameCycle{Window}
   color::Resource
@@ -30,24 +35,3 @@ mutable struct Renderer
     new(instance, device, FrameCycle(device, Surface(instance, window)), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())
   end
 end
-
-function Lava.render(givre, rdr::Renderer)
-  next = acquire_next_image(rdr.frame_cycle)
-  if next === Vk.ERROR_OUT_OF_DATE_KHR
-    recreate!(rdr.frame_cycle)
-    render(givre, rdr)
-  else
-    isa(next, Int) || error("Could not acquire an image from the swapchain (returned $next)")
-    (; color) = rdr
-    fetched = tryfetch(execute(() -> frame_nodes(givre, color), task_owner()))
-    iserror(fetched) && shutdown_scheduled() && return
-    nodes = unwrap(fetched)::Vector{RenderNode}
-    state = cycle!(image -> draw_and_prepare_for_presentation(rdr.device, nodes, color, image), rdr.frame_cycle, next)
-    next!(rdr.frame_diagnostics)
-    get(ENV, "GIVRE_LOG_FRAMECOUNT", "true") == "true" && print_framecount(rdr.frame_diagnostics)
-    filter!(exec -> !wait(exec, 0), rdr.pending)
-    push!(rdr.pending, state)
-  end
-end
-
-print_framecount(fd::FrameDiagnostics) = print("Frame: ", rpad(fd.count, 5), " (", rpad(fd.elapsed_ms, 4), " ms)            \r")

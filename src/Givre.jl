@@ -36,11 +36,14 @@ using AbstractGUI: Input
 const Window = XCBWindow
 const WindowManager = XWindowManager
 
+import ConcurrencyGraph: shutdown
+
 const Optional{T} = Union{T,Nothing}
 
 include("renderer.jl")
+include("components.jl")
+include("systems.jl")
 include("main.jl")
-include("render.jl")
 
 @compile_traces "precompilation_traces.jl"
 
