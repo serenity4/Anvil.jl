@@ -31,7 +31,9 @@ mutable struct Renderer
   task::Task
   function Renderer(window::Window; release = get(ENV, "GIVRE_RELEASE", "false") == "true")
     instance, device = Lava.init(; debug = !release, with_validation = !release, instance_extensions = ["VK_KHR_xcb_surface"])
-    color = attachment_resource(device, zeros(RGBA{Float16}, extent(window)); usage_flags = Vk.IMAGE_USAGE_TRANSFER_SRC_BIT | Vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+    color = color_attachment(device, window)
     new(instance, device, FrameCycle(device, Surface(instance, window)), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())
   end
 end
+
+color_attachment(device::Device, window::Window) = attachment_resource(device, zeros(RGBA{Float16}, extent(window)); usage_flags = Vk.IMAGE_USAGE_TRANSFER_SRC_BIT | Vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT)

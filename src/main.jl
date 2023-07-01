@@ -31,6 +31,9 @@ function Lava.render(givre::GivreApplication, rdr::Renderer)
     render(givre, rdr)
   else
     isa(next, Int) || error("Could not acquire an image from the swapchain (returned $next)")
+    if collect(Int, extent(givre.window)) ≠ dimensions(rdr.color.attachment)
+      rdr.color = color_attachment(rdr.device, givre.window)
+    end
     (; color) = rdr
     fetched = tryfetch(execute(() -> frame_nodes(givre, color), task_owner()))
     iserror(fetched) && shutdown_scheduled() && return
