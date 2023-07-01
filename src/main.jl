@@ -92,7 +92,7 @@ function initialize!(givre::GivreApplication)
   insert!(givre.ecs, rect, GEOMETRY_COMPONENT_ID, geometry)
   visual = RenderComponent(RENDER_OBJECT_RECTANGLE, fill(Vec3(1.0, 0.0, 1.0), 4), nothing)
   insert!(givre.ecs, rect, RENDER_COMPONENT_ID, visual)
-  on_input = let origin = Ref{Point2}()
+  on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{Point2}()
       function (input::Input)
       if input.type === BUTTON_PRESSED
         origin[] = givre.ecs[rect, LOCATION_COMPONENT_ID]::Point2
@@ -100,6 +100,11 @@ function initialize!(givre::GivreApplication)
         target, event = input.dragged
         drag_amount = event.location .- input.source.event.location
         givre.ecs[rect, LOCATION_COMPONENT_ID] = origin[] .+ drag_amount
+        if sqrt(sum((drag_amount .- threshold[]) .^ 2)) > 0.5
+          threshold[] = drag_amount
+          renderable = givre.ecs[rect, RENDER_COMPONENT_ID]::RenderComponent
+          givre.ecs[rect, RENDER_COMPONENT_ID] = @set renderable.vertex_data = fill(Vec3(rand(3)), 4)
+        end
       end
     end
   end
