@@ -96,8 +96,9 @@ function initialize!(givre::GivreApplication)
   visual = RenderComponent(RENDER_OBJECT_RECTANGLE, fill(Vec3(1.0, 0.0, 1.0), 4), nothing)
   insert!(givre.ecs, rect, RENDER_COMPONENT_ID, visual)
   on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{Point2}()
-      function (input::Input)
+    function (input::Input)
       if input.type === BUTTON_PRESSED
+        threshold[] = (0.0, 0.0)
         origin[] = givre.ecs[rect, LOCATION_COMPONENT_ID]::Point2
       elseif input.type === DRAG
         target, event = input.dragged
