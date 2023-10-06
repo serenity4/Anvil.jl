@@ -98,11 +98,17 @@ function (system::RenderingSystem)(ecs::ECSDatabase, target::Resource)
         rect = Rectangle(geometry.object, location, object.vertex_data, object.primitive_data)
         Command(system.renderer.program_cache, Gradient(target), Primitive(rect))
       end
+      &RENDER_OBJECT_IMAGE => begin
+        rect = Rectangle(geometry.object, location, full_image_uv(), nothing)
+        Command(system.renderer.program_cache, Sprite(target, Texture(object.primitive_data)), Primitive(rect))
+      end
     end
     push!(commands, command)
   end
   commands
 end
+
+full_image_uv() = Vec2[(0, 0), (0, 1), (1, 0), (1, 1)]
 
 struct Systems
   event::EventSystem

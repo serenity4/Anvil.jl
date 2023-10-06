@@ -5,6 +5,7 @@ const GEOMETRY_COMPONENT_ID = ComponentID(4) # GeometryComponent
 
 @enum RenderObjectType begin
   RENDER_OBJECT_RECTANGLE = 1
+  RENDER_OBJECT_IMAGE = 2
 end
 
 struct GeometryComponent

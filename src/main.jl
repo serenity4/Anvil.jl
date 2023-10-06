@@ -88,29 +88,29 @@ function main()
 end
 
 function initialize!(givre::GivreApplication)
-  rect = new!(givre.entity_pool)
+  texture = new!(givre.entity_pool)
   location = Point2(-0.4, -0.4)
-  insert!(givre.ecs, rect, LOCATION_COMPONENT_ID, location)
+  insert!(givre.ecs, texture, LOCATION_COMPONENT_ID, location)
   geometry = GeometryComponent(Box(Scaling(0.5, 0.5)), 1.0)
-  insert!(givre.ecs, rect, GEOMETRY_COMPONENT_ID, geometry)
-  visual = RenderComponent(RENDER_OBJECT_RECTANGLE, fill(Vec3(1.0, 0.0, 1.0), 4), nothing)
-  insert!(givre.ecs, rect, RENDER_COMPONENT_ID, visual)
+  insert!(givre.ecs, texture, GEOMETRY_COMPONENT_ID, geometry)
+  visual = RenderComponent(RENDER_OBJECT_IMAGE, nothing, image_resource(givre.systems.rendering.renderer.device, rand(RGBA{Float32}, 512, 512)))
+  insert!(givre.ecs, texture, RENDER_COMPONENT_ID, visual)
   on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{Point2}()
     function (input::Input)
       if input.type === BUTTON_PRESSED
         threshold[] = (0.0, 0.0)
-        origin[] = givre.ecs[rect, LOCATION_COMPONENT_ID]::Point2
+        origin[] = givre.ecs[texture, LOCATION_COMPONENT_ID]::Point2
       elseif input.type === DRAG
         target, event = input.dragged
         drag_amount = event.location .- input.source.event.location
-        givre.ecs[rect, LOCATION_COMPONENT_ID] = origin[] .+ drag_amount
+        givre.ecs[texture, LOCATION_COMPONENT_ID] = origin[] .+ drag_amount
         if sqrt(sum((drag_amount .- threshold[]) .^ 2)) > 0.5
           threshold[] = drag_amount
-          renderable = givre.ecs[rect, RENDER_COMPONENT_ID]::RenderComponent
-          givre.ecs[rect, RENDER_COMPONENT_ID] = @set renderable.vertex_data = fill(Vec3(rand(3)), 4)
+          renderable = givre.ecs[texture, RENDER_COMPONENT_ID]::RenderComponent
+          givre.ecs[texture, RENDER_COMPONENT_ID] = @set renderable.vertex_data = fill(Vec3(rand(3)), 4)
         end
       end
     end
   end
-  insert!(givre.ecs, rect, INPUT_COMPONENT_ID, InputComponent(rect, on_input, BUTTON_PRESSED, DRAG))
+  insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(texture, on_input, BUTTON_PRESSED, DRAG))
 end
