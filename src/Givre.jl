@@ -42,6 +42,7 @@ const Optional{T} = Union{T,Nothing}
 
 include("renderer.jl")
 include("components.jl")
+include("layout.jl")
 include("systems.jl")
 include("main.jl")
 
