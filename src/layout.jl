@@ -2,6 +2,8 @@ using Graphs
 
 export
   LayoutEngine, ECSLayoutEngine,
+  PositionalFeature, at,
+  Constraint, attach,
   compute_layout!,
 
   Constraint,
@@ -43,13 +45,89 @@ function compute_layout!(engine::LayoutEngine, objects, constraints)
     cs = dg.object_constraints[v]
     isnothing(cs) && continue
     validate_constraints(engine, cs)
-    target = dg.objects[v]
-    original = get_position(engine, target)
+    object = dg.objects[v]
+    original = get_position(engine, object)
     position = foldl(cs; init = original) do position, constraint
       apply_constraint(engine, constraint, position)
     end
-    position ≠ original && set_position!(engine, target, position)
+    position ≠ original && set_position!(engine, object, position)
   end
+end
+
+@enum FeatureLocation begin
+  FEATURE_LOCATION_CENTER
+  FEATURE_LOCATION_ORIGIN
+  FEATURE_LOCATION_CORNER
+  FEATURE_LOCATION_EDGE
+  FEATURE_LOCATION_CUSTOM
+end
+
+struct PositionalFeature{O}
+  "Object the feature is attached to."
+  object::O
+  location::FeatureLocation
+  "Position of the feature relative to the origin (position) of the object."
+  data::Any
+end
+
+PositionalFeature(object, location::FeatureLocation) = PositionalFeature(object, location, nothing)
+
+@enum Direction begin
+  DIRECTION_HORIZONTAL = 1
+  DIRECTION_VERTICAL = 2
+end
+
+@enum Edge begin
+  EDGE_LEFT = 1
+  EDGE_RIGHT = 2
+  EDGE_BOTTOM = 3
+  EDGE_TOP = 4
+end
+
+@enum Corner begin
+  CORNER_BOTTOM_LEFT = 1
+  CORNER_BOTTOM_RIGHT = 2
+  CORNER_TOP_LEFT = 3
+  CORNER_TOP_RIGHT = 4
+end
+
+function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeature)
+  C = coordinate_type(engine)
+  T = eltype(C)
+  @match feature.location begin
+    &FEATURE_LOCATION_ORIGIN => zero(C)
+    &FEATURE_LOCATION_CENTER => centroid(get_geometry(engine, feature.object))
+    &FEATURE_LOCATION_CORNER => coordinates(get_geometry(engine, feature.object)::Box{2,T}, feature.data::Corner)
+    &FEATURE_LOCATION_EDGE => begin
+        geometry = get_geometry(engine, feature.object)::Box{2,T}
+        (x, y) = @match edge = feature.data::Edge begin
+          &EDGE_BOTTOM => (coordinates(geometry, CORNER_BOTTOM_LEFT), coordinates(geometry, CORNER_BOTTOM_RIGHT))
+          &EDGE_TOP => (coordinates(geometry, CORNER_TOP_LEFT), coordinates(geometry, CORNER_TOP_RIGHT))
+          &EDGE_LEFT => (coordinates(geometry, CORNER_BOTTOM_LEFT), coordinates(geometry, CORNER_TOP_LEFT))
+          &EDGE_RIGHT => (coordinates(geometry, CORNER_BOTTOM_RIGHT), coordinates(geometry, CORNER_TOP_RIGHT))
+        end
+        Segment(x, y)
+      end
+    &FEATURE_LOCATION_CUSTOM => feature.data::C
+  end
+end
+
+get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = get_coordinates(engine, feature.object) .+ get_relative_coordinates(engine, feature)
+
+coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry).points[Int64(corner)]
+
+at(object, position) = at(object, FEATURE_LOCATION_CUSTOM, position)
+function at(object, location::FeatureLocation, argument = nothing)
+  if location in (FEATURE_LOCATION_ORIGIN, FEATURE_LOCATION_CENTER)
+    isnothing(argument) || throw(ArgumentError("No argument must be provided for feature location in (`FEATURE_LOCATION_ORIGIN`, `FEATURE_LOCATION_CENTER`)"))
+  elseif location == FEATURE_LOCATION_CORNER
+    isa(argument, Corner) || throw(ArgumentError("`$location` requires a `Corner` argument"))
+  elseif location == FEATURE_LOCATION_EDGE
+    isa(argument, Edge) || throw(ArgumentError("`$location` requires a `Edge` argument"))
+  elseif location == FEATURE_LOCATION_CUSTOM
+    !isnothing(location) || throw(ArgumentError("`$location` requires an argument"))
+  end
+  PositionalFeature(object, location, argument)
 end
 
 @enum ConstraintType begin
@@ -67,64 +145,39 @@ CONSTRAINT_TYPE_DISTRIBUTE
 
 struct Constraint{O}
   type::ConstraintType
-  source::Optional{O}
-  target::Union{O, Vector{O}}
+  by::Optional{PositionalFeature{O}}
+  on::Union{PositionalFeature{O}, Vector{PositionalFeature{O}}}
   data::Any
 end
 
 function Base.getproperty(constraint::Constraint, name::Symbol)
-  name === :attach_point && return getfield(constraint, :data)::PositionalFeature
-  name === :alignment && return getfield(constraint, :data)::AlignedElements
+  name === :direction && return getfield(constraint, :data)::Direction
   getfield(constraint, name)
 end
 
 function apply_constraint(engine::LayoutEngine, constraint::Constraint, position)
   C = coordinate_type(engine)
   @match constraint.type begin
-    &CONSTRAINT_TYPE_ATTACH => set_coordinates(engine, position, get_coordinates(engine, constraint.attach_point))
+    &CONSTRAINT_TYPE_ATTACH => set_coordinates(engine, position, attach_point(engine, constraint))
   end
 end
 
-struct PositionalFeature{O,P}
-  "Object the feature is attached to."
-  object::O
-  "Position of the feature relative to the position of the object."
-  position::P
-end
+attach(by, on) = Constraint(CONSTRAINT_TYPE_ATTACH, positional_feature(by), positional_feature(on), nothing)
 
-get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = get_coordinates(engine, feature.object) .+ coordinates(engine, feature.position)
+attach_point(engine::LayoutEngine, constraint::Constraint) = get_coordinates(engine, constraint.by) .- get_relative_coordinates(engine, constraint.on)
 
-@enum AlignmentType begin
-  ALIGNMENT_TYPE_ALONG_VERTICAL
-  ALIGNMENT_TYPE_ALONG_HORIZONTAL
-end
-
-struct AlignedElements{O}
-  type::AlignmentType
-  objects::Vector{O}
-end
-
-# @enum PositionalFeature begin
-#   POSITIONAL_FEATURE_CENTER
-#   POSITIONAL_FEATURE_ORIGIN
-#   POSITIONAL_FEATURE_EDGE
-#   POSITIONAL_FEATURE_CUSTOM
-# end
-
-# @enum Direction DIRECTION_HORIZONTAL DIRECTION_VERTICAL
-# @enum AlignmentTarget ALIGN_BOTTOM ALIGN_TOP ALIGN_CENTER
-
-# align(rectangles, DIRECTION_HORIZONTAL, ALIGN_BOTTOM)::Constraint
+positional_feature(feature::PositionalFeature) = feature
+positional_feature(object) = PositionalFeature(object, FEATURE_LOCATION_ORIGIN)
 
 function validate_constraints(engine::LayoutEngine, constraints)
-  attach_point = nothing
+  point = nothing
   for constraint in constraints
     if constraint.type == CONSTRAINT_TYPE_ATTACH
-      if isnothing(attach_point)
-        (; attach_point) = constraint
+      if isnothing(point)
+        point = attach_point(engine, constraint)
       else
-        coords = get_coordinates(engine, constraint.attach_point)
-        coords == get_coordinates(engine, attach_point) || error("Attempting to attach the same object at two different locations")
+        other_point = attach_point(engine, constraint)
+        point == other_point || point ≈ other_point || error("Attempting to attach the same object at two different locations")
       end
     end
   end
@@ -153,9 +206,9 @@ function DependencyGraph(engine::LayoutEngine, constraints)
   end
 
   for constraint in constraints
-    from = constraint.source
+    from = constraint.by.object
     !isnothing(from) && (from = (from,))
-    to = constraint.target
+    to = constraint.on.object
     isa(to, O) && (to = (to,))
     from = something(from, to)
     for x in from
