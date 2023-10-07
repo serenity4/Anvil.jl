@@ -9,7 +9,7 @@ const P2 = Point2
 
 pool = EntityPool()
 ecs = ECSDatabase()
-engine = ECSLayoutEngine{P2,Box{2,Float64}}(ecs)
+engine = ECSLayoutEngine{P2,Box{2,Float64},P2,Box{2,Float64}}(ecs)
 
 objects = [new!(pool) for _ in 1:3]
 locations = P2[(10, 10), (30, 30), (76, 54)]

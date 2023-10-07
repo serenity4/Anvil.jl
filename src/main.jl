@@ -88,6 +88,8 @@ function main()
 end
 
 function initialize!(givre::GivreApplication)
+  layout = ECSLayoutEngine{Point2, Box{2,Float64}, Point2, GeometryComponent}(givre.ecs)
+
   texture = new!(givre.entity_pool)
   location = Point2(-0.4, -0.4)
   insert!(givre.ecs, texture, LOCATION_COMPONENT_ID, location)
@@ -113,4 +115,11 @@ function initialize!(givre::GivreApplication)
     end
   end
   insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(texture, on_input, BUTTON_PRESSED, DRAG))
+  button_bg = new!(givre.entity_pool)
+  insert!(givre.ecs, button_bg, LOCATION_COMPONENT_ID, Point2(0, 0))
+  geometry = GeometryComponent(Box(Scaling(0.1, 0.05)), 2.0)
+  insert!(givre.ecs, button_bg, GEOMETRY_COMPONENT_ID, geometry)
+  compute_layout!(layout, [texture, button_bg], [attach(at(texture, FEATURE_LOCATION_CENTER), at(button_bg, Point(-1.0, 0.0)))])
+  visual = RenderComponent(RENDER_OBJECT_RECTANGLE, repeat([Vec3(0.3, 0.2, 0.9)], 4), nothing)
+  insert!(givre.ecs, button_bg, RENDER_COMPONENT_ID, visual)
 end

@@ -45,14 +45,17 @@ set_coordinates(engine::LayoutEngine{<:Any,T,T}, position::T, coords::T) where {
 report_unsolvable_decision(engine::LayoutEngine) = error("No solution was found which satisfies all requested constraints.")
 # will also need similar functions to access geometry
 
-struct ECSLayoutEngine{C,G} <: LayoutEngine{EntityID,C,C,G}
+struct ECSLayoutEngine{C,G,PC,GC} <: LayoutEngine{EntityID,C,C,G}
   ecs::ECSDatabase
 end
 
 coordinates(engine::ECSLayoutEngine{C}, position::C) where {C} = position
-get_position(engine::ECSLayoutEngine{C}, object::EntityID) where {C} = engine.ecs[object, LOCATION_COMPONENT_ID]::C
+position(engine::ECSLayoutEngine{C,<:Any,C}, position::C) where {C} = position
+get_position(engine::ECSLayoutEngine{<:Any,<:Any,PC}, object::EntityID) where {PC} = position(engine, engine.ecs[object, LOCATION_COMPONENT_ID]::PC)
 set_position!(engine::ECSLayoutEngine{C}, object::EntityID, position::C) where {C} = engine.ecs[object, LOCATION_COMPONENT_ID] = position
-get_geometry(engine::ECSLayoutEngine{<:Any,G}, object::EntityID) where {G} = engine.ecs[object, GEOMETRY_COMPONENT_ID]::G
+get_geometry(engine::ECSLayoutEngine{<:Any,<:Any,<:Any,GC}, object::EntityID) where {GC} = geometry(engine, engine.ecs[object, GEOMETRY_COMPONENT_ID]::GC)
+geometry(engine::ECSLayoutEngine{<:Any,G,<:Any,G}, geometry::G) where {G} = geometry
+geometry(engine::ECSLayoutEngine{<:Any,G,<:Any,GC}, component::GC) where {G,GC<:GeometryComponent} = component.object::G
 
 "Materialize constraints present in the `input` and add them to the existing `constraints`."
 materialize_constraints(objects, constraints) = union!(materialize_constraints(objects), constraints)
