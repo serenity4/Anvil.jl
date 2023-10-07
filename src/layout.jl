@@ -3,35 +3,56 @@ using Graphs
 export
   LayoutEngine, ECSLayoutEngine,
   PositionalFeature, at,
-  Constraint, attach,
+  Constraint, attach, align,
   compute_layout!,
 
   Constraint,
   CONSTRAINT_TYPE_ATTACH,
   CONSTRAINT_TYPE_ALIGN,
   CONSTRAINT_TYPE_DISTRIBUTE,
-  PositionalFeature
+  PositionalFeature,
+  FEATURE_LOCATION_ORIGIN,
+  FEATURE_LOCATION_CENTER,
+  FEATURE_LOCATION_CORNER,
+  FEATURE_LOCATION_EDGE,
+  FEATURE_LOCATION_CUSTOM,
+  Corner,
+  CORNER_BOTTOM_LEFT,
+  CORNER_BOTTOM_RIGHT,
+  CORNER_TOP_LEFT,
+  CORNER_TOP_RIGHT,
+  Direction,
+  DIRECTION_HORIZONTAL,
+  DIRECTION_VERTICAL,
+  AlignmentTarget,
+  ALIGNMENT_TARGET_MINIMUM,
+  ALIGNMENT_TARGET_MAXIMUM,
+  ALIGNMENT_TARGET_AVERAGE
 
-abstract type LayoutEngine{O,P,C} end
+abstract type LayoutEngine{O,P,C,G} end
 
 object_type(::LayoutEngine{O}) where {O} = O
+position_type(::LayoutEngine{<:Any,P}) where {P} = P
 coordinate_type(::LayoutEngine{<:Any,<:Any,C}) where {C} = C
+geometry_type(::LayoutEngine{<:Any,<:Any,<:Any,G}) where {G} = G
 
 # coordinates(engine::LayoutEngine{<:Any,P,C}, position::P)::C where {P,C}
 # get_position(engine::LayoutEngine{O,P}, object::O)::P where {O,P}
 # set_position!(engine::LayoutEngine{O,P}, object::O, position::P) where {O,P}
+# get_geometry(engine::LayoutEngine{O,<:Any,<:Any,G}, object::O)::G where {O,G}
 get_coordinates(engine::LayoutEngine{O,P}, object::O) where {O,P} = coordinates(engine, get_position(engine, object))
 set_coordinates(engine::LayoutEngine{<:Any,T,T}, position::T, coords::T) where {T} = coords
 report_unsolvable_decision(engine::LayoutEngine) = error("No solution was found which satisfies all requested constraints.")
 # will also need similar functions to access geometry
 
-struct ECSLayoutEngine{C} <: LayoutEngine{EntityID,C,C}
+struct ECSLayoutEngine{C,G} <: LayoutEngine{EntityID,C,C,G}
   ecs::ECSDatabase
 end
 
 coordinates(engine::ECSLayoutEngine{C}, position::C) where {C} = position
 get_position(engine::ECSLayoutEngine{C}, object::EntityID) where {C} = engine.ecs[object, LOCATION_COMPONENT_ID]::C
 set_position!(engine::ECSLayoutEngine{C}, object::EntityID, position::C) where {C} = engine.ecs[object, LOCATION_COMPONENT_ID] = position
+get_geometry(engine::ECSLayoutEngine{<:Any,G}, object::EntityID) where {G} = engine.ecs[object, GEOMETRY_COMPONENT_ID]::G
 
 "Materialize constraints present in the `input` and add them to the existing `constraints`."
 materialize_constraints(objects, constraints) = union!(materialize_constraints(objects), constraints)
@@ -39,18 +60,35 @@ materialize_constraints(objects, constraints) = union!(materialize_constraints(o
 materialize_constraints(objects) = Constraint[]
 
 function compute_layout!(engine::LayoutEngine, objects, constraints)
+  O = object_type(engine)
+  C = Constraint{O}
   constraints = materialize_constraints(objects, constraints)
   dg = DependencyGraph(engine, constraints)
   for v in topological_sort(dg.graph)
-    cs = dg.object_constraints[v]
-    isnothing(cs) && continue
-    validate_constraints(engine, cs)
-    object = dg.objects[v]
-    original = get_position(engine, object)
-    position = foldl(cs; init = original) do position, constraint
-      apply_constraint(engine, constraint, position)
+    node = dg.nodes[v]
+    @switch node begin
+      @case ::O
+      cs = dg.node_constraints[v]
+      isnothing(cs) && continue
+      validate_constraints(engine, cs)
+      original = get_position(engine, node)
+      position = foldl(cs; init = original) do position, constraint
+        apply_constraint(engine, constraint, position)
+      end
+      position ≠ original && set_position!(engine, node, position)
+
+      @case ::C
+      @switch node.type begin
+        @case &CONSTRAINT_TYPE_ALIGN
+        alignment = compute_alignment(engine, node)
+        for feature in node.on
+          object = feature[]
+          original = get_position(engine, object)
+          position = apply_alignment(engine, node, feature, alignment)
+          position ≠ original && set_position!(engine, object, position)
+        end
+      end
     end
-    position ≠ original && set_position!(engine, object, position)
   end
 end
 
@@ -72,10 +110,7 @@ end
 
 PositionalFeature(object, location::FeatureLocation) = PositionalFeature(object, location, nothing)
 
-@enum Direction begin
-  DIRECTION_HORIZONTAL = 1
-  DIRECTION_VERTICAL = 2
-end
+Base.getindex(feature::PositionalFeature) = feature.object
 
 @enum Edge begin
   EDGE_LEFT = 1
@@ -114,8 +149,9 @@ end
 
 get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = get_coordinates(engine, feature.object) .+ get_relative_coordinates(engine, feature)
 
-coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry).points[Int64(corner)]
+coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry, Point{2,T}).points[Int64(corner)]
 
+at(object) = positional_feature(object)
 at(object, position) = at(object, FEATURE_LOCATION_CUSTOM, position)
 function at(object, location::FeatureLocation, argument = nothing)
   if location in (FEATURE_LOCATION_ORIGIN, FEATURE_LOCATION_CENTER)
@@ -128,6 +164,22 @@ function at(object, location::FeatureLocation, argument = nothing)
     !isnothing(location) || throw(ArgumentError("`$location` requires an argument"))
   end
   PositionalFeature(object, location, argument)
+end
+
+@enum Direction begin
+  DIRECTION_HORIZONTAL = 1
+  DIRECTION_VERTICAL = 2
+end
+
+@enum AlignmentTarget begin
+  ALIGNMENT_TARGET_MINIMUM = 1
+  ALIGNMENT_TARGET_MAXIMUM = 2
+  ALIGNMENT_TARGET_AVERAGE = 3
+end
+
+struct Alignment
+  direction::Direction
+  target::AlignmentTarget
 end
 
 @enum ConstraintType begin
@@ -151,7 +203,7 @@ struct Constraint{O}
 end
 
 function Base.getproperty(constraint::Constraint, name::Symbol)
-  name === :direction && return getfield(constraint, :data)::Direction
+  name === :alignment && return getfield(constraint, :data)::Alignment
   getfield(constraint, name)
 end
 
@@ -162,7 +214,32 @@ function apply_constraint(engine::LayoutEngine, constraint::Constraint, position
   end
 end
 
+function compute_alignment(engine::LayoutEngine, constraint::Constraint)
+  @assert constraint.type == CONSTRAINT_TYPE_ALIGN
+  (; direction, target) = constraint.alignment
+  i = 2 - Int64(direction)
+  @match target begin
+    &ALIGNMENT_TARGET_MINIMUM => minimum(get_coordinates(engine, object)[i] for object in constraint.on)
+    &ALIGNMENT_TARGET_MAXIMUM => maximum(get_coordinates(engine, object)[i] for object in constraint.on)
+    &ALIGNMENT_TARGET_AVERAGE => sum(get_coordinates(engine, object)[i] for object in constraint.on)/length(constraint.on)
+  end
+end
+
+function apply_alignment(engine::LayoutEngine, constraint::Constraint, feature::PositionalFeature, alignment)
+  C = coordinate_type(engine)
+  object = feature[]
+  position = get_position(engine, object)
+  coords = coordinates(engine, position)
+  relative = get_relative_coordinates(engine, feature)
+  @match constraint.alignment.direction begin
+    &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(coords[1], alignment - relative[2]))
+    &DIRECTION_VERTICAL => set_coordinates(engine, position, C(alignment - relative[1], coords[2]))
+  end
+end
+
 attach(by, on) = Constraint(CONSTRAINT_TYPE_ATTACH, positional_feature(by), positional_feature(on), nothing)
+align(objects::AbstractVector{<:PositionalFeature}, direction::Direction, target::AlignmentTarget) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, objects, Alignment(direction, target))
+align(objects, direction::Direction, target::AlignmentTarget) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, positional_feature.(objects), Alignment(direction, target))
 
 attach_point(engine::LayoutEngine, constraint::Constraint) = get_coordinates(engine, constraint.by) .- get_relative_coordinates(engine, constraint.on)
 
@@ -183,47 +260,60 @@ function validate_constraints(engine::LayoutEngine, constraints)
   end
 end
 
+const DependencyNode{O} = Union{O, Constraint{O}}
+
 struct DependencyGraph{O}
   graph::SimpleDiGraph{Int64}
-  objects::Vector{O}
-  object_constraints::Vector{Optional{Vector{Constraint}}}
-  cycles::Vector{Vector{Int64}}
+  nodes::Vector{DependencyNode{O}}
+  node_constraints::Vector{Optional{Vector{Constraint{O}}}}
 end
 
-function DependencyGraph(engine::LayoutEngine, constraints)
-  O = object_type(engine)
+function DependencyGraph(engine::LayoutEngine{O}, constraints) where {O}
+  C = Constraint{O}
   g = SimpleDiGraph{Int64}()
-  verts = Dict{O, Int64}()
-  objects = O[]
-  object_constraints = Optional{Vector{Constraint}}[]
-  function add_node!(object)
-    get!(verts, object) do
-      push!(objects, object)
-      push!(object_constraints, nothing)
-      Graphs.add_vertex!(g)
-      Graphs.nv(g)
-    end
+  verts = Dict{DependencyNode{O}, Int64}()
+  nodes = DependencyNode{O}[]
+  node_constraints = Optional{Vector{C}}[]
+  # Constraint nodes to be considered with respect to dependency order instead of an individual object.
+  constraint_proxies = Dict{O, Union{C, Vector{C}}}()
+  function get_node!(object::O)
+    proxy = get(constraint_proxies, object, object)
+    get!(() -> add_node!(proxy), verts, proxy)
+  end
+  function add_node!(x::DependencyNode{O})
+    push!(nodes, x)
+    push!(node_constraints, nothing)
+    Graphs.add_vertex!(g)
+    Graphs.nv(g)
   end
 
-  for constraint in constraints
-    from = constraint.by.object
-    !isnothing(from) && (from = (from,))
-    to = constraint.on.object
-    isa(to, O) && (to = (to,))
-    from = something(from, to)
-    for x in from
-      u = get!(() -> add_node!(x), verts, x)
-      for y in to
-        x === y && continue
-        v = get!(() -> add_node!(y), verts, y)
-        isnothing(object_constraints[v]) && (object_constraints[v] = Vector{Constraint}[])
-        push!(object_constraints[v], constraint)
+  for constraint in unique(constraints)
+    @switch constraint.type begin
+      @case &CONSTRAINT_TYPE_ATTACH
+      src = constraint.by[]
+      dst = constraint.on[]
+      u = get_node!(src)
+      v = get_node!(dst)
+      isnothing(node_constraints[v]) && (node_constraints[v] = Vector{Constraint}[])
+      push!(node_constraints[v], constraint)
+      Graphs.add_edge!(g, u, v)
+
+      @case &CONSTRAINT_TYPE_ALIGN || &CONSTRAINT_TYPE_DISTRIBUTE
+      v = add_node!(constraint)
+      for to in constraint.on
+        src = to[]
+        u = get!(() -> add_node!(src), verts, src)
+        existing = get(constraint_proxies, src, nothing)
+        @match existing begin
+          ::Nothing => (constraint_proxies[src] = constraint)
+          ::C => (constraint_proxies[src] = [existing, constraint])
+          ::Vector{C} => push!(existing, constraint)
+        end
         Graphs.add_edge!(g, u, v)
       end
     end
   end
 
-  cycles = simplecycles(g)
-  isempty(cycles) || error("Cyclic dependencies not yet supported.")
-  DependencyGraph(g, objects, object_constraints, cycles)
+  !is_cyclic(g) || error("Cyclic dependencies are not supported.")
+  DependencyGraph(g, nodes, node_constraints)
 end
