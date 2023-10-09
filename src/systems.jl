@@ -90,17 +90,22 @@ function shutdown(system::RenderingSystem)
 end
 
 function (system::RenderingSystem)(ecs::ECSDatabase, target::Resource)
+  (; program_cache) = system.renderer
   commands = Command[]
 
   for (location, geometry, object) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID), Tuple{Point2,GeometryComponent,RenderComponent})
     command = @match object.type begin
       &RENDER_OBJECT_RECTANGLE => begin
         rect = Rectangle(geometry.object, location, object.vertex_data, object.primitive_data)
-        Command(system.renderer.program_cache, Gradient(target), Primitive(rect))
+        Command(program_cache, Gradient(target), Primitive(rect))
       end
       &RENDER_OBJECT_IMAGE => begin
         rect = Rectangle(geometry.object, location, full_image_uv(), nothing)
-        Command(system.renderer.program_cache, Sprite(target, Texture(object.primitive_data)), Primitive(rect))
+        Command(program_cache, Sprite(target, Texture(object.primitive_data)), Primitive(rect))
+      end
+      &RENDER_OBJECT_TEXT => begin
+        text, font, options = object.primitive_data::Tuple{OpenType.Text, OpenTypeFont, FontOptions}
+        renderables(program_cache, ShaderLibrary.Text(target, text), font, options, location)
       end
     end
     push!(commands, command)

@@ -6,7 +6,10 @@ const GEOMETRY_COMPONENT_ID = ComponentID(4) # GeometryComponent
 @enum RenderObjectType begin
   RENDER_OBJECT_RECTANGLE = 1
   RENDER_OBJECT_IMAGE = 2
+  RENDER_OBJECT_TEXT = 3
 end
+
+const LocationComponent = Point2
 
 struct GeometryComponent
   object::Any

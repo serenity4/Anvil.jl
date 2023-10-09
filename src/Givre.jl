@@ -23,12 +23,12 @@ using ConcurrencyGraph
 using Lava: Command
 using ShaderLibrary
 using ShaderLibrary: Instance, aspect_ratio
+using OpenType
 using Accessors: @set, setproperties
 using GeometryExperiments
 using Accessors
 using XCB
 using Entities
-using Entities: new!
 using MLStyle
 using AbstractGUI
 using AbstractGUI: Input
@@ -37,6 +37,7 @@ const Window = XCBWindow
 const WindowManager = XWindowManager
 
 import ConcurrencyGraph: shutdown
+import Entities: new!
 
 const Optional{T} = Union{T,Nothing}
 
@@ -44,6 +45,8 @@ include("renderer.jl")
 include("components.jl")
 include("layout.jl")
 include("systems.jl")
+include("application.jl")
+include("text.jl")
 include("main.jl")
 
 @compile_traces "precompilation_traces.jl"
