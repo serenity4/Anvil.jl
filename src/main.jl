@@ -33,7 +33,7 @@ function initialize!(givre::GivreApplication)
 
   texture = new_entity!(givre)
   set_location!(givre, texture, Point2(-0.4, -0.4))
-  set_geometry!(givre, texture, GeometryComponent(Box(Scaling(0.5, 0.5)), 1.0))
+  set_geometry!(givre, texture, GeometryComponent(Box(Point2(0.5, 0.5)), 1.0))
   set_render!(givre, texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, image_resource(givre.systems.rendering.renderer.device, rand(RGBA{Float32}, 512, 512))))
   on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{Point2}()
     function (input::Input)
@@ -56,7 +56,7 @@ function initialize!(givre::GivreApplication)
 
   button_bg = new_entity!(givre)
   set_location!(givre, button_bg, Point2(0, 0))
-  set_geometry!(givre, button_bg, GeometryComponent(Box(Scaling(0.1, 0.05)), 2.0))
+  set_geometry!(givre, button_bg, GeometryComponent(Box(Point2(0.1, 0.05)), 2.0))
   set_render!(givre, button_bg, RenderComponent(RENDER_OBJECT_RECTANGLE, repeat([Vec3(0.3, 0.2, 0.9)], 4), nothing))
 
   options = FontOptions(ShapingOptions(tag"latn", tag"fra "), 1/10)
