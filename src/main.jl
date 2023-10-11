@@ -54,17 +54,22 @@ function initialize!(givre::GivreApplication)
   end
   insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(texture, on_input, BUTTON_PRESSED, DRAG))
 
-  button_bg = new_entity!(givre)
-  set_location!(givre, button_bg, Point2(0, 0))
-  set_geometry!(givre, button_bg, GeometryComponent(Box(Point2(0.1, 0.05)), 2.0))
-  set_render!(givre, button_bg, RenderComponent(RENDER_OBJECT_RECTANGLE, repeat([Vec3(0.3, 0.2, 0.9)], 4), nothing))
-
   options = FontOptions(ShapingOptions(tag"latn", tag"fra "), 1/10)
-  model_text = new!(givre, Text("juliamono-regular", OpenType.Text("Model", TextOptions()), options))
+  text = Text("arial", OpenType.Text("Model", TextOptions()), options)
+  model_text = new!(givre, text)
+  box = (givre.ecs[model_text, GEOMETRY_COMPONENT_ID]::GeometryComponent).object::Box{2,Float64}
   set_location!(givre, model_text, zero(LocationComponent))
 
-  compute_layout!(layout, [texture, button_bg, model_text], [
-    attach(at(texture, FEATURE_LOCATION_CENTER), at(button_bg, Point(-1.0, 0.0))),
-    attach(button_bg, model_text),
+  model_text_bg = new_entity!(givre)
+  set_location!(givre, model_text_bg, Point2(0, 0))
+  # set_geometry!(givre, model_text_bg, GeometryComponent(box - centroid(box), 2.0))
+  # Don't center the background to show the text.
+  # XXX: Solve the z-ordering issue. We should have a mechanism for that in rendering, similar to what exists for inputs.
+  set_geometry!(givre, model_text_bg, GeometryComponent(box, 2.0))
+  set_render!(givre, model_text_bg, RenderComponent(RENDER_OBJECT_RECTANGLE, repeat([Vec3(0.3, 0.2, 0.9)], 4), nothing))
+
+  compute_layout!(layout, [texture, model_text_bg, model_text], [
+    attach(at(texture, FEATURE_LOCATION_CENTER), at(model_text_bg, Point(-1.0, 0.0))),
+    attach(model_text_bg, at(model_text, FEATURE_LOCATION_CENTER)),
   ])
 end

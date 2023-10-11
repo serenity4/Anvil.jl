@@ -36,6 +36,7 @@ using AbstractGUI: Input
 const Window = XCBWindow
 const WindowManager = XWindowManager
 
+import GeometryExperiments: boundingelement
 import ConcurrencyGraph: shutdown
 import Entities: new!
 
