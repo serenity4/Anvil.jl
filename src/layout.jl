@@ -152,7 +152,7 @@ end
 
 get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = get_coordinates(engine, feature.object) .+ get_relative_coordinates(engine, feature)
 
-coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry, Point{2,T}).points[Int64(corner)]
+coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry).points[Int64(corner)]
 
 at(object) = positional_feature(object)
 at(object, position) = at(object, FEATURE_LOCATION_CUSTOM, position)
@@ -240,7 +240,7 @@ function apply_alignment(engine::LayoutEngine, constraint::Constraint, feature::
   end
 end
 
-attach(by, on) = Constraint(CONSTRAINT_TYPE_ATTACH, positional_feature(by), positional_feature(on), nothing)
+attach(object, onto) = Constraint(CONSTRAINT_TYPE_ATTACH, positional_feature(onto), positional_feature(object), nothing)
 align(objects::AbstractVector{<:PositionalFeature}, direction::Direction, target::AlignmentTarget) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, objects, Alignment(direction, target))
 align(objects, direction::Direction, target::AlignmentTarget) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, positional_feature.(objects), Alignment(direction, target))
 

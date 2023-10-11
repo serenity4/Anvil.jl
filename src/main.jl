@@ -69,7 +69,7 @@ function initialize!(givre::GivreApplication)
   set_render!(givre, model_text_bg, RenderComponent(RENDER_OBJECT_RECTANGLE, repeat([Vec3(0.3, 0.2, 0.9)], 4), nothing))
 
   compute_layout!(layout, [texture, model_text_bg, model_text], [
-    attach(at(texture, FEATURE_LOCATION_CENTER), at(model_text_bg, Point(-1.0, 0.0))),
-    attach(model_text_bg, at(model_text, FEATURE_LOCATION_CENTER)),
+    attach(at(model_text_bg, Point(-1.0, 0.0)), at(texture, FEATURE_LOCATION_CENTER)),
+    attach(at(model_text, FEATURE_LOCATION_CENTER), model_text_bg),
   ])
 end
