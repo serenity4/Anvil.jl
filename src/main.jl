@@ -34,7 +34,8 @@ function initialize!(givre::GivreApplication)
   texture = new_entity!(givre)
   set_location!(givre, texture, Point2(-0.4, -0.4))
   set_geometry!(givre, texture, GeometryComponent(Box(Point2(0.5, 0.5)), 1.0))
-  set_render!(givre, texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, image_resource(givre.systems.rendering.renderer.device, rand(RGBA{Float32}, 512, 512))))
+  image = image_resource(givre.systems.rendering.renderer.device, rand(RGBA{Float32}, 512, 512))
+  set_render!(givre, texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
   on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{Point2}()
     function (input::Input)
       if input.type === BUTTON_PRESSED
@@ -55,10 +56,10 @@ function initialize!(givre::GivreApplication)
   insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(texture, on_input, BUTTON_PRESSED, DRAG))
 
   options = FontOptions(ShapingOptions(tag"latn", tag"fra "), 1/10)
-  text = Text("arial", OpenType.Text("Model", TextOptions()), options)
+  text = Text(OpenType.Text("Model", TextOptions()), font(givre, "arial"), options)
   model_text = new!(givre, text)
-  box = (givre.ecs[model_text, GEOMETRY_COMPONENT_ID]::GeometryComponent).object::Box{2,Float64}
   set_location!(givre, model_text, zero(LocationComponent))
+  box = (givre.ecs[model_text, GEOMETRY_COMPONENT_ID]::GeometryComponent).object::Box{2,Float64}
 
   model_text_bg = new_entity!(givre)
   set_location!(givre, model_text_bg, Point2(0, 0))
@@ -66,7 +67,7 @@ function initialize!(givre::GivreApplication)
   # Don't center the background to show the text.
   # XXX: Solve the z-ordering issue. We should have a mechanism for that in rendering, similar to what exists for inputs.
   set_geometry!(givre, model_text_bg, GeometryComponent(box, 2.0))
-  set_render!(givre, model_text_bg, RenderComponent(RENDER_OBJECT_RECTANGLE, repeat([Vec3(0.3, 0.2, 0.9)], 4), nothing))
+  set_render!(givre, model_text_bg, RenderComponent(RENDER_OBJECT_RECTANGLE, repeat([Vec3(0.3, 0.2, 0.9)], 4), Gradient()))
 
   compute_layout!(layout, [texture, model_text_bg, model_text], [
     attach(at(model_text_bg, Point(-1.0, 0.0)), at(texture, FEATURE_LOCATION_CENTER)),

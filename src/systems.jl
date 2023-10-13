@@ -92,20 +92,24 @@ end
 function (system::RenderingSystem)(ecs::ECSDatabase, target::Resource)
   (; program_cache) = system.renderer
   commands = Command[]
+  parameters = ShaderParameters(target)
 
   for (location, geometry, object) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID), Tuple{Point2,GeometryComponent,RenderComponent})
+    location = Point3(location..., geometry.z/10)
     command = @match object.type begin
       &RENDER_OBJECT_RECTANGLE => begin
-        rect = Rectangle(geometry.object, location, object.vertex_data, object.primitive_data)
-        Command(program_cache, Gradient(target), Primitive(rect))
+        rect = Rectangle(geometry.object, location, object.vertex_data, nothing)
+        gradient = object.primitive_data::Gradient
+        Command(program_cache, gradient, parameters, Primitive(rect))
       end
       &RENDER_OBJECT_IMAGE => begin
         rect = Rectangle(geometry.object, location, full_image_uv(), nothing)
-        Command(program_cache, Sprite(target, Texture(object.primitive_data)), Primitive(rect))
+        sprite = object.primitive_data::Sprite
+        Command(program_cache, sprite, parameters, Primitive(rect))
       end
       &RENDER_OBJECT_TEXT => begin
-        text, font, options = object.primitive_data::Tuple{OpenType.Text, OpenTypeFont, FontOptions}
-        renderables(program_cache, ShaderLibrary.Text(target, text), font, options, location)
+        text = object.primitive_data::Text
+        renderables(program_cache, text, parameters, location)
       end
     end
     push!(commands, command)

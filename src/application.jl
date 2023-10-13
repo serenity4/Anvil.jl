@@ -4,6 +4,7 @@ struct GivreApplication
   ecs::ECSDatabase
   window::Window
   systems::Systems
+  fonts::Dict{String, OpenTypeFont}
   function GivreApplication()
     wm = XWindowManager()
     window = Window(wm, "Givre"; width = 1920, height = 1080, map = false)
@@ -11,7 +12,7 @@ struct GivreApplication
       EventSystem(EventQueue(wm), UserInterface(window)),
       RenderingSystem(Renderer(window)),
     )
-    givre = new(wm, EntityPool(), ECSDatabase(), window, systems)
+    givre = new(wm, EntityPool(), ECSDatabase(), window, systems, Dict())
     initialize!(givre)
     start(systems.rendering.renderer, givre)
     map_window(window)
