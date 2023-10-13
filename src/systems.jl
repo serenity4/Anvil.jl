@@ -89,13 +89,14 @@ function shutdown(system::RenderingSystem)
   wait(system.renderer.device)
 end
 
-function (system::RenderingSystem)(ecs::ECSDatabase, target::Resource)
-  (; program_cache) = system.renderer
+function ((; renderer)::RenderingSystem)(ecs::ECSDatabase, target::Resource)
+  (; program_cache) = renderer
   commands = Command[]
-  parameters = ShaderParameters(target)
+  depth = attachment_resource(renderer.device, ones(Float32, dimensions(target.attachment)...); format = Vk.FORMAT_D32_SFLOAT, usage_flags = Vk.IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+  parameters = ShaderParameters(target; depth)
 
   for (location, geometry, object) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID), Tuple{Point2,GeometryComponent,RenderComponent})
-    location = Point3(location..., geometry.z/10)
+    location = Point3f(location..., 1/geometry.z)
     command = @match object.type begin
       &RENDER_OBJECT_RECTANGLE => begin
         rect = Rectangle(geometry.object, location, object.vertex_data, nothing)
