@@ -23,7 +23,7 @@ function main()
   reset_mpi_state()
   application_thread = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
     givre = GivreApplication()
-    LoopExecution(0.000; shutdown = false)(givre)()
+    LoopExecution(0.001; shutdown = false)(givre)()
   end
   monitor_children()
 end
