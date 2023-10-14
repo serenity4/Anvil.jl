@@ -63,10 +63,7 @@ function initialize!(givre::GivreApplication)
 
   model_text_bg = new_entity!(givre)
   set_location!(givre, model_text_bg, Point2(0, 0))
-  # set_geometry!(givre, model_text_bg, GeometryComponent(box - centroid(box), 2.0))
-  # Don't center the background to show the text.
-  # XXX: Solve the z-ordering issue. We should have a mechanism for that in rendering, similar to what exists for inputs.
-  set_geometry!(givre, model_text_bg, GeometryComponent(box, 2.0))
+  set_geometry!(givre, model_text_bg, GeometryComponent(box - centroid(box), 2.0))
   set_render!(givre, model_text_bg, RenderComponent(RENDER_OBJECT_RECTANGLE, repeat([Vec3(0.3, 0.2, 0.9)], 4), Gradient()))
 
   compute_layout!(layout, [texture, model_text_bg, model_text], [

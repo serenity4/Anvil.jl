@@ -89,11 +89,18 @@ function shutdown(system::RenderingSystem)
   wait(system.renderer.device)
 end
 
-function ((; renderer)::RenderingSystem)(ecs::ECSDatabase, target::Resource)
+function (rendering::RenderingSystem)(ecs::ECSDatabase, target::Resource)
+  nodes = RenderNode[]
+  depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, dimensions(target.attachment))
+  parameters = ShaderParameters(target; depth)
+  push!(nodes, render_opaque_objects(rendering, ecs, @set parameters.depth_clear = ClearValue(1f0)))
+  push!(nodes, render_transparent_objects(rendering, ecs, @set parameters.color_clear[1] = nothing))
+  nodes
+end
+
+function render_opaque_objects((; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
   (; program_cache) = renderer
   commands = Command[]
-  depth = attachment_resource(renderer.device, ones(Float32, dimensions(target.attachment)...); format = Vk.FORMAT_D32_SFLOAT, usage_flags = Vk.IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-  parameters = ShaderParameters(target; depth)
 
   for (location, geometry, object) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID), Tuple{Point2,GeometryComponent,RenderComponent})
     location = Point3f(location..., 1/geometry.z)
@@ -104,18 +111,34 @@ function ((; renderer)::RenderingSystem)(ecs::ECSDatabase, target::Resource)
         Command(program_cache, gradient, parameters, Primitive(rect))
       end
       &RENDER_OBJECT_IMAGE => begin
+        # Assume that images are opaque for now.
         rect = Rectangle(geometry.object, location, full_image_uv(), nothing)
         sprite = object.primitive_data::Sprite
         Command(program_cache, sprite, parameters, Primitive(rect))
       end
+      _ => continue
+    end
+    push!(commands, command)
+  end
+  RenderNode(commands)
+end
+
+function render_transparent_objects((; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
+  (; program_cache) = renderer
+  commands = Command[]
+
+  for (location, geometry, object) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID), Tuple{Point2,GeometryComponent,RenderComponent})
+    location = Point3f(location..., 1/geometry.z)
+    command = @match object.type begin
       &RENDER_OBJECT_TEXT => begin
         text = object.primitive_data::Text
         renderables(program_cache, text, parameters, location)
       end
+      _ => continue
     end
     push!(commands, command)
   end
-  commands
+  RenderNode(commands)
 end
 
 full_image_uv() = Vec2[(0, 0), (0, 1), (1, 0), (1, 1)]

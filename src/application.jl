@@ -54,8 +54,7 @@ end
 
 # Called by the application thread.
 function frame_nodes(givre::GivreApplication, target::Resource)
-  commands = givre.systems.rendering(givre.ecs, target)
-  [RenderNode(commands)]
+  givre.systems.rendering(givre.ecs, target)
 end
 
 function shutdown(givre::GivreApplication)
