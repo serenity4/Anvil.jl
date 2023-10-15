@@ -8,13 +8,15 @@ struct GivreApplication
   function GivreApplication()
     wm = XWindowManager()
     window = Window(wm, "Givre"; width = 1920, height = 1080, map = false)
+    ecs = ECSDatabase()
     systems = Systems(
       SynchronizationSystem(),
+      LayoutSystem(ecs),
       DrawingOrderSystem(),
       RenderingSystem(Renderer(window)),
       EventSystem(EventQueue(wm), UserInterface(window)),
     )
-    givre = new(wm, EntityPool(), ECSDatabase(), window, systems, Dict())
+    givre = new(wm, EntityPool(), ecs, window, systems, Dict())
     initialize!(givre)
     start(systems.rendering.renderer, givre)
     map_window(window)
@@ -39,6 +41,7 @@ set_render!(givre::GivreApplication, entity, render::RenderComponent) = givre.ec
 font_file(font_name) = joinpath(pkgdir(Givre), "assets", "fonts", font_name * ".ttf")
 get_font(givre, name::AbstractString) = get!(() -> OpenTypeFont(font_file(name)), givre.fonts, name)
 
+add_constraint!(givre::GivreApplication, constraint) = add_constraint!(givre.systems.layout, constraint)
 put_behind!(givre::GivreApplication, behind, of) = put_behind!(givre.systems.drawing_order, behind, of)
 
 function start(renderer::Renderer, givre::GivreApplication)
@@ -68,10 +71,16 @@ function Lava.render(givre::GivreApplication, rdr::Renderer)
   end
 end
 
+"Run systems that are common to and essential for both rendering and event handling."
+function run_systems(givre::GivreApplication)
+  givre.systems.synchronization(givre)
+  givre.systems.layout(givre.ecs)
+  givre.systems.drawing_order(givre.ecs)
+end
+
 # Called by the application thread.
 function frame_nodes(givre::GivreApplication, target::Resource)
-  givre.systems.synchronization(givre)
-  givre.systems.drawing_order(givre.ecs)
+  run_systems(givre)
   givre.systems.rendering(givre.ecs, target)
 end
 

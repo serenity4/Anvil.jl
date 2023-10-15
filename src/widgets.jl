@@ -99,7 +99,9 @@ function Button(on_click, givre::GivreApplication, geometry::Box{2}; background_
   on_input = function (input::Input)
     input.type === BUTTON_PRESSED && on_click()
   end
-  new_widget!(givre, Button, on_input, geometry, background_color, text)
+  widget = new_widget!(givre, Button, on_input, geometry, background_color, text)
+  !isnothing(text) && add_constraint!(givre, attach(at(text, :center), at(widget, :center)))
+  widget
 end
 
 function synchronize!(givre::GivreApplication, button::Button)

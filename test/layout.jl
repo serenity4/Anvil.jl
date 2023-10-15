@@ -40,41 +40,41 @@ end
 
 @testset "Layout computations" begin
   reset_location.((1, 2))
-  compute_layout!(engine, objects[1:2], [attach(objects[2], objects[1])])
+  compute_layout!(engine, [attach(objects[2], objects[1])])
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
   @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
 
   reset_location.((1, 2))
-  compute_layout!(engine, objects[1:2], [attach(objects[2], at(at(objects[1], P2(2, 3)), P2(-2, -3)))])
+  compute_layout!(engine, [attach(objects[2], at(at(objects[1], P2(2, 3)), P2(-2, -3)))])
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
   @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
 
 
   reset_location.((1, 2))
-  compute_layout!(engine, objects[1:2], [attach(objects[2], at(objects[1], P2(2, 3)))])
+  compute_layout!(engine, [attach(objects[2], at(objects[1], P2(2, 3)))])
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
   @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
 
   reset_location.((1, 2))
-  compute_layout!(engine, objects[1:2], [attach(at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))])
+  compute_layout!(engine, [attach(at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))])
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
   @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
 
   # Idempotence.
   reset_location.((1, 2))
-  compute_layout!(engine, objects[1:2], repeat([attach(at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))], 2))
+  compute_layout!(engine, repeat([attach(at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))], 2))
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
   @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
 
   reset_location.((1, 2))
-  @test_throws "attach the same object at two different locations" compute_layout!(engine, objects, [
+  @test_throws "attach the same object at two different locations" compute_layout!(engine, [
     attach(objects[2], at(objects[1], P2(2, 3))),
     attach(objects[2], at(objects[1], P2(4, 5))),
   ])
 
   # Layout out 3 objects.
   reset_location.((1, 2, 3))
-  compute_layout!(engine, objects[1:3], [
+  compute_layout!(engine, [
     attach(objects[2], at(objects[1], P2(2, 3))),
     attach(at(objects[3], P2(4, 9)), objects[1]),
   ])
@@ -85,7 +85,7 @@ end
   # Align objects.
   reset_location.((1, 2, 3))
   reset_geometry.((1, 2, 3))
-  compute_layout!(engine, objects[1:3], [
+  compute_layout!(engine, [
     align(objects[1:3], DIRECTION_HORIZONTAL, ALIGNMENT_TARGET_MINIMUM),
   ])
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
@@ -94,7 +94,7 @@ end
 
   reset_location.((1, 2, 3))
   reset_geometry.((1, 2, 3))
-  compute_layout!(engine, objects[1:3], [
+  compute_layout!(engine, [
     align([objects[1], at(objects[2], P2(2, 5)), objects[3]], DIRECTION_HORIZONTAL, ALIGNMENT_TARGET_MINIMUM),
   ])
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)

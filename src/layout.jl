@@ -58,15 +58,9 @@ get_geometry(engine::ECSLayoutEngine{<:Any,GC,<:Any,GC}, object::EntityID) where
 # get_geometry(engine::ECSLayoutEngine{<:Any,<:Any,<:Any,GC}, object::EntityID) where {GC} = geometry(engine, engine.ecs[object, GEOMETRY_COMPONENT_ID]::GC)
 # geometry(engine::ECSLayoutEngine{<:Any,G,<:Any,GC}, component::GC) where {G,GC<:GeometryComponent} = component.object::G
 
-"Materialize constraints present in the `input` and add them to the existing `constraints`."
-materialize_constraints(objects, constraints) = union!(materialize_constraints(objects), constraints)
-# XXX: Actually do something or remove.
-materialize_constraints(objects) = Constraint[]
-
-function compute_layout!(engine::LayoutEngine, objects, constraints)
+function compute_layout!(engine::LayoutEngine, constraints)
   O = object_type(engine)
   C = Constraint{O}
-  constraints = materialize_constraints(objects, constraints)
   dg = DependencyGraph(engine, constraints)
   for v in topological_sort(dg.graph)
     node = dg.nodes[v]

@@ -12,6 +12,18 @@ function (::SynchronizationSystem)(givre #=::GivreApplication=#)
   end
 end
 
+struct LayoutSystem <: System
+  engine::ECSLayoutEngine{P2, Box{2,Float64}, LocationComponent, GeometryComponent}
+  constraints::Vector{Constraint{EntityID}}
+end
+LayoutSystem(ecs::ECSDatabase) = LayoutSystem(ECSLayoutEngine{P2, Box{2,Float64}, LocationComponent, GeometryComponent}(ecs), [])
+
+add_constraint!(layout::LayoutSystem, constraint::Constraint{EntityID}) = push!(layout.constraints, constraint)
+
+function ((; engine, constraints)::LayoutSystem)(ecs::ECSDatabase)
+  compute_layout!(engine, constraints)
+end
+
 "System determining which objects are going to be in front of other objects when displayed on the screen."
 struct DrawingOrderSystem <: System
   """
@@ -191,6 +203,7 @@ end
 
 struct Systems
   synchronization::SynchronizationSystem
+  layout::LayoutSystem
   drawing_order::DrawingOrderSystem
   rendering::RenderingSystem
   event::EventSystem
@@ -201,5 +214,6 @@ function shutdown(systems::Systems)
   shutdown(systems.event)
   shutdown(systems.rendering)
   shutdown(systems.drawing_order)
+  shutdown(systems.layout)
   shutdown(systems.synchronization)
 end

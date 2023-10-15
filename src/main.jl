@@ -13,8 +13,7 @@ end
 function (givre::GivreApplication)()
   # Make sure that the drawing order (which also defines interaction order)
   # has been resolved prior to resolving which object receives which event based on that order.
-  givre.systems.synchronization(givre)
-  givre.systems.drawing_order(givre.ecs)
+  run_systems(givre)
   code = givre.systems.event(givre.ecs)
   if isa(code, Int)
     exit(givre, code)
@@ -35,7 +34,6 @@ end
 function initialize!(givre::GivreApplication)
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
   givre.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
-  layout = ECSLayoutEngine{P2, Box{2,Float64}, LocationComponent, GeometryComponent}(givre.ecs)
 
   texture = new_entity!(givre)
   set_location!(givre, texture, P2(-0.4, -0.4))
@@ -49,7 +47,7 @@ function initialize!(givre::GivreApplication)
   put_behind!(givre, dropdown_bg, model_text)
 
   checkbox = Checkbox(identity, givre, false, Box(P2(0.02, 0.02)))
-  button = Button(givre, Box(P2(0.1, 0.04))) do
+  button = Button(givre, Box(P2(0.15, 0.05)); text = Text(givre, "Save")) do
     button.background_color = rand(RGB{Float32})
   end
 
@@ -73,10 +71,8 @@ function initialize!(givre::GivreApplication)
   end
   insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(on_input, BUTTON_PRESSED, DRAG))
 
-  compute_layout!(layout, [texture, dropdown_bg, model_text], [
-    attach(dropdown_bg, at(at(texture, :corner, CORNER_TOP_RIGHT), Point(0.2, -0.1))),
-    attach(at(model_text, :center), dropdown_bg),
-    attach(checkbox, at(at(model_text, :center), P2(0.2, 0.0))),
-    attach(button, at(checkbox, P2(0.0, -0.2))),
-  ])
+  add_constraint!(givre, attach(dropdown_bg, at(at(texture, :corner, CORNER_TOP_RIGHT), Point(0.2, -0.1))))
+  add_constraint!(givre, attach(at(model_text, :center), dropdown_bg))
+  add_constraint!(givre, attach(checkbox, at(at(model_text, :center), P2(0.2, 0.0))))
+  add_constraint!(givre, attach(button, at(checkbox, P2(0.0, -0.2))))
 end
