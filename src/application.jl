@@ -9,10 +9,10 @@ struct GivreApplication
     wm = XWindowManager()
     window = Window(wm, "Givre"; width = 1920, height = 1080, map = false)
     systems = Systems(
-      EventSystem(EventQueue(wm), UserInterface(window)),
-      RenderingSystem(Renderer(window)),
-      DrawingOrderSystem(),
       SynchronizationSystem(),
+      DrawingOrderSystem(),
+      RenderingSystem(Renderer(window)),
+      EventSystem(EventQueue(wm), UserInterface(window)),
     )
     givre = new(wm, EntityPool(), ECSDatabase(), window, systems, Dict())
     initialize!(givre)
