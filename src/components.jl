@@ -1,7 +1,9 @@
+const ENTITY_COMPONENT_ID = ComponentID(0) # EntityID
 const RENDER_COMPONENT_ID = ComponentID(1) # RenderComponent
 const INPUT_COMPONENT_ID = ComponentID(2) # InputComponent
-const LOCATION_COMPONENT_ID = ComponentID(3) # Point2
+const LOCATION_COMPONENT_ID = ComponentID(3) # LocationComponent
 const GEOMETRY_COMPONENT_ID = ComponentID(4) # GeometryComponent
+const ZCOORDINATE_COMPONENT_ID = ComponentID(5) # ZCoordinateComponent
 
 @enum RenderObjectType begin
   RENDER_OBJECT_RECTANGLE = 1
@@ -10,11 +12,8 @@ const GEOMETRY_COMPONENT_ID = ComponentID(4) # GeometryComponent
 end
 
 const LocationComponent = Point2
-
-struct GeometryComponent
-  object::Any
-  z::Float64
-end
+const GeometryComponent = Box2
+const ZCoordinateComponent = Float32
 
 struct RenderComponent
   type::RenderObjectType

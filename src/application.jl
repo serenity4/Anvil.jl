@@ -11,6 +11,7 @@ struct GivreApplication
     systems = Systems(
       EventSystem(EventQueue(wm), UserInterface(window)),
       RenderingSystem(Renderer(window)),
+      DrawingOrderSystem(),
     )
     givre = new(wm, EntityPool(), ECSDatabase(), window, systems, Dict())
     initialize!(givre)
@@ -20,10 +21,22 @@ struct GivreApplication
   end
 end
 
-new_entity!(givre::GivreApplication) = new!(givre.entity_pool)
-set_location!(givre::GivreApplication, entity::EntityID, location::LocationComponent) = givre.ecs[entity, LOCATION_COMPONENT_ID] = location
-set_geometry!(givre::GivreApplication, entity::EntityID, geometry::GeometryComponent) = givre.ecs[entity, GEOMETRY_COMPONENT_ID] = geometry
-set_render!(givre::GivreApplication, entity::EntityID, render::RenderComponent) = givre.ecs[entity, RENDER_COMPONENT_ID] = render
+function new_entity!(givre::GivreApplication)
+  entity = new!(givre.entity_pool)
+  givre.ecs[entity, ENTITY_COMPONENT_ID] = entity
+  entity
+end
+get_location(givre::GivreApplication, entity) = givre.ecs[entity, LOCATION_COMPONENT_ID]::LocationComponent
+set_location!(givre::GivreApplication, entity, location::LocationComponent) = givre.ecs[entity, LOCATION_COMPONENT_ID] = location
+get_geometry(givre::GivreApplication, entity) = givre.ecs[entity, GEOMETRY_COMPONENT_ID]::GeometryComponent
+set_geometry!(givre::GivreApplication, entity, geometry::GeometryComponent) = givre.ecs[entity, GEOMETRY_COMPONENT_ID] = geometry
+get_render(givre::GivreApplication, entity) = givre.ecs[entity, RENDER_COMPONENT_ID]::RenderComponent
+set_render!(givre::GivreApplication, entity, render::RenderComponent) = givre.ecs[entity, RENDER_COMPONENT_ID] = render
+
+font_file(font_name) = joinpath(pkgdir(Givre), "assets", "fonts", font_name * ".ttf")
+get_font(givre, name::AbstractString) = get!(() -> OpenTypeFont(font_file(name)), givre.fonts, name)
+
+put_behind!(givre::GivreApplication, behind, of) = put_behind!(givre.systems.drawing_order, behind, of)
 
 function start(renderer::Renderer, givre::GivreApplication)
   options = SpawnOptions(start_threadid = RENDERER_THREADID, allow_task_migration = false, execution_mode = LoopExecution(0.005))
@@ -54,6 +67,7 @@ end
 
 # Called by the application thread.
 function frame_nodes(givre::GivreApplication, target::Resource)
+  givre.systems.drawing_order(givre.ecs)
   givre.systems.rendering(givre.ecs, target)
 end
 

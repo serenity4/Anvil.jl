@@ -22,8 +22,9 @@ using Lava
 using ConcurrencyGraph
 using Lava: Command
 using ShaderLibrary
-using ShaderLibrary: Instance, aspect_ratio, Text
+using ShaderLibrary: Instance, aspect_ratio
 using OpenType
+using OpenType: Tag4
 using Accessors: @set, setproperties
 using GeometryExperiments
 using Accessors
@@ -41,13 +42,15 @@ import ConcurrencyGraph: shutdown
 import Entities: new!
 
 const Optional{T} = Union{T,Nothing}
+const Box2 = Box{2,Float64}
 
 include("renderer.jl")
 include("components.jl")
 include("layout.jl")
 include("systems.jl")
 include("application.jl")
-include("text.jl")
+include("widgets.jl")
+include("theme.jl")
 include("main.jl")
 
 @compile_traces "precompilation_traces.jl"
