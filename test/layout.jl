@@ -21,9 +21,11 @@ reset_geometry(i) = ecs[objects[i], GEOMETRY_COMPONENT_ID] = geometries[i]
   feature = positional_feature(nothing)
   @test feature == at(nothing)
   @test feature == PositionalFeature(nothing, FEATURE_LOCATION_ORIGIN, nothing)
+  @test feature == PositionalFeature(nothing, :origin, nothing)
   @test positional_feature(feature) === feature
   @test at(nothing, 4.0) == PositionalFeature(nothing, FEATURE_LOCATION_CUSTOM, 4.0)
   @test at(nothing, FEATURE_LOCATION_CENTER) == PositionalFeature(nothing, FEATURE_LOCATION_CENTER, nothing)
+  @test at(nothing, :center) == PositionalFeature(nothing, :center, nothing)
 
   reset_location(1)
   @test get_coordinates(engine, objects[1]) == locations[1]

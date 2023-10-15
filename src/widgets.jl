@@ -1,6 +1,6 @@
 abstract type Widget end
 
-convert(::Type{EntityID}, widget::Widget) = widget.id
+Base.convert(::Type{EntityID}, widget::Widget) = widget.id
 
 struct Rectangle <: Widget
   id::EntityID

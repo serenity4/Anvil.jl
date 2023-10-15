@@ -97,11 +97,18 @@ function compute_layout!(engine::LayoutEngine, objects, constraints)
 end
 
 @enum FeatureLocation begin
-  FEATURE_LOCATION_CENTER
-  FEATURE_LOCATION_ORIGIN
-  FEATURE_LOCATION_CORNER
-  FEATURE_LOCATION_EDGE
-  FEATURE_LOCATION_CUSTOM
+  FEATURE_LOCATION_CENTER = 1
+  FEATURE_LOCATION_ORIGIN = 2
+  FEATURE_LOCATION_CORNER = 3
+  FEATURE_LOCATION_EDGE = 4
+  FEATURE_LOCATION_CUSTOM = 5
+end
+
+function FeatureLocation(name::Symbol)
+  names = (:center, :origin, :corner, :edge, :custom)
+  i = findfirst(==(name), names)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  FeatureLocation(i)
 end
 
 struct PositionalFeature{O}
@@ -113,6 +120,7 @@ struct PositionalFeature{O}
 end
 
 PositionalFeature(object, location::FeatureLocation) = PositionalFeature(object, location, nothing)
+PositionalFeature(object, location::Symbol, data = nothing) = PositionalFeature(object, FeatureLocation(location), data)
 
 Base.getindex(feature::PositionalFeature) = feature.object
 
@@ -169,6 +177,7 @@ function at(object, location::FeatureLocation, argument = nothing)
   end
   PositionalFeature(object, location, argument)
 end
+at(object, location::Symbol, argument = nothing) = at(object, FeatureLocation(location), argument)
 
 @enum Direction begin
   DIRECTION_HORIZONTAL = 1

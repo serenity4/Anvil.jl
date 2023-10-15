@@ -11,6 +11,9 @@ function Base.exit(givre::GivreApplication, code::Int)
 end
 
 function (givre::GivreApplication)()
+  # Make sure that the drawing order (which also defines interaction order)
+  # has been resolved prior to resolving which object receives which event based on that order.
+  givre.systems.drawing_order(givre.ecs)
   code = givre.systems.event(givre.ecs)
   if isa(code, Int)
     exit(givre, code)
@@ -61,7 +64,7 @@ function initialize!(givre::GivreApplication)
   put_behind!(givre, dropdown_bg, model_text)
 
   compute_layout!(layout, [texture, dropdown_bg, model_text], [
-    attach(at(dropdown_bg, Point(-1.0, 0.0)), at(texture, FEATURE_LOCATION_CENTER)),
-    attach(at(model_text, FEATURE_LOCATION_CENTER), dropdown_bg),
+    attach(at(dropdown_bg, Point(-1.0, 0.0)), at(texture, :center)),
+    attach(at(model_text, :center), dropdown_bg),
   ])
 end
