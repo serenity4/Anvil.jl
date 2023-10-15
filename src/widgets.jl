@@ -10,7 +10,7 @@ function Base.setproperty!(widget::Widget, name::Symbol, value)
   setfield!(widget, name, value)
 end
 
-function (T::Type{<:Widget})(givre::GivreApplication, args...)
+function new_widget!(givre::GivreApplication, ::Type{T}, args...) where {T<:Widget}
   entity = new_entity!(givre)
   set_location!(givre, entity, zero(LocationComponent))
   widget = T(entity, args...)
@@ -18,6 +18,8 @@ function (T::Type{<:Widget})(givre::GivreApplication, args...)
   givre.ecs[entity, WIDGET_COMPONENT_ID] = widget
   widget
 end
+
+(T::Type{<:Widget})(givre::GivreApplication, args...) = new_widget!(givre, T, args...)
 
 """
     @widget struct Rectangle
@@ -89,6 +91,32 @@ end
 @widget struct Dropdown
   background::Rectangle
   choices::Vector{Text}
+end
+
+@widget struct Checkbox
+  on_toggle::Function
+  value::Bool
+  geometry::Box2
+  active_color::RGB{Float32}
+  inactive_color::RGB{Float32}
+end
+
+function Checkbox(on_toggle, givre::GivreApplication, value::Bool, geometry::Box{2}; active_color = CHECKBOX_ACTIVE_COLOR, inactive_color = CHECKBOX_INACTIVE_COLOR)
+  checkbox = new_widget!(givre, Checkbox, identity, value, geometry, active_color, inactive_color)
+  checkbox.on_toggle = function (input::Input)
+    if input.type == BUTTON_PRESSED
+      checkbox.value = !checkbox.value
+      on_toggle(checkbox.value)
+    end
+  end
+  checkbox
+end
+
+function synchronize!(givre::GivreApplication, checkbox::Checkbox)
+  haskey(givre.ecs, checkbox.id, RENDER_COMPONENT_ID) && delete!(givre.ecs, checkbox.id, RENDER_COMPONENT_ID)
+  givre.ecs[checkbox, INPUT_COMPONENT_ID] = InputComponent(checkbox.on_toggle, BUTTON_PRESSED, NO_ACTION)
+  rect = Rectangle(checkbox.id, checkbox.geometry, checkbox.value ? checkbox.active_color : checkbox.inactive_color)
+  synchronize!(givre, rect)
 end
 
 function Dropdown(givre::GivreApplication, box::Box{2}; background_color = DROPDOWN_BACKGROUND_COLOR, choices = Text[])

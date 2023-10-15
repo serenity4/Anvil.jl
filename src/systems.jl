@@ -69,7 +69,7 @@ function render_opaque_objects((; renderer)::RenderingSystem, ecs::ECSDatabase, 
   (; program_cache) = renderer
   commands = Command[]
 
-  for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{Point2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+  for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
     location = Point3f(location..., z)
     command = @match object.type begin
       &RENDER_OBJECT_RECTANGLE => begin
@@ -94,7 +94,7 @@ function render_transparent_objects((; renderer)::RenderingSystem, ecs::ECSDatab
   (; program_cache) = renderer
   commands = Command[]
 
-  for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{Point2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+  for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
     location = Point3f(location..., z)
     command = @match object.type begin
       &RENDER_OBJECT_TEXT => begin
@@ -170,13 +170,13 @@ end
 
 function update_overlays!(system::EventSystem, ecs::ECSDatabase)
   updated = Set{InputArea}()
-  for (location, geometry, input, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, INPUT_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{Point2, GeometryComponent, InputComponent, ZCoordinateComponent})
+  for (entity, location, geometry, input, z) in components(ecs, (ENTITY_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, INPUT_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{EntityID, P2, GeometryComponent, InputComponent, ZCoordinateComponent})
     zindex = round(Float64, 1/z)
-    area = get(system.ui.areas, input.entity, nothing)
+    area = get(system.ui.areas, entity, nothing)
     contains = x -> in(x .- location, geometry)
     if isnothing(area)
       area = InputArea(geometry, zindex, contains, input.events, input.actions)
-      insert!(system.ui, input.entity, area)
+      insert!(system.ui, entity, area)
       push!(updated, area)
     else
       area.aabb = geometry

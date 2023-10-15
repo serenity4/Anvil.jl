@@ -35,11 +35,11 @@ end
 function initialize!(givre::GivreApplication)
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
   givre.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
-  layout = ECSLayoutEngine{Point2, Box{2,Float64}, LocationComponent, GeometryComponent}(givre.ecs)
+  layout = ECSLayoutEngine{P2, Box{2,Float64}, LocationComponent, GeometryComponent}(givre.ecs)
 
   texture = new_entity!(givre)
-  set_location!(givre, texture, Point2(-0.4, -0.4))
-  set_geometry!(givre, texture, Box(Point2(0.5, 0.5)))
+  set_location!(givre, texture, P2(-0.4, -0.4))
+  set_geometry!(givre, texture, Box(P2(0.5, 0.5)))
   image = image_resource(givre.systems.rendering.renderer.device, rand(RGBA{Float32}, 512, 512))
   set_render!(givre, texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
 
@@ -48,7 +48,9 @@ function initialize!(givre::GivreApplication)
   dropdown_bg = Rectangle(givre, box, RGB(0.3, 0.2, 0.9))
   put_behind!(givre, dropdown_bg, model_text)
 
-  on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{Point2}()
+  checkbox = Checkbox(identity, givre, false, Box(P2(0.02, 0.02)))
+
+  on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{P2}()
     function (input::Input)
       if input.type === BUTTON_PRESSED
         threshold[] = (0.0, 0.0)
@@ -66,10 +68,11 @@ function initialize!(givre::GivreApplication)
       end
     end
   end
-  insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(texture, on_input, BUTTON_PRESSED, DRAG))
+  insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(on_input, BUTTON_PRESSED, DRAG))
 
   compute_layout!(layout, [texture, dropdown_bg, model_text], [
-    attach(at(dropdown_bg, Point(-1.0, 0.0)), at(texture, :center)),
+    attach(dropdown_bg, at(at(texture, :corner, CORNER_TOP_RIGHT), Point(0.2, -0.1))),
     attach(at(model_text, :center), dropdown_bg),
+    attach(checkbox, at(at(model_text, :center), P2(0.2, 0.0))),
   ])
 end

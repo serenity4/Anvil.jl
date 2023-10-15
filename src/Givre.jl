@@ -44,6 +44,8 @@ import Entities: new!
 
 const Optional{T} = Union{T,Nothing}
 const Box2 = Box{2,Float64}
+const P2 = Point2
+const P2f = Point2f
 
 include("renderer.jl")
 include("components.jl")

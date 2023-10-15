@@ -27,6 +27,8 @@ function new_entity!(givre::GivreApplication)
   givre.ecs[entity, ENTITY_COMPONENT_ID] = entity
   entity
 end
+Base.delete!(givre::GivreApplication, object) = delete!(givre.ecs, convert(EntityID, object))
+
 get_location(givre::GivreApplication, entity) = givre.ecs[entity, LOCATION_COMPONENT_ID]::LocationComponent
 set_location!(givre::GivreApplication, entity, location::LocationComponent) = givre.ecs[entity, LOCATION_COMPONENT_ID] = location
 get_geometry(givre::GivreApplication, entity) = givre.ecs[entity, GEOMETRY_COMPONENT_ID]::GeometryComponent

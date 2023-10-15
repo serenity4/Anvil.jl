@@ -12,7 +12,7 @@ const WIDGET_COMPONENT_ID = ComponentID(6) # WidgetComponent
   RENDER_OBJECT_TEXT = 3
 end
 
-const LocationComponent = Point2
+const LocationComponent = P2
 const GeometryComponent = Box2
 const ZCoordinateComponent = Float32
 
@@ -23,7 +23,6 @@ struct RenderComponent
 end
 
 struct InputComponent
-  entity::EntityID
   on_input::Function
   events::EventType
   actions::ActionType

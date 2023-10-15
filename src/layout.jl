@@ -113,7 +113,7 @@ end
 
 struct PositionalFeature{O}
   "Object the feature is attached to."
-  object::O
+  object::Union{PositionalFeature{O},O}
   location::FeatureLocation
   "Position of the feature relative to the origin (position) of the object."
   data::Any
@@ -122,7 +122,13 @@ end
 PositionalFeature(object, location::FeatureLocation) = PositionalFeature(object, location, nothing)
 PositionalFeature(object, location::Symbol, data = nothing) = PositionalFeature(object, FeatureLocation(location), data)
 
-Base.getindex(feature::PositionalFeature) = feature.object
+function Base.getindex(feature::PositionalFeature{O}) where {O}
+  (; object) = feature
+  while !isa(object, O)
+    (; object) = object
+  end
+  object
+end
 
 @enum Edge begin
   EDGE_LEFT = 1

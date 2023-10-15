@@ -1,11 +1,9 @@
 using Givre
-using Givre: LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, positional_feature, get_coordinates, get_geometry
+using Givre: LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, positional_feature, get_coordinates, get_geometry, P2
 using GeometryExperiments
 using Entities
 using Entities: new!
 using Test
-
-const P2 = Point2
 
 pool = EntityPool()
 ecs = ECSDatabase()
@@ -33,13 +31,24 @@ reset_geometry(i) = ecs[objects[i], GEOMETRY_COMPONENT_ID] = geometries[i]
   @test get_coordinates(engine, at(objects[1], P2(2, 3))) == locations[1] + P2(2, 3)
 
   reset_geometry(1)
-  @test get_coordinates(engine, at(objects[1], FEATURE_LOCATION_CENTER)) == locations[1] # origin == center in this case
-  @test get_coordinates(engine, at(objects[1], FEATURE_LOCATION_CORNER, CORNER_BOTTOM_LEFT)) == P2(9, 8)
-  @test get_coordinates(engine, at(objects[1], FEATURE_LOCATION_CORNER, CORNER_BOTTOM_RIGHT)) == P2(11, 8)
-  @test get_coordinates(engine, at(objects[1], FEATURE_LOCATION_CORNER, CORNER_TOP_RIGHT)) == P2(11, 12)
+  @test get_coordinates(engine, at(objects[1], :center)) == locations[1] # origin == center in this case
+  @test get_coordinates(engine, at(objects[1], :corner, CORNER_BOTTOM_LEFT)) == P2(9, 8)
+  @test get_coordinates(engine, at(objects[1], :corner, CORNER_BOTTOM_RIGHT)) == P2(11, 8)
+  @test get_coordinates(engine, at(objects[1], :corner, CORNER_TOP_RIGHT)) == P2(11, 12)
+  @test get_coordinates(engine, at(at(objects[1], P2(0.1, 0.1)), P2(-0.1, -0.1))) == get_coordinates(engine, objects[1])
 end
 
 @testset "Layout computations" begin
+  reset_location.((1, 2))
+  compute_layout!(engine, objects[1:2], [attach(objects[2], objects[1])])
+  @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
+  @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
+
+  reset_location.((1, 2))
+  compute_layout!(engine, objects[1:2], [attach(objects[2], at(at(objects[1], P2(2, 3)), P2(-2, -3)))])
+  @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
+  @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
+
 
   reset_location.((1, 2))
   compute_layout!(engine, objects[1:2], [attach(objects[2], at(objects[1], P2(2, 3)))])
