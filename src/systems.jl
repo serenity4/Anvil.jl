@@ -81,7 +81,7 @@ function update_overlays!(system::EventSystem, ecs::ECSDatabase)
   system.ui.overlay.areas[system.ui.window] = updated
 end
 
-struct RenderingSystem
+struct RenderingSystem <: System
   renderer::Renderer
 end
 
@@ -179,10 +179,21 @@ function ((; behind)::DrawingOrderSystem)(ecs::ECSDatabase)
   end
 end
 
+struct SynchronizationSystem <: System end
+
+function (::SynchronizationSystem)(givre #=::GivreApplication=#)
+  for widget in components(givre.ecs, WIDGET_COMPONENT_ID, WidgetComponent)
+    widget.modified || continue
+    synchronize!(givre, widget)
+    widget.modified = false
+  end
+end
+
 struct Systems
   event::EventSystem
   rendering::RenderingSystem
   drawing_order::DrawingOrderSystem
+  synchronization::SynchronizationSystem
 end
 
 # Only call that from the application thread.
@@ -190,4 +201,5 @@ function shutdown(systems::Systems)
   shutdown(systems.event)
   shutdown(systems.rendering)
   shutdown(systems.drawing_order)
+  shutdown(systems.synchronization)
 end

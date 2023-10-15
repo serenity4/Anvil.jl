@@ -2,23 +2,69 @@ abstract type Widget end
 
 Base.convert(::Type{EntityID}, widget::Widget) = widget.id
 
-struct Rectangle <: Widget
-  id::EntityID
+function Base.setproperty!(widget::Widget, name::Symbol, value)
+  (name === :modified || name === :id) && return setfield!(widget, name, value)
+  prev = getproperty(widget, name)
+  prev === value && return value
+  widget.modified = true
+  setfield!(widget, name, value)
+end
+
+function (T::Type{<:Widget})(givre::GivreApplication, args...)
+  entity = new_entity!(givre)
+  set_location!(givre, entity, zero(LocationComponent))
+  widget = T(entity, args...)
+  synchronize!(givre, widget)
+  givre.ecs[entity, WIDGET_COMPONENT_ID] = widget
+  widget
+end
+
+"""
+    @widget struct Rectangle
+      geometry::Box2
+      color::RGB{Float32}
+    end
+
+Turn a `struct` declaration into a mutable `Widget` subtype,
+with two additional fields:
+- `const id::EntityID` to identify the widget.
+- `modified::Bool` to keep track of changes made to the widget.
+
+A constructor is furthermore added which receives all arguments except `modified` and sets `modified` to `true`.
+
+Any `Widget` subtype should be declared in a way that is compatible to the above.
+"""
+macro widget(ex)
+  @match ex begin
+    Expr(:struct, mutable, name, block) => begin
+      ex.args[1] = true # force mutability
+      fields = map(x -> Meta.isexpr(x, :const) ? x.args[1] : x, filter(x -> Meta.isexpr(x, (:const, :(::))), block.args))
+      new = @match name begin
+        :($_{$Ts...}) => :(new{$(Ts...)})
+        _ => :new
+      end
+      !Meta.isexpr(name, :(<:)) && (ex.args[2] = Expr(:(<:), ex.args[2], Widget)) # force subtyping `Widget`.
+      pushfirst!(block.args, Expr(:const, :(id::$EntityID)), :(modified::Bool))
+      push!(block.args, :($name(id::EntityID, args...) = $new(id, true, args...)))
+    end
+    _ => error("Expected a struct declaration, got `$ex`")
+  end
+  esc(ex)
+end
+
+@widget struct Rectangle
   geometry::Box2
   color::RGB{Float32}
 end
 
-function Rectangle(givre::GivreApplication, box::Box{2}, color::RGB)
-  entity = new_entity!(givre)
-  set_geometry!(givre, entity, box)
-  set_location!(givre, entity, zero(LocationComponent))
-  vertex_data = [Vec3(color.r, color.g, color.b) for _ in 1:4]
-  set_render!(givre, entity, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient()))
-  Rectangle(entity, box, color)
+function synchronize!(givre::GivreApplication, rect::Rectangle)
+  (; r, g, b) = rect.color
+  vertex_data = [Vec3(r, g, b) for _ in 1:4]
+  set_geometry!(givre, rect.id, rect.geometry)
+  set_render!(givre, rect.id, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient()))
 end
 
-struct Text <: Widget
-  id::EntityID
+@widget struct Text
   text::String
   size::Float64
   font::String
@@ -26,24 +72,21 @@ struct Text <: Widget
   language::Tag4
 end
 
-function new!(givre::GivreApplication, text::ShaderLibrary.Text)
-  entity = new_entity!(givre)
+function synchronize!(givre::GivreApplication, text::Text)
+  (; id) = text
+  font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
+  options = TextOptions()
+  text = ShaderLibrary.Text(OpenType.Text(text.text, options), get_font(givre, text.font), font_options)
   box = boundingelement(text)
-  set_geometry!(givre, entity, box)
-  set_location!(givre, entity, zero(LocationComponent))
-  set_render!(givre, entity, RenderComponent(RENDER_OBJECT_TEXT, nothing, text))
-  entity
+  set_geometry!(givre, id, box)
+  set_render!(givre, id, RenderComponent(RENDER_OBJECT_TEXT, nothing, text))
 end
 
 function Text(givre::GivreApplication, text::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ")
-  font_options = FontOptions(ShapingOptions(script, language), size)
-  options = TextOptions()
-  id = new!(givre, ShaderLibrary.Text(OpenType.Text(text, options), get_font(givre, font), font_options))
-  Text(id, text, size, font, script, language)
+  Text(givre, text, size, font, script, language)
 end
 
-struct Dropdown <: Widget
-  id::EntityID
+@widget struct Dropdown
   background::Rectangle
   choices::Vector{Text}
 end
@@ -66,3 +109,5 @@ attach(object::Widget, onto::Widget) = attach(object.id, onto.id)
 attach(object, onto::Widget) = attach(object, onto.id)
 attach(object::Widget, onto) = attach(object.id, onto)
 at(object::Widget, location::FeatureLocation, args...) = at(object.id, location, args...)
+
+const WidgetComponent = Union{subtypes(Widget)...}

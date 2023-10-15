@@ -13,6 +13,7 @@ end
 function (givre::GivreApplication)()
   # Make sure that the drawing order (which also defines interaction order)
   # has been resolved prior to resolving which object receives which event based on that order.
+  givre.systems.synchronization(givre)
   givre.systems.drawing_order(givre.ecs)
   code = givre.systems.event(givre.ecs)
   if isa(code, Int)
@@ -32,6 +33,8 @@ function main()
 end
 
 function initialize!(givre::GivreApplication)
+  # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
+  givre.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
   layout = ECSLayoutEngine{Point2, Box{2,Float64}, LocationComponent, GeometryComponent}(givre.ecs)
 
   texture = new_entity!(givre)
@@ -39,11 +42,18 @@ function initialize!(givre::GivreApplication)
   set_geometry!(givre, texture, Box(Point2(0.5, 0.5)))
   image = image_resource(givre.systems.rendering.renderer.device, rand(RGBA{Float32}, 512, 512))
   set_render!(givre, texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
+
+  model_text = Text(givre, "Model")
+  box = get_geometry(givre, model_text)
+  dropdown_bg = Rectangle(givre, box, RGB(0.3, 0.2, 0.9))
+  put_behind!(givre, dropdown_bg, model_text)
+
   on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{Point2}()
     function (input::Input)
       if input.type === BUTTON_PRESSED
         threshold[] = (0.0, 0.0)
         origin[] = get_location(givre, texture)
+        dropdown_bg.color = rand(RGB{Float32})
       elseif input.type === DRAG
         target, event = input.dragged
         drag_amount = event.location .- input.source.event.location
@@ -57,11 +67,6 @@ function initialize!(givre::GivreApplication)
     end
   end
   insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(texture, on_input, BUTTON_PRESSED, DRAG))
-
-  model_text = Text(givre, "Model")
-  box = get_geometry(givre, model_text)
-  dropdown_bg = Rectangle(givre, box, RGB(0.3, 0.2, 0.9))
-  put_behind!(givre, dropdown_bg, model_text)
 
   compute_layout!(layout, [texture, dropdown_bg, model_text], [
     attach(at(dropdown_bg, Point(-1.0, 0.0)), at(texture, :center)),

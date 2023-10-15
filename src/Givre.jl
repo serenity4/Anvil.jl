@@ -33,6 +33,7 @@ using Entities
 using MLStyle
 using AbstractGUI
 using AbstractGUI: Input
+using InteractiveUtils: subtypes
 
 const Window = XCBWindow
 const WindowManager = XWindowManager

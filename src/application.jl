@@ -12,6 +12,7 @@ struct GivreApplication
       EventSystem(EventQueue(wm), UserInterface(window)),
       RenderingSystem(Renderer(window)),
       DrawingOrderSystem(),
+      SynchronizationSystem(),
     )
     givre = new(wm, EntityPool(), ECSDatabase(), window, systems, Dict())
     initialize!(givre)
@@ -67,6 +68,7 @@ end
 
 # Called by the application thread.
 function frame_nodes(givre::GivreApplication, target::Resource)
+  givre.systems.synchronization(givre)
   givre.systems.drawing_order(givre.ecs)
   givre.systems.rendering(givre.ecs, target)
 end
