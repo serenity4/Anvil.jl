@@ -49,6 +49,9 @@ function initialize!(givre::GivreApplication)
   put_behind!(givre, dropdown_bg, model_text)
 
   checkbox = Checkbox(identity, givre, false, Box(P2(0.02, 0.02)))
+  button = Button(givre, Box(P2(0.1, 0.04))) do
+    button.background_color = rand(RGB{Float32})
+  end
 
   on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{P2}()
     function (input::Input)
@@ -74,5 +77,6 @@ function initialize!(givre::GivreApplication)
     attach(dropdown_bg, at(at(texture, :corner, CORNER_TOP_RIGHT), Point(0.2, -0.1))),
     attach(at(model_text, :center), dropdown_bg),
     attach(checkbox, at(at(model_text, :center), P2(0.2, 0.0))),
+    attach(button, at(checkbox, P2(0.0, -0.2))),
   ])
 end

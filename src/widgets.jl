@@ -88,9 +88,27 @@ function Text(givre::GivreApplication, text::AbstractString; font = "arial", siz
   Text(givre, text, size, font, script, language)
 end
 
-@widget struct Dropdown
-  background::Rectangle
-  choices::Vector{Text}
+@widget struct Button
+  on_input::Function
+  geometry::Box2
+  background_color::RGB{Float32}
+  text::Optional{Text}
+end
+
+function Button(on_click, givre::GivreApplication, geometry::Box{2}; background_color = BUTTON_BACKGROUND_COLOR, text = nothing)
+  on_input = function (input::Input)
+    input.type === BUTTON_PRESSED && on_click()
+  end
+  new_widget!(givre, Button, on_input, geometry, background_color, text)
+end
+
+function synchronize!(givre::GivreApplication, button::Button)
+  rect = Rectangle(button.id, button.geometry, button.background_color)
+  synchronize!(givre, rect)
+  givre.ecs[button, INPUT_COMPONENT_ID] = InputComponent(button.on_input, BUTTON_PRESSED, NO_ACTION)
+  isnothing(button.text) && return
+  synchronize!(givre, button.text)
+  put_behind!(givre, rect, button.text)
 end
 
 @widget struct Checkbox
@@ -113,10 +131,14 @@ function Checkbox(on_toggle, givre::GivreApplication, value::Bool, geometry::Box
 end
 
 function synchronize!(givre::GivreApplication, checkbox::Checkbox)
-  haskey(givre.ecs, checkbox.id, RENDER_COMPONENT_ID) && delete!(givre.ecs, checkbox.id, RENDER_COMPONENT_ID)
   givre.ecs[checkbox, INPUT_COMPONENT_ID] = InputComponent(checkbox.on_toggle, BUTTON_PRESSED, NO_ACTION)
   rect = Rectangle(checkbox.id, checkbox.geometry, checkbox.value ? checkbox.active_color : checkbox.inactive_color)
   synchronize!(givre, rect)
+end
+
+@widget struct Dropdown
+  background::Rectangle
+  choices::Vector{Text}
 end
 
 function Dropdown(givre::GivreApplication, box::Box{2}; background_color = DROPDOWN_BACKGROUND_COLOR, choices = Text[])

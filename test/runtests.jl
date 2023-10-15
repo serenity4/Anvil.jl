@@ -6,6 +6,7 @@ ENV["JULIA_DEBUG"] = "Givre"
 ENV["GIVRE_RELEASE"] = true # circumvent issue with validation layers
 
 #= Known issues:
+- The dragging effect may be stuck, i.e. it sometimes doesn't release on button release and there is no way to undo it (besides waiting for some other bug later which apparently unsticks it).
 =# main()
 
 GC.gc()
