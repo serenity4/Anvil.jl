@@ -18,6 +18,7 @@ const APPLICATION_THREADID = 2
 const RENDERER_THREADID = 3
 
 using CompileTraces
+using ColorTypes
 using Lava
 using ConcurrencyGraph
 using Lava: Command

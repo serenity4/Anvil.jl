@@ -35,12 +35,14 @@ function initialize!(givre::GivreApplication)
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
   givre.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
 
+  # TODO: Use a `Widget` for this.
   texture = new_entity!(givre)
-  set_location!(givre, texture, P2(-0.4, -0.4))
+  set_location!(givre, texture, P2(-0.5, 0))
   set_geometry!(givre, texture, Box(P2(0.5, 0.5)))
-  image = image_resource(givre.systems.rendering.renderer.device, rand(RGBA{Float32}, 512, 512))
+  image = image_resource(givre.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
   set_render!(givre, texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
 
+  settings_background = Rectangle(givre, Box(P2(0.4, 0.9)), RGB(0.01, 0.01, 0.01))
   model_text = Text(givre, "Model")
   box = get_geometry(givre, model_text)
   dropdown_bg = Rectangle(givre, box, RGB(0.3, 0.2, 0.9))
@@ -71,8 +73,9 @@ function initialize!(givre::GivreApplication)
   end
   insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(on_input, BUTTON_PRESSED, DRAG))
 
-  add_constraint!(givre, attach(dropdown_bg, at(at(texture, :corner, CORNER_TOP_RIGHT), Point(0.2, -0.1))))
-  add_constraint!(givre, attach(at(model_text, :center), dropdown_bg))
+  add_constraint!(givre, attach(at(at(settings_background, :center), P2(-0.4, 0.0)), at(at(texture, :center), P2(0.5, 0.0))))
+  add_constraint!(givre, attach(at(model_text, :center), at(at(settings_background, :corner, CORNER_TOP_LEFT), P2(0.1, -0.1))))
+  add_constraint!(givre, attach(at(dropdown_bg, P2(0.0, 0.1)), at(model_text, :center)))
   add_constraint!(givre, attach(checkbox, at(at(model_text, :center), P2(0.2, 0.0))))
   add_constraint!(givre, attach(button, at(checkbox, P2(0.0, -0.2))))
 end
