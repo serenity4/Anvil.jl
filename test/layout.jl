@@ -104,4 +104,23 @@ end
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
   @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(30, 5)
   @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(76, 10)
+
+  reset_location.((1, 2, 3))
+  reset_geometry.((1, 2, 3))
+  @test_throws "variable segment" compute_layout!(engine, [
+    align(objects[2:3], DIRECTION_HORIZONTAL, at(objects[1], :edge, :right)),
+  ])
+  compute_layout!(engine, [
+    align(objects[2:3], DIRECTION_VERTICAL, at(objects[1], :edge, :right)),
+  ])
+  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(11, 30)
+  @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(11, 54)
+
+  reset_location.((1, 2, 3))
+  reset_geometry.((1, 2, 3))
+  compute_layout!(engine, [
+    align(at.(objects[2:3], :edge, :right), DIRECTION_VERTICAL, at(objects[1], :edge, :right)),
+  ])
+  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(-19, 30)
+  @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(-89, 54)
 end;

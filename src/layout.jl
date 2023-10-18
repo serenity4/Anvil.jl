@@ -217,9 +217,9 @@ end
   ALIGNMENT_TARGET_AVERAGE = 3
 end
 
-struct Alignment
+struct Alignment{O}
   direction::Direction
-  target::AlignmentTarget
+  target::Union{AlignmentTarget,PositionalFeature{O}}
 end
 
 @enum ConstraintType begin
@@ -242,8 +242,8 @@ struct Constraint{O}
   data::Any
 end
 
-function Base.getproperty(constraint::Constraint, name::Symbol)
-  name === :alignment && return getfield(constraint, :data)::Alignment
+function Base.getproperty(constraint::Constraint{O}, name::Symbol) where {O}
+  name === :alignment && return getfield(constraint, :data)::Alignment{O}
   getfield(constraint, name)
 end
 
@@ -257,12 +257,26 @@ end
 function compute_alignment(engine::LayoutEngine, constraint::Constraint)
   @assert constraint.type == CONSTRAINT_TYPE_ALIGN
   (; direction, target) = constraint.alignment
-  i = 2 - Int64(direction)
+  i = 3 - Int64(direction)
   @match target begin
     &ALIGNMENT_TARGET_MINIMUM => minimum(get_coordinates(engine, object)[i] for object in constraint.on)
     &ALIGNMENT_TARGET_MAXIMUM => maximum(get_coordinates(engine, object)[i] for object in constraint.on)
     &ALIGNMENT_TARGET_AVERAGE => sum(get_coordinates(engine, object)[i] for object in constraint.on)/length(constraint.on)
+    _ => alignment_target(get_coordinates(engine, target), direction)
   end
+end
+
+function alignment_target(coordinates, direction::Direction)
+  i = 3 - Int64(direction)
+  @match coordinates begin
+    p::Point => p[i]
+    s::Segment => alignment_target(s, i)
+  end
+end
+
+function alignment_target(s::Segment, i::Integer)
+  s.a[i] ≈ s.b[i] || error("Alignment along a variable segment is not supported; you should instead provide a point location, or either a vertical segment for horizontal alignment or a horizontal segment for vertical alignment.")
+  s.a[i]
 end
 
 function apply_alignment(engine::LayoutEngine, constraint::Constraint, feature::PositionalFeature, alignment)
@@ -270,16 +284,42 @@ function apply_alignment(engine::LayoutEngine, constraint::Constraint, feature::
   object = feature[]
   position = get_position(engine, object)
   coords = coordinates(engine, position)
-  relative = get_relative_coordinates(engine, feature)
+  relative = alignment_target(get_relative_coordinates(engine, feature), constraint.alignment.direction)
   @match constraint.alignment.direction begin
-    &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(coords[1], alignment - relative[2]))
-    &DIRECTION_VERTICAL => set_coordinates(engine, position, C(alignment - relative[1], coords[2]))
+    &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(coords[1], alignment - relative))
+    &DIRECTION_VERTICAL => set_coordinates(engine, position, C(alignment - relative, coords[2]))
   end
 end
 
+# XXX To avoid having to infer types in such a way, perhaps require an `engine::LayoutEngine` argument in `attach`/`align`/etc?
+function object_type(xs::AbstractVector) # of `PositionalFeature` or possibly `Any`.
+  T = eltype(xs)
+  # If concrete, we'll have a `PositionalFeature` type.
+  if isconcretetype(T)
+    @assert T <: PositionalFeature
+    return object_type(T)
+  end
+  # Try to pick off a `PositionalFeature{O}` and infer `O` from that.
+  for x in xs
+    if isa(x, PositionalFeature)
+      for y in xs
+        typeof(y) === typeof(x) || throw(ArgumentError("Multiple possible object types detected in `$xs`"))
+      end
+      return object_type(typeof(x))
+    end
+  end
+  isempty(xs) && return throw(ArgumentError("Cannot infer object type from $xs"))
+  # Fall back to the supertype of all components, assumed to be "objects".
+  Ts = unique(typeof.(xs))
+  object_type(reduce(typejoin, Ts; init = Union{}))
+end
+
+object_type(::Type{T}) where {O,T<:PositionalFeature{O}} = O
+object_type(::Type{T}) where {T} = T
+
 attach(object, onto) = Constraint(CONSTRAINT_TYPE_ATTACH, positional_feature(onto), positional_feature(object), nothing)
-align(objects::AbstractVector{<:PositionalFeature}, direction::Direction, target::AlignmentTarget) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, objects, Alignment(direction, target))
-align(objects, direction::Direction, target::AlignmentTarget) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, positional_feature.(objects), Alignment(direction, target))
+align(objects::AbstractVector{<:PositionalFeature}, direction::Direction, target) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, objects, Alignment{object_type(objects)}(direction, target))
+align(objects::AbstractVector, direction::Direction, target) = align(positional_feature.(objects), direction, target)
 
 attach_point(engine::LayoutEngine, constraint::Constraint) = get_coordinates(engine, constraint.by) .- get_relative_coordinates(engine, constraint.on)
 
