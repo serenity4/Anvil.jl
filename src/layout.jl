@@ -1,7 +1,7 @@
 using Graphs
 
 export
-  LayoutEngine, ECSLayoutEngine,
+  LayoutEngine, ECSLayoutEngine, ArrayLayoutEngine,
   PositionalFeature, at,
   Constraint, attach, align,
   compute_layout!,
@@ -29,6 +29,18 @@ export
   ALIGNMENT_TARGET_MAXIMUM,
   ALIGNMENT_TARGET_AVERAGE
 
+"""
+    LayoutEngine{O,P,C,G}
+
+Abstract type for a layout engine where:
+- `O` represents the type of objects to be laid out by the engine, e.g. `Widget`.
+- `P` is the type of position values to be manipulated, e.g. `Point{2,Float64}`.
+- `C` is the coordinate type for the position, which will usually be the same as `P`.
+- `G` is the type of geometry to be manipulated, e.g. `Box{2,Float64}`.
+
+!!! note
+    `P` and `C` were made to be different parameters such that a given position type is allowed to differ from the numerical type that represents its data. For example, with `struct LocationComponent; metadata::Any; coords::Point{2,Float64}; end`, `LocationComponent` is the position type `P`, while `Point{2,Float64}` is the coordinate type `C`. This relaxation is meant to facilitate integration with larger codebases that may have their custom data structures.
+"""
 abstract type LayoutEngine{O,P,C,G} end
 
 object_type(::LayoutEngine{O}) where {O} = O
@@ -36,27 +48,61 @@ position_type(::LayoutEngine{<:Any,P}) where {P} = P
 coordinate_type(::LayoutEngine{<:Any,<:Any,C}) where {C} = C
 geometry_type(::LayoutEngine{<:Any,<:Any,<:Any,G}) where {G} = G
 
-# coordinates(engine::LayoutEngine{<:Any,P,C}, position::P)::C where {P,C}
-# get_position(engine::LayoutEngine{O,P}, object::O)::P where {O,P}
-# set_position!(engine::LayoutEngine{O,P}, object::O, position::P) where {O,P}
-# get_geometry(engine::LayoutEngine{O,<:Any,<:Any,G}, object::O)::G where {O,G}
+"""
+    coordinates(engine::LayoutEngine{<:Any,P,C}, position::P)::C where {P,C}
+"""
+function coordinates end
+
+"""
+    get_position(engine::LayoutEngine{O,P}, object::O)::P where {O,P}
+"""
+function get_position end
+
+"""
+    set_position!(engine::LayoutEngine{O,P}, object::O, position::P) where {O,P}
+"""
+function set_position! end
+
+"""
+    get_geometry(engine::LayoutEngine{O,<:Any,<:Any,G}, object::O)::G where {O,G}
+"""
+function get_geometry end
+
+coordinates(engine::LayoutEngine{<:Any,P,P}, position::P) where {P} = position
 get_coordinates(engine::LayoutEngine{O,P}, object::O) where {O,P} = coordinates(engine, get_position(engine, object))
 set_coordinates(engine::LayoutEngine{<:Any,T,T}, position::T, coords::T) where {T} = coords
 report_unsolvable_decision(engine::LayoutEngine) = error("No solution was found which satisfies all requested constraints.")
 # will also need similar functions to access geometry
 
+"""
+Array-backed layout engine, where "objects" are indices to `Vector`s of positions and geometries.
+"""
+struct ArrayLayoutEngine{O,P,C,G} <: LayoutEngine{O,P,C,G}
+  positions::Vector{P}
+  geometries::Vector{G}
+end
+
+get_position(engine::ArrayLayoutEngine{O}, object::O) where {O} = engine.positions[object]
+set_position!(engine::ArrayLayoutEngine{O,P}, object::O, position::P) where {O,P} = engine.positions[object] = position
+get_geometry(engine::ArrayLayoutEngine{O}, object::O) where {O} = engine.geometries[object]
+set_geometry!(engine::ArrayLayoutEngine{O,<:Any,<:Any,G}, object::O, geometry::G) where {O,G} = engine.geometries[object] = geometry
+
+ArrayLayoutEngine{P,G}() where {P,G} = ArrayLayoutEngine{P,P,G}()
+ArrayLayoutEngine{P,C,G}() where {P,C,G} = ArrayLayoutEngine{Int64,P,C,G}()
+ArrayLayoutEngine{O,P,C,G}() where {O,P,C,G} = ArrayLayoutEngine{O,P,C,G}(P[], G[])
+ArrayLayoutEngine(positions, geometries) = ArrayLayoutEngine{Int64}(positions, geometries)
+ArrayLayoutEngine{O}(positions::AbstractVector{P}, geometries::AbstractVector{G}) where {O,P,G} = ArrayLayoutEngine{O,P,P,G}(positions, geometries)
+
 struct ECSLayoutEngine{C,G,PC,GC} <: LayoutEngine{EntityID,C,C,G}
   ecs::ECSDatabase
 end
 
-coordinates(engine::ECSLayoutEngine{C}, position::C) where {C} = position
 position(engine::ECSLayoutEngine{C,<:Any,C}, position::C) where {C} = position
 get_position(engine::ECSLayoutEngine{<:Any,<:Any,PC}, object::EntityID) where {PC} = position(engine, engine.ecs[object, LOCATION_COMPONENT_ID]::PC)
 set_position!(engine::ECSLayoutEngine{C}, object::EntityID, position::C) where {C} = engine.ecs[object, LOCATION_COMPONENT_ID] = position
 geometry(engine::ECSLayoutEngine{<:Any,G,<:Any,G}, geometry::G) where {G} = geometry
 get_geometry(engine::ECSLayoutEngine{<:Any,GC,<:Any,GC}, object::EntityID) where {GC} = engine.ecs[object, GEOMETRY_COMPONENT_ID]::GC
-# get_geometry(engine::ECSLayoutEngine{<:Any,<:Any,<:Any,GC}, object::EntityID) where {GC} = geometry(engine, engine.ecs[object, GEOMETRY_COMPONENT_ID]::GC)
-# geometry(engine::ECSLayoutEngine{<:Any,G,<:Any,GC}, component::GC) where {G,GC<:GeometryComponent} = component.object::G
+set_geometry!(engine::ECSLayoutEngine{<:Any,GC}, object::EntityID, geometry::GC) where {GC} = engine.ecs[object, GEOMETRY_COMPONENT_ID] = geometry
 
 function compute_layout!(engine::LayoutEngine, constraints)
   O = object_type(engine)

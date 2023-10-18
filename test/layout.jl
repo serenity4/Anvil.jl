@@ -1,9 +1,32 @@
 using Givre
-using Givre: LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, positional_feature, get_coordinates, get_geometry, P2
+using Givre: LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, positional_feature, P2
+using Givre: object_type, position_type, coordinate_type, geometry_type, get_position, get_coordinates, set_coordinates, get_geometry, set_position!, set_geometry!
 using GeometryExperiments
 using Entities
 using Entities: new!
 using Test
+
+function test_engine_interface!(engine::LayoutEngine, objects)
+  @testset "`LayoutEngine` interface for $(nameof(typeof(engine)))" begin
+    O, P, C, G = object_type(engine), position_type(engine), coordinate_type(engine), geometry_type(engine)
+    for object in objects
+      @test isa(object, O)
+      position = get_position(engine, object)
+      @test isa(position, P)
+      coordinates = get_coordinates(engine, object)
+      @test isa(coordinates, C)
+      new_position = set_coordinates(engine, position, coordinates .+ 1)
+      set_position!(engine, object, new_position)
+      @test get_position(engine, object) === new_position
+      set_position!(engine, object, position)
+      @test get_position(engine, object) === position
+      geometry = get_geometry(engine, object)
+      @test isa(geometry, G)
+      set_geometry!(engine, object, geometry)
+      @test get_geometry(engine, object) === geometry
+    end
+  end
+end
 
 pool = EntityPool()
 ecs = ECSDatabase()
@@ -13,7 +36,15 @@ objects = [new!(pool) for _ in 1:3]
 locations = P2[(10, 10), (30, 30), (76, 54)]
 geometries = Box.(P2[(1.0, 2.0), (30.0, 45.0), (100.0, 0.5)])
 reset_location(i) = ecs[objects[i], LOCATION_COMPONENT_ID] = locations[i]
+reset_locations() = reset_location.(eachindex(objects))
 reset_geometry(i) = ecs[objects[i], GEOMETRY_COMPONENT_ID] = geometries[i]
+reset_geometries() = reset_geometry.(eachindex(objects))
+
+reset_locations()
+reset_geometries()
+
+test_engine_interface!(engine, objects)
+test_engine_interface!(ArrayLayoutEngine{Int64}(locations, geometries), eachindex(objects))
 
 @testset "Features" begin
   feature = positional_feature(nothing)
@@ -52,7 +83,6 @@ end
   compute_layout!(engine, [attach(objects[2], at(at(objects[1], P2(2, 3)), P2(-2, -3)))])
   @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
   @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
-
 
   reset_location.((1, 2))
   compute_layout!(engine, [attach(objects[2], at(objects[1], P2(2, 3)))])
