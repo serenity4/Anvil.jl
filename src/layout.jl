@@ -131,11 +131,33 @@ end
   EDGE_TOP = 4
 end
 
+function Edge(name::Symbol)
+  names = (:left, :right, :bottom, :top)
+  i = findfirst(==(name), names)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  Edge(i)
+end
+
 @enum Corner begin
   CORNER_BOTTOM_LEFT = 1
   CORNER_BOTTOM_RIGHT = 2
   CORNER_TOP_LEFT = 3
   CORNER_TOP_RIGHT = 4
+end
+
+function Corner(name::Symbol)
+  names = (:bottom_left, :bottom_right, :top_left, :top_right)
+  i = findfirst(==(name), names)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  Corner(i)
+end
+
+function PositionalFeature(object, location::FeatureLocation, name::Symbol)
+  @match location begin
+    &FEATURE_LOCATION_CORNER => PositionalFeature(object, location, Corner(name))
+    &FEATURE_LOCATION_EDGE => PositionalFeature(object, location, Edge(name))
+    _ => throw(ArgumentError("Symbol data `$name` is not allowed for $location"))
+  end
 end
 
 function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeature)
@@ -159,7 +181,12 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
   end
 end
 
-get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = get_coordinates(engine, feature.object) .+ get_relative_coordinates(engine, feature)
+add_coordinates(x, y) = x .+ y
+add_coordinates(x::Segment, y::Segment) = Segment(x.a + y.a, x.b + y.b)
+add_coordinates(x::Segment, y) = Segment(x.a + y, x.b + y)
+add_coordinates(x, y::Segment) = Segment(x + y.a, x + y.b)
+
+get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = add_coordinates(get_coordinates(engine, feature.object), get_relative_coordinates(engine, feature))
 
 coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry).points[Int64(corner)]
 
@@ -169,9 +196,9 @@ function at(object, location::FeatureLocation, argument = nothing)
   if location in (FEATURE_LOCATION_ORIGIN, FEATURE_LOCATION_CENTER)
     isnothing(argument) || throw(ArgumentError("No argument must be provided for feature location in (`FEATURE_LOCATION_ORIGIN`, `FEATURE_LOCATION_CENTER`)"))
   elseif location == FEATURE_LOCATION_CORNER
-    isa(argument, Corner) || throw(ArgumentError("`$location` requires a `Corner` argument"))
+    isa(argument, Union{Symbol,Corner}) || throw(ArgumentError("`$location` requires a `Corner` argument"))
   elseif location == FEATURE_LOCATION_EDGE
-    isa(argument, Edge) || throw(ArgumentError("`$location` requires a `Edge` argument"))
+    isa(argument, Union{Symbol,Edge}) || throw(ArgumentError("`$location` requires a `Edge` argument"))
   elseif location == FEATURE_LOCATION_CUSTOM
     !isnothing(location) || throw(ArgumentError("`$location` requires an argument"))
   end

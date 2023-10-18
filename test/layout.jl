@@ -32,10 +32,14 @@ reset_geometry(i) = ecs[objects[i], GEOMETRY_COMPONENT_ID] = geometries[i]
 
   reset_geometry(1)
   @test get_coordinates(engine, at(objects[1], :center)) == locations[1] # origin == center in this case
-  @test get_coordinates(engine, at(objects[1], :corner, CORNER_BOTTOM_LEFT)) == P2(9, 8)
-  @test get_coordinates(engine, at(objects[1], :corner, CORNER_BOTTOM_RIGHT)) == P2(11, 8)
-  @test get_coordinates(engine, at(objects[1], :corner, CORNER_TOP_RIGHT)) == P2(11, 12)
+  @test get_coordinates(engine, at(objects[1], :corner, :bottom_left)) == P2(9, 8)
+  @test get_coordinates(engine, at(objects[1], :corner, :bottom_right)) == P2(11, 8)
+  @test get_coordinates(engine, at(objects[1], :corner, :top_right)) == P2(11, 12)
   @test get_coordinates(engine, at(at(objects[1], P2(0.1, 0.1)), P2(-0.1, -0.1))) == get_coordinates(engine, objects[1])
+  @test get_coordinates(engine, at(objects[1], :edge, :left)) == Segment(P2(9, 8), P2(9, 12))
+  @test get_coordinates(engine, at(objects[1], :edge, :right)) == Segment(P2(11, 8), P2(11, 12))
+  @test get_coordinates(engine, at(objects[1], :edge, :bottom)) == Segment(P2(9, 8), P2(11, 8))
+  @test get_coordinates(engine, at(objects[1], :edge, :top)) == Segment(P2(9, 12), P2(11, 12))
 end
 
 @testset "Layout computations" begin
