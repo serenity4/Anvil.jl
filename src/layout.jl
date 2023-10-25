@@ -3,7 +3,7 @@ using Graphs
 export
   LayoutEngine, ECSLayoutEngine, ArrayLayoutEngine,
   PositionalFeature, at,
-  Constraint, attach, align,
+  Constraint, attach, align, distribute,
   compute_layout!,
 
   Constraint,
@@ -27,7 +27,14 @@ export
   AlignmentTarget,
   ALIGNMENT_TARGET_MINIMUM,
   ALIGNMENT_TARGET_MAXIMUM,
-  ALIGNMENT_TARGET_AVERAGE
+  ALIGNMENT_TARGET_AVERAGE,
+  SpacingAmount,
+  SPACING_AMOUNT_MINIMUM,
+  SPACING_AMOUNT_MAXIMUM,
+  SPACING_AMOUNT_AVERAGE,
+  SpacingMode,
+  SPACING_MODE_POINT,
+  SPACING_MODE_GEOMETRY
 
 """
     LayoutEngine{O,P,C,G}
@@ -47,6 +54,8 @@ object_type(::LayoutEngine{O}) where {O} = O
 position_type(::LayoutEngine{<:Any,P}) where {P} = P
 coordinate_type(::LayoutEngine{<:Any,<:Any,C}) where {C} = C
 geometry_type(::LayoutEngine{<:Any,<:Any,<:Any,G}) where {G} = G
+
+Base.broadcastable(engine::LayoutEngine) = Ref(engine)
 
 """
     coordinates(engine::LayoutEngine{<:Any,P,C}, position::P)::C where {P,C}
@@ -130,6 +139,18 @@ function compute_layout!(engine::LayoutEngine, constraints)
           original = get_position(engine, object)
           position = apply_alignment(engine, node, feature, alignment)
           position ≠ original && set_position!(engine, object, position)
+        end
+
+        @case &CONSTRAINT_TYPE_DISTRIBUTE
+        spacing = compute_spacing(engine, node)
+        length(node.on) == 1 && continue
+        reference = node.on[1]
+        for feature in @view node.on[2:end]
+          object = feature[]
+          original = get_position(engine, object)
+          position = apply_spacing(engine, node, reference, feature, spacing)
+          position ≠ original && set_position!(engine, object, position)
+          reference = feature
         end
       end
     end
@@ -257,6 +278,13 @@ at(object, location::Symbol, argument = nothing) = at(object, FeatureLocation(lo
   DIRECTION_VERTICAL = 2
 end
 
+function Direction(name::Symbol)
+  names = (:horizontal, :vertical)
+  i = findfirst(==(name), names)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  Direction(i)
+end
+
 @enum AlignmentTarget begin
   ALIGNMENT_TARGET_MINIMUM = 1
   ALIGNMENT_TARGET_MAXIMUM = 2
@@ -267,6 +295,44 @@ struct Alignment{O}
   direction::Direction
   target::Union{AlignmentTarget,PositionalFeature{O}}
 end
+Alignment{O}(direction::Symbol, target) where {O} = Alignment{O}(Direction(direction), target)
+
+@enum SpacingAmount begin
+  SPACING_TARGET_MINIMUM = 1
+  SPACING_TARGET_MAXIMUM = 2
+  SPACING_TARGET_AVERAGE = 3
+end
+
+"""
+Specify which notion of distance to use for spacing out objects.
+
+Either we're talking about point distances, or we're talking about gaps between objects.
+"""
+@enum SpacingMode begin
+  SPACING_MODE_POINT = 1
+  SPACING_MODE_GEOMETRY = 2
+end
+
+"Consider the distance to be that between feature points."
+SPACING_MODE_POINT
+"Consider the distance to be that between the geometries of the objects."
+SPACING_MODE_GEOMETRY
+
+function SpacingMode(name::Symbol)
+  names = (:point, :geometry)
+  i = findfirst(==(name), names)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  SpacingMode(i)
+end
+
+struct Spacing
+  direction::Direction
+  amount::Union{Float64,SpacingAmount}
+  mode::SpacingMode
+end
+Spacing(direction::Symbol, amount, mode) = Spacing(Direction(direction), amount, mode)
+Spacing(direction, amount, mode::Symbol) = Spacing(direction, amount, SpacingMode(mode))
+Spacing(direction::Symbol, amount, mode::Symbol) = Spacing(Direction(direction), amount, SpacingMode(mode))
 
 @enum ConstraintType begin
   CONSTRAINT_TYPE_ATTACH
@@ -276,9 +342,21 @@ end
 
 "Attach two features together, resulting in an identical position for both."
 CONSTRAINT_TYPE_ATTACH
-"Align features together, either vertically or horizontally, according to a specified [`AlignmentType`](@ref)."
+"""
+Position a set of features on a line along a [`Direction`](@ref), either along a horizontal (i.e. the vertical position is set to rest on a horizontal line) or along a vertical (the horizontal position is set to rest on a vertical line).
+"""
 CONSTRAINT_TYPE_ALIGN
-"Evenly distribute gaps between features, either vertically or horizontally, according to a specified [`AlignmentType`](@ref)."
+"""
+Evenly space out a set of features along a [`Direction`](@ref).
+
+The notion of "space" may be defined with respect to points, or to geometries: either we talk about the distance between points, or about the distance between geometries.
+
+The desired spacing may be provided as a floating point value. However, for convenience, we also allow a [`SpacingAmount`](@ref) value, which will automatically compute the required spacing depending on the desired behavior.
+
+Automatic spacing includes taking the minimum, maximum or average of the distances between the provided features. Which notion of distance is used depends on the mode (see [`SpacingMode`](@ref)).
+
+Providing any positional feature for a [`SPACING_MODE_GEOMETRY`](@ref) mode will result in considering the geometry of associated objects to be offset by the relative offset between the feature and the center of the geometry. Therefore, the spacing will not appear even if any positional features are not positioned to the center of the objects.
+"""
 CONSTRAINT_TYPE_DISTRIBUTE
 
 struct Constraint{O}
@@ -290,6 +368,7 @@ end
 
 function Base.getproperty(constraint::Constraint{O}, name::Symbol) where {O}
   name === :alignment && return getfield(constraint, :data)::Alignment{O}
+  name === :spacing && return getfield(constraint, :data)::Spacing
   getfield(constraint, name)
 end
 
@@ -312,16 +391,10 @@ function compute_alignment(engine::LayoutEngine, constraint::Constraint)
   end
 end
 
-function alignment_target(coordinates, direction::Direction)
-  i = 3 - Int64(direction)
-  @match coordinates begin
-    p::Point => p[i]
-    s::Segment => alignment_target(s, i)
-  end
-end
-
-function alignment_target(s::Segment, i::Integer)
-  s.a[i] ≈ s.b[i] || error("Alignment along a variable segment is not supported; you should instead provide a point location, or either a vertical segment for horizontal alignment or a horizontal segment for vertical alignment.")
+alignment_target(coordinates, direction::Direction) = alignment_or_distribution_target(coordinates, 3 - Int64(direction))
+alignment_or_distribution_target(p::Point, i::Integer) = p[i]
+function alignment_or_distribution_target(s::Segment, i::Integer)
+  s.a[i] ≈ s.b[i] || error("Alignment or distribution along a variable segment is not supported; you should instead provide a point location, or either a vertical segment for horizontal alignment/distribution or a horizontal segment for vertical alignment/distribution.")
   s.a[i]
 end
 
@@ -334,6 +407,44 @@ function apply_alignment(engine::LayoutEngine, constraint::Constraint, feature::
   @match constraint.alignment.direction begin
     &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(coords[1], alignment - relative))
     &DIRECTION_VERTICAL => set_coordinates(engine, position, C(alignment - relative, coords[2]))
+  end
+end
+
+"Compute the required spacing between two elements `x` and `y` according to the provided `constraint`."
+function compute_spacing(engine::LayoutEngine, constraint::Constraint)
+  @assert constraint.type == CONSTRAINT_TYPE_DISTRIBUTE
+  (; spacing) = constraint
+  objects = constraint.on
+  xs, ys = @view(objects[1:(end - 1)]), @view(objects[2:end])
+  i = 3 - Int64(spacing.direction)
+  edges = ((:left, :right), (:top, :bottom))[i]
+  isa(spacing.amount, Float64) && return spacing.amount
+  spacings = [get_coordinates(engine, at(y, :edge, edges[1])).a[i] - get_coordinates(engine, at(x, :edge, edges[2])).a[i] for (x, y) in zip(xs, ys)]
+  @match spacing.amount begin
+    &SPACING_AMOUNT_MINIMUM => minimum(spacings)
+    &SPACING_AMOUNT_MAXIMUM => maximum(spacings)
+    &SPACING_AMOUNT_AVERAGE => sum(spacings)/length(spacings)
+  end
+end
+
+function apply_spacing(engine::LayoutEngine, constraint::Constraint, x::PositionalFeature, y::PositionalFeature, spacing)
+  C = coordinate_type(engine)
+  (; direction) = constraint.spacing
+  position = get_position(engine, y[])
+  coords = coordinates(engine, position)
+  @when &SPACING_MODE_GEOMETRY = constraint.spacing.mode begin
+    xb, yb = get_geometry(engine, x[]), get_geometry(engine, y[])
+    sx, sy = (xb.max - xb.min) ./ 2, (yb.max - yb.min) ./ 2
+    spacing += @match direction begin
+      &DIRECTION_HORIZONTAL => sx[1] + sy[1]
+      &DIRECTION_VERTICAL => sx[2] + sy[2]
+    end
+  end
+  xc, yr = get_coordinates(engine, x), get_relative_coordinates(engine, y)
+  (xc, yr) = alignment_or_distribution_target.((xc, yr), Int64(direction))
+  @match direction begin
+    &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(xc - yr + spacing, coords[2]))
+    &DIRECTION_VERTICAL => set_coordinates(engine, position, C(coords[1], xc - yr + spacing))
   end
 end
 
@@ -364,8 +475,10 @@ object_type(::Type{T}) where {O,T<:PositionalFeature{O}} = O
 object_type(::Type{T}) where {T} = T
 
 attach(object, onto) = Constraint(CONSTRAINT_TYPE_ATTACH, positional_feature(onto), positional_feature(object), nothing)
-align(objects::AbstractVector{<:PositionalFeature}, direction::Direction, target) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, objects, Alignment{object_type(objects)}(direction, target))
-align(objects::AbstractVector, direction::Direction, target) = align(positional_feature.(objects), direction, target)
+align(objects::AbstractVector{<:PositionalFeature}, direction, target) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, objects, Alignment{object_type(objects)}(direction, target))
+align(objects::AbstractVector, direction, target) = align(positional_feature.(objects), direction, target)
+distribute(objects::AbstractVector{<:PositionalFeature}, direction, spacing, mode = SPACING_MODE_POINT) = Constraint(CONSTRAINT_TYPE_DISTRIBUTE, nothing, objects, Spacing(direction, spacing, mode))
+distribute(objects::AbstractVector, direction, spacing, mode = SPACING_MODE_POINT) = distribute(positional_feature.(objects), direction, spacing, mode)
 
 attach_point(engine::LayoutEngine, constraint::Constraint) = get_coordinates(engine, constraint.by) .- get_relative_coordinates(engine, constraint.on)
 
@@ -404,7 +517,7 @@ function DependencyGraph(engine::LayoutEngine{O}, constraints) where {O}
   constraint_proxies = Dict{O, Union{C, Vector{C}}}()
   function get_node!(object::O)
     proxy = get(constraint_proxies, object, object)
-    get!(() -> add_node!(proxy), verts, proxy)
+    get!(() -> add_node!(proxy), verts, object)
   end
   function add_node!(x::DependencyNode{O})
     push!(nodes, x)

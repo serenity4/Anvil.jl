@@ -44,6 +44,7 @@ function initialize!(givre::GivreApplication)
 
   settings_background = Rectangle(givre, Box(P2(0.4, 0.9)), RGB(0.01, 0.01, 0.01))
   model_text = Text(givre, "Model")
+  path_text = Text(givre, "Path")
   box = get_geometry(givre, model_text)
   dropdown_bg = Rectangle(givre, box, RGB(0.3, 0.2, 0.9))
   put_behind!(givre, dropdown_bg, model_text)
@@ -73,9 +74,20 @@ function initialize!(givre::GivreApplication)
   end
   insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(on_input, BUTTON_PRESSED, DRAG))
 
+  vline_left = at(at(settings_background, :edge, :left), P2(0.2, 0))
+  vline_right = at(vline_left, P2(0.05, 0))
+  vspacing = 0.1
+
   add_constraint!(givre, attach(at(at(settings_background, :center), P2(-0.4, 0.0)), at(at(texture, :center), P2(0.5, 0.0))))
-  add_constraint!(givre, attach(at(model_text, :center), at(at(settings_background, :corner, CORNER_TOP_LEFT), P2(0.1, -0.1))))
-  add_constraint!(givre, attach(at(dropdown_bg, P2(0.0, 0.1)), at(model_text, :center)))
-  add_constraint!(givre, attach(checkbox, at(at(model_text, :center), P2(0.2, 0.0))))
+
+  add_constraint!(givre, align(at.([model_text, path_text], :edge, :right), :vertical, vline_left))
+  add_constraint!(givre, align(at.([checkbox, dropdown_bg], :edge, :left), :vertical, vline_right))
+  left_column = EntityID[model_text, path_text]
+  right_column = EntityID[checkbox, dropdown_bg]
+
+  for column in (left_column, right_column)
+    add_constraint!(givre, distribute(column, :vertical, vspacing, :point))
+  end
+
   add_constraint!(givre, attach(button, at(checkbox, P2(0.0, -0.2))))
 end
