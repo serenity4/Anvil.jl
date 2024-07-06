@@ -32,7 +32,7 @@ mutable struct Renderer
   function Renderer(window::Window; release = get(ENV, "GIVRE_RELEASE", "false") == "true")
     instance, device = Lava.init(; debug = !release, with_validation = !release, instance_extensions = ["VK_KHR_xcb_surface"])
     color = color_attachment(device, window)
-    new(instance, device, FrameCycle(device, Surface(instance, window)), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())
+    new(instance, device, FrameCycle(device, Surface(instance, window); n = 2), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())
   end
 end
 

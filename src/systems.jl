@@ -43,17 +43,17 @@ function ((; behind)::DrawingOrderSystem)(ecs::ECSDatabase)
   for id in components(ecs, ENTITY_COMPONENT_ID, EntityID)
     # Only process entities which are to be rendered.
     haskey(ecs, id, RENDER_COMPONENT_ID) || continue
-    # First, do not process the objects if the value of their z-coordinate will depend on other objects first.
+    # Do not process objects whose z-coordinate will depend on other objects first.
     haskey(behind, id) && continue
     n = reinterpret(UInt32, id)
     z = Float32(n)
-    ecs[id, ZCOORDINATE_COMPONENT_ID] = 1/z
+    ecs[id, ZCOORDINATE_COMPONENT_ID] = -1/z
   end
   for (id, in_front) in behind
     n = reinterpret(UInt32, id)
     haskey(ecs, in_front, ZCOORDINATE_COMPONENT_ID) || error("Object $id has been placed behind object $in_front, but $in_front ", haskey(behind, in_front) ? "is also to be placed behind another object" : "has no render component", '.')
     z_front = ecs[in_front, ZCOORDINATE_COMPONENT_ID]::Float32
-    z = nextfloat(z_front, Int64(n))
+    z = prevfloat(z_front, Int64(n))
     ecs[id, ZCOORDINATE_COMPONENT_ID] = z
   end
 end
@@ -85,15 +85,15 @@ function render_opaque_objects((; renderer)::RenderingSystem, ecs::ECSDatabase, 
     location = Point3f(location..., z)
     command = @match object.type begin
       &RENDER_OBJECT_RECTANGLE => begin
-        rect = ShaderLibrary.Rectangle(geometry, location, object.vertex_data, nothing)
+        rect = ShaderLibrary.Rectangle(geometry, object.vertex_data, nothing)
         gradient = object.primitive_data::Gradient
-        Command(program_cache, gradient, parameters, Primitive(rect))
+        Command(program_cache, gradient, parameters, Primitive(rect, location))
       end
       &RENDER_OBJECT_IMAGE => begin
         # Assume that images are opaque for now.
-        rect = ShaderLibrary.Rectangle(geometry, location, full_image_uv(), nothing)
+        rect = ShaderLibrary.Rectangle(geometry, full_image_uv(), nothing)
         sprite = object.primitive_data::Sprite
-        Command(program_cache, sprite, parameters, Primitive(rect))
+        Command(program_cache, sprite, parameters, Primitive(rect, location))
       end
       _ => continue
     end
@@ -212,6 +212,7 @@ end
 # Only call that from the application thread.
 function shutdown(systems::Systems)
   shutdown(systems.event)
+  @debug "Shutting down the rendering system"
   shutdown(systems.rendering)
   shutdown(systems.drawing_order)
   shutdown(systems.layout)

@@ -3,7 +3,6 @@ struct Exit
 end
 
 function Base.exit(givre::GivreApplication, code::Int)
-  @debug "Shutting down the rendering system"
   shutdown(givre)
   close(givre.wm, givre.window)
   @debug "Exiting application" * (!iszero(code) ? "(exit code: $(code))" : "")

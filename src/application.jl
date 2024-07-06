@@ -50,25 +50,21 @@ function start(renderer::Renderer, givre::GivreApplication)
 end
 
 function Lava.render(givre::GivreApplication, rdr::Renderer)
-  next = acquire_next_image(rdr.frame_cycle)
-  if next === Vk.ERROR_OUT_OF_DATE_KHR
-    recreate!(rdr.frame_cycle)
-    render(givre, rdr)
-  else
-    isa(next, Int) || error("Could not acquire an image from the swapchain (returned $next)")
+  state = cycle!(rdr.frame_cycle) do image
     if collect(Int, extent(givre.window)) ≠ dimensions(rdr.color.attachment)
       rdr.color = color_attachment(rdr.device, givre.window)
     end
     (; color) = rdr
-    fetched = tryfetch(execute(() -> frame_nodes(givre, color), task_owner()))
-    iserror(fetched) && shutdown_scheduled() && return
-    nodes = unwrap(fetched)::Vector{RenderNode}
-    state = cycle!(image -> draw_and_prepare_for_presentation(rdr.device, nodes, color, image), rdr.frame_cycle, next)
-    next!(rdr.frame_diagnostics)
-    get(ENV, "GIVRE_LOG_FRAMECOUNT", "true") == "true" && print_framecount(rdr.frame_diagnostics)
-    filter!(exec -> !wait(exec, 0), rdr.pending)
-    push!(rdr.pending, state)
+    ret = tryfetch(execute(() -> frame_nodes(givre, color), task_owner()))
+    iserror(ret) && shutdown_scheduled() && return draw_and_prepare_for_presentation(rdr.device, RenderNode[], color, image)
+    nodes = unwrap(ret)::Vector{RenderNode}
+    draw_and_prepare_for_presentation(rdr.device, nodes, color, image)
   end
+  !isnothing(state) && push!(rdr.pending, state)
+  filter!(exec -> !wait(exec, 0), rdr.pending)
+  next!(rdr.frame_diagnostics)
+  get(ENV, "GIVRE_LOG_FRAMECOUNT", "true") == "true" && print_framecount(rdr.frame_diagnostics)
+  nothing
 end
 
 "Run systems that are common to and essential for both rendering and event handling."
