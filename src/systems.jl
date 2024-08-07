@@ -172,12 +172,9 @@ end
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
   event.type == KEY_PRESSED && matches(key"ctrl+q", event) && return 0
   update_overlays!(system, ecs)
-  input = react_to_event(system.ui.overlay, event)
+  input = input_from_event(system.ui.overlay, event)
   isnothing(input) && return
-  entity = system.ui.entities[input.area]
-  input_component = ecs[entity, INPUT_COMPONENT_ID]::InputComponent
-  input_component.on_input(input)
-  nothing
+  consume!(input)
 end
 
 function update_overlays!(system::EventSystem, ecs::ECSDatabase)
@@ -187,7 +184,7 @@ function update_overlays!(system::EventSystem, ecs::ECSDatabase)
     area = get(system.ui.areas, entity, nothing)
     contains = x -> in(x .- location, geometry)
     if isnothing(area)
-      area = InputArea(geometry, zindex, contains, input.events, input.actions)
+      area = InputArea(input.on_input, geometry, zindex, contains, input.events, input.actions)
       insert!(system.ui, entity, area)
       push!(updated, area)
     else

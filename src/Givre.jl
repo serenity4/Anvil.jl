@@ -33,7 +33,7 @@ using XCB
 using Entities
 using MLStyle
 using AbstractGUI
-using AbstractGUI: Input
+using AbstractGUI: Input, consume!
 using InteractiveUtils: subtypes
 
 const Window = XCBWindow

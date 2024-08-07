@@ -1,6 +1,8 @@
+const WidgetID = EntityID
+
 abstract type Widget end
 
-Base.convert(::Type{EntityID}, widget::Widget) = widget.id
+Base.convert(::Type{WidgetID}, widget::Widget) = widget.id
 
 function Base.setproperty!(widget::Widget, name::Symbol, value)
   (name === :modified || name === :id) && return setfield!(widget, name, value)
@@ -29,7 +31,7 @@ end
 
 Turn a `struct` declaration into a mutable `Widget` subtype,
 with two additional fields:
-- `const id::EntityID` to identify the widget.
+- `const id::WidgetID` to identify the widget.
 - `modified::Bool` to keep track of changes made to the widget.
 
 A constructor is furthermore added which receives all arguments except `modified` and sets `modified` to `true`.
@@ -46,8 +48,8 @@ macro widget(ex)
         _ => :new
       end
       !Meta.isexpr(name, :(<:)) && (ex.args[2] = Expr(:(<:), ex.args[2], Widget)) # force subtyping `Widget`.
-      pushfirst!(block.args, Expr(:const, :(id::$EntityID)), :(modified::Bool))
-      push!(block.args, :($name(id::EntityID, args...) = $new(id, true, args...)))
+      pushfirst!(block.args, Expr(:const, :(id::$WidgetID)), :(modified::Bool))
+      push!(block.args, :($name(id::$WidgetID, args...) = $new(id, true, args...)))
     end
     _ => error("Expected a struct declaration, got `$ex`")
   end
