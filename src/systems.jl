@@ -4,10 +4,10 @@ shutdown(::System) = nothing
 
 struct SynchronizationSystem <: System end
 
-function (::SynchronizationSystem)(givre #=::GivreApplication=#)
-  for widget in components(givre.ecs, WIDGET_COMPONENT_ID, WidgetComponent)
+function (::SynchronizationSystem)(ecs::ECSDatabase)
+  for widget in components(ecs, WIDGET_COMPONENT_ID, WidgetComponent)
     widget.modified || continue
-    synchronize!(givre, widget)
+    synchronize(widget)
     widget.modified = false
   end
 end
@@ -63,7 +63,7 @@ struct RenderingSystem <: System
 end
 
 function shutdown(system::RenderingSystem)
-  wait(shutdown(system.renderer.task))
+  wait(ConcurrencyGraph.shutdown(system.renderer.task))
   wait(system.renderer.device)
 end
 
@@ -91,7 +91,7 @@ function render_opaque_objects((; renderer)::RenderingSystem, ecs::ECSDatabase, 
       end
       &RENDER_OBJECT_IMAGE => begin
         # Assume that images are opaque for now.
-        rect = ShaderLibrary.Rectangle(geometry, full_image_uv(), nothing)
+        rect = ShaderLibrary.Rectangle(geometry, FULL_IMAGE_UV, nothing)
         sprite = object.primitive_data::Sprite
         Command(program_cache, sprite, parameters, Primitive(rect, location))
       end
@@ -120,7 +120,7 @@ function render_transparent_objects((; renderer)::RenderingSystem, ecs::ECSDatab
   RenderNode(commands)
 end
 
-full_image_uv() = Vec2[(0, 0), (0, 1), (1, 0), (1, 1)]
+const FULL_IMAGE_UV = Vec2[(0, 0), (0, 1), (1, 0), (1, 1)]
 
 struct UserInterface
   overlay::UIOverlay

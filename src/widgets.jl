@@ -12,16 +12,16 @@ function Base.setproperty!(widget::Widget, name::Symbol, value)
   setfield!(widget, name, value)
 end
 
-function new_widget!(givre::GivreApplication, ::Type{T}, args...) where {T<:Widget}
-  entity = new_entity!(givre)
-  set_location!(givre, entity, zero(LocationComponent))
+function new_widget(::Type{T}, args...) where {T<:Widget}
+  entity = new_entity!()
+  set_location(entity, zero(LocationComponent))
   widget = T(entity, args...)
-  synchronize!(givre, widget)
+  synchronize(widget)
   givre.ecs[entity, WIDGET_COMPONENT_ID] = widget
   widget
 end
 
-(T::Type{<:Widget})(givre::GivreApplication, args...) = new_widget!(givre, T, args...)
+(T::Type{<:Widget})(args...) = new_widget(T, args...)
 
 """
     @widget struct Rectangle
@@ -61,11 +61,11 @@ end
   color::RGB{Float32}
 end
 
-function synchronize!(givre::GivreApplication, rect::Rectangle)
+function synchronize(rect::Rectangle)
   (; r, g, b) = rect.color
   vertex_data = [Vec3(r, g, b) for _ in 1:4]
-  set_geometry!(givre, rect.id, rect.geometry)
-  set_render!(givre, rect.id, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient()))
+  set_geometry(rect.id, rect.geometry)
+  set_render(rect.id, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient()))
 end
 
 @widget struct Text
@@ -76,18 +76,18 @@ end
   language::Tag4
 end
 
-function synchronize!(givre::GivreApplication, text::Text)
+function synchronize(text::Text)
   (; id) = text
   font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
   options = TextOptions()
-  text = ShaderLibrary.Text(OpenType.Text(text.text, options), get_font(givre, text.font), font_options)
+  text = ShaderLibrary.Text(OpenType.Text(text.text, options), get_font(text.font), font_options)
   box = boundingelement(text)
-  set_geometry!(givre, id, box)
-  set_render!(givre, id, RenderComponent(RENDER_OBJECT_TEXT, nothing, text))
+  set_geometry(id, box)
+  set_render(id, RenderComponent(RENDER_OBJECT_TEXT, nothing, text))
 end
 
-function Text(givre::GivreApplication, text::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ")
-  Text(givre, text, size, font, script, language)
+function Text(text::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ")
+  Text(text, size, font, script, language)
 end
 
 @widget struct Button
@@ -97,22 +97,22 @@ end
   text::Optional{Text}
 end
 
-function Button(on_click, givre::GivreApplication, geometry::Box{2}; background_color = BUTTON_BACKGROUND_COLOR, text = nothing)
+function Button(on_click, geometry::Box{2}; background_color = BUTTON_BACKGROUND_COLOR, text = nothing)
   on_input = function (input::Input)
     input.type === BUTTON_PRESSED && on_click()
   end
-  widget = new_widget!(givre, Button, on_input, geometry, background_color, text)
-  !isnothing(text) && add_constraint!(givre, attach(at(text, :center), at(widget, :center)))
+  widget = new_widget(Button, on_input, geometry, background_color, text)
+  !isnothing(text) && add_constraint(attach(at(text, :center), at(widget, :center)))
   widget
 end
 
-function synchronize!(givre::GivreApplication, button::Button)
+function synchronize(button::Button)
   rect = Rectangle(button.id, button.geometry, button.background_color)
-  synchronize!(givre, rect)
+  synchronize(rect)
   givre.ecs[button, INPUT_COMPONENT_ID] = InputComponent(button.on_input, BUTTON_PRESSED, NO_ACTION)
   isnothing(button.text) && return
-  synchronize!(givre, button.text)
-  put_behind!(givre, rect, button.text)
+  synchronize(button.text)
+  put_behind(rect, button.text)
 end
 
 @widget struct Checkbox
@@ -123,8 +123,8 @@ end
   inactive_color::RGB{Float32}
 end
 
-function Checkbox(on_toggle, givre::GivreApplication, value::Bool, geometry::Box{2}; active_color = CHECKBOX_ACTIVE_COLOR, inactive_color = CHECKBOX_INACTIVE_COLOR)
-  checkbox = new_widget!(givre, Checkbox, identity, value, geometry, active_color, inactive_color)
+function Checkbox(on_toggle, value::Bool, geometry::Box{2}; active_color = CHECKBOX_ACTIVE_COLOR, inactive_color = CHECKBOX_INACTIVE_COLOR)
+  checkbox = new_widget(Checkbox, identity, value, geometry, active_color, inactive_color)
   checkbox.on_toggle = function (input::Input)
     if input.type == BUTTON_PRESSED
       checkbox.value = !checkbox.value
@@ -134,10 +134,10 @@ function Checkbox(on_toggle, givre::GivreApplication, value::Bool, geometry::Box
   checkbox
 end
 
-function synchronize!(givre::GivreApplication, checkbox::Checkbox)
+function synchronize(checkbox::Checkbox)
   givre.ecs[checkbox, INPUT_COMPONENT_ID] = InputComponent(checkbox.on_toggle, BUTTON_PRESSED, NO_ACTION)
   rect = Rectangle(checkbox.id, checkbox.geometry, checkbox.value ? checkbox.active_color : checkbox.inactive_color)
-  synchronize!(givre, rect)
+  synchronize(rect)
 end
 
 @widget struct Dropdown
@@ -145,8 +145,8 @@ end
   choices::Vector{Text}
 end
 
-function Dropdown(givre::GivreApplication, box::Box{2}; background_color = DROPDOWN_BACKGROUND_COLOR, choices = Text[])
-  background = Rectangle(givre, box, background_color)
+function Dropdown(box::Box{2}; background_color = DROPDOWN_BACKGROUND_COLOR, choices = Text[])
+  background = Rectangle(box, background_color)
   # TODO
   # on_input = function (input::Input)
   #   if input.type === BUTTON_PRESSED

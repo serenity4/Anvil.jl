@@ -40,7 +40,6 @@ const Window = XCBWindow
 const WindowManager = XWindowManager
 
 import GeometryExperiments: boundingelement
-import ConcurrencyGraph: shutdown
 import Entities: new!
 
 const Optional{T} = Union{T,Nothing}
@@ -56,6 +55,8 @@ include("application.jl")
 include("widgets.jl")
 include("theme.jl")
 include("main.jl")
+
+const givre = GivreApplication()
 
 @compile_traces "precompilation_traces.jl"
 
