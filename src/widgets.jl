@@ -17,7 +17,7 @@ function new_widget(::Type{T}, args...) where {T<:Widget}
   set_location(entity, zero(LocationComponent))
   widget = T(entity, args...)
   synchronize(widget)
-  givre.ecs[entity, WIDGET_COMPONENT_ID] = widget
+  app.ecs[entity, WIDGET_COMPONENT_ID] = widget
   widget
 end
 
@@ -109,7 +109,7 @@ end
 function synchronize(button::Button)
   rect = Rectangle(button.id, button.geometry, button.background_color)
   synchronize(rect)
-  givre.ecs[button, INPUT_COMPONENT_ID] = InputComponent(button.on_input, BUTTON_PRESSED, NO_ACTION)
+  app.ecs[button, INPUT_COMPONENT_ID] = InputComponent(button.on_input, BUTTON_PRESSED, NO_ACTION)
   isnothing(button.text) && return
   synchronize(button.text)
   put_behind(rect, button.text)
@@ -135,7 +135,7 @@ function Checkbox(on_toggle, value::Bool, geometry::Box{2}; active_color = CHECK
 end
 
 function synchronize(checkbox::Checkbox)
-  givre.ecs[checkbox, INPUT_COMPONENT_ID] = InputComponent(checkbox.on_toggle, BUTTON_PRESSED, NO_ACTION)
+  app.ecs[checkbox, INPUT_COMPONENT_ID] = InputComponent(checkbox.on_toggle, BUTTON_PRESSED, NO_ACTION)
   rect = Rectangle(checkbox.id, checkbox.geometry, checkbox.value ? checkbox.active_color : checkbox.inactive_color)
   synchronize(rect)
 end

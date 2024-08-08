@@ -3,17 +3,17 @@ struct Exit
 end
 
 function exit(code::Int)
-  shutdown(givre)
-  close(givre.wm, givre.window)
+  shutdown(app)
+  close(app.wm, app.window)
   @debug "Exiting application" * (!iszero(code) ? "(exit code: $(code))" : "")
   Exit(code)
 end
 
-function (givre::GivreApplication)()
+function (app::Application)()
   # Make sure that the drawing order (which also defines interaction order)
   # has been resolved prior to resolving which object receives which event based on that order.
   run_systems()
-  code = givre.systems.event(givre.ecs)
+  code = app.systems.event(app.ecs)
   if isa(code, Int)
     exit(code)
     schedule_shutdown()
@@ -25,20 +25,20 @@ function main()
   reset_mpi_state()
   application_thread = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
     initialize()
-    LoopExecution(0.001; shutdown = false)(givre)()
+    LoopExecution(0.001; shutdown = false)(app)()
   end
   monitor_children()
 end
 
 function initialize_components()
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
-  givre.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
+  app.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
 
   # TODO: Use a `Widget` for this.
   texture = new_entity!()
   set_location(texture, P2(-0.5, 0))
   set_geometry(texture, Box(P2(0.5, 0.5)))
-  image = image_resource(givre.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
+  image = image_resource(app.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
   set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
 
   settings_background = Rectangle(Box(P2(0.4, 0.9)), RGB(0.01, 0.01, 0.01))
@@ -71,7 +71,7 @@ function initialize_components()
       end
     end
   end
-  insert!(givre.ecs, texture, INPUT_COMPONENT_ID, InputComponent(on_input, BUTTON_PRESSED, DRAG))
+  insert!(app.ecs, texture, INPUT_COMPONENT_ID, InputComponent(on_input, BUTTON_PRESSED, DRAG))
 
   vline_left = at(at(settings_background, :edge, :left), P2(0.2, 0))
   vline_right = at(vline_left, P2(0.05, 0))

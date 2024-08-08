@@ -6,5 +6,5 @@ precompile(Tuple{typeof(Dictionaries.set!), Dictionaries.Dictionary{DataType, SP
 precompile(Tuple{typeof(Dictionaries.set!), Dictionaries.Dictionary{DataType, SPIRV.SPIRType}, Type{SPIRV.Pointer{Givre.RectangleData}}, SPIRV.PointerType})
 precompile(Tuple{typeof(Core.convert), Type{DataType}, Type{Givre.RectangleData}})
 precompile(Tuple{typeof(Core.convert), Type{DataType}, Type{SPIRV.Pointer{Givre.RectangleData}}})
-precompile(Tuple{ConcurrencyGraph.var"#_exec#35"{ConcurrencyGraph.LoopExecution, Givre.var"#9#10"{Givre.GivreApplication, Givre.Renderer}}})
-precompile(Tuple{Givre.var"#3#6"{Givre.GivreApplication, Lava.Resource}})
+precompile(Tuple{ConcurrencyGraph.var"#_exec#35"{ConcurrencyGraph.LoopExecution, Givre.var"#9#10"{Givre.Application, Givre.Renderer}}})
+precompile(Tuple{Givre.var"#3#6"{Givre.Application, Lava.Resource}})

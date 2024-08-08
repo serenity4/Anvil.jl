@@ -56,7 +56,7 @@ include("widgets.jl")
 include("theme.jl")
 include("main.jl")
 
-const givre = GivreApplication()
+const app = Application()
 
 @compile_traces "precompilation_traces.jl"
 
