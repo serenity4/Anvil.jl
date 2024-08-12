@@ -1,5 +1,10 @@
 const WidgetID = EntityID
 
+"""
+A widget is a user-interface element rendered on screen that a user may or may not interact with.
+
+Common examples include clickable buttons, static text displays, checkboxes, dropdowns, and more.
+"""
 abstract type Widget end
 
 Base.convert(::Type{WidgetID}, widget::Widget) = widget.id
