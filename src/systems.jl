@@ -7,8 +7,8 @@ struct SynchronizationSystem <: System end
 function (::SynchronizationSystem)(ecs::ECSDatabase)
   for widget in components(ecs, WIDGET_COMPONENT_ID, WidgetComponent)
     widget.modified || continue
-    synchronize(widget)
-    widget.modified = false
+    widget.disabled && continue
+    synchronize!(widget)
   end
 end
 
@@ -19,6 +19,21 @@ end
 LayoutSystem(ecs::ECSDatabase) = LayoutSystem(ECSLayoutEngine{P2, Box{2,Float64}, LocationComponent, GeometryComponent}(ecs), [])
 
 add_constraint!(layout::LayoutSystem, constraint::Constraint{EntityID}) = push!(layout.constraints, constraint)
+function remove_constraints!(layout::LayoutSystem, entity::EntityID)
+  to_delete = Int[]
+  for (i, constraint) in enumerate(layout.constraints)
+    if !isnothing(constraint.by) && constraint.by[] == entity
+      push!(to_delete, i)
+      continue
+    end
+    (; on) = constraint
+    isa(on, PositionalFeature{EntityID}) && (on = [on])
+    any(target -> target[] == entity, on) && push!(to_delete, i)
+  end
+  isempty(to_delete) && return false
+  splice!(layout.constraints, to_delete)
+  true
+end
 
 function ((; engine, constraints)::LayoutSystem)(ecs::ECSDatabase)
   compute_layout!(engine, constraints)
@@ -30,31 +45,57 @@ struct DrawingOrderSystem <: System
   Map an entity to an object it should be behind.
 
   Very basic at the moment - objects can only be specified as behind *a single other object*. Furthermore, if two objects are behind another,
-  they will be ordered with respect to one another by their entity ID: `A` and `B` behind `C` implies that `A` is behind `B` iff
-  `A` would naturally be behind `B` (i.e. as determined by their entity ID).
+  they will be ordered with respect to one another in specification order: `A` and `B` behind `C` implies that `A` is behind `B` iff
+  `A` was specified as behind `C` *before* `B`.
   """
-  behind::Dict{EntityID, EntityID}
+  behind::Dictionary{EntityID, EntityID}
 end
-DrawingOrderSystem() = DrawingOrderSystem(Dict())
+DrawingOrderSystem() = DrawingOrderSystem(Dictionary())
 
-put_behind!(drawing_order::DrawingOrderSystem, behind, of) = drawing_order.behind[convert(EntityID, behind)] = of
+put_behind!(drawing_order::DrawingOrderSystem, behind, of) = set!(drawing_order.behind, convert(EntityID, behind), of)
+
+function drawing_order_graph(behind)
+  g = SimpleDiGraph{Int64}()
+  node_indices = Dict{EntityID, Int64}()
+  entities = Dict{Int64, EntityID}()
+  for (id, in_front) in pairs(behind)
+    v = get!(node_indices, in_front) do
+      Graphs.add_vertex!(g)
+      Graphs.nv(g)
+    end
+    entities[v] = in_front
+    w = get!(node_indices, id) do
+      Graphs.add_vertex!(g)
+      Graphs.nv(g)
+    end
+    entities[w] = id
+    Graphs.add_edge!(g, v, w)
+  end
+  !is_cyclic(g) || error("Cyclic dependencies are not supported.")
+  g, entities
+end
 
 function ((; behind)::DrawingOrderSystem)(ecs::ECSDatabase)
   for id in components(ecs, ENTITY_COMPONENT_ID, EntityID)
-    # Only process entities which are to be rendered.
-    haskey(ecs, id, RENDER_COMPONENT_ID) || continue
     # Do not process objects whose z-coordinate will depend on other objects first.
     haskey(behind, id) && continue
     n = reinterpret(UInt32, id)
     z = Float32(n)
-    ecs[id, ZCOORDINATE_COMPONENT_ID] = -1/z
+    set_z(id, z)
   end
-  for (id, in_front) in behind
-    n = reinterpret(UInt32, id)
-    haskey(ecs, in_front, ZCOORDINATE_COMPONENT_ID) || error("Object $id has been placed behind object $in_front, but $in_front ", haskey(behind, in_front) ? "is also to be placed behind another object" : "has no render component", '.')
-    z_front = ecs[in_front, ZCOORDINATE_COMPONENT_ID]::Float32
-    z = prevfloat(z_front, Int64(n))
-    ecs[id, ZCOORDINATE_COMPONENT_ID] = z
+  g, entities = drawing_order_graph(behind)
+  for v in topological_sort(g)
+    in_front = entities[v]
+    z_front = get_z(in_front)
+    prev = z_front
+    for w in outneighbors(g, v)
+      id = entities[w]
+      n = reinterpret(UInt32, id)
+      has_z(in_front) || error("Object $id has been placed behind object $in_front, but $in_front has no assigned Z component.")
+      z_behind = prevfloat(prev, 100)
+      set_z(id, z_behind)
+      prev = z_behind
+    end
   end
 end
 
@@ -82,7 +123,7 @@ function render_opaque_objects((; renderer)::RenderingSystem, ecs::ECSDatabase, 
   commands = Command[]
 
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
-    location = Point3f(location..., z)
+    location = Point3f(location..., -1/z)
     command = @match object.type begin
       &RENDER_OBJECT_RECTANGLE => begin
         rect = ShaderLibrary.Rectangle(geometry, object.vertex_data, nothing)
@@ -107,7 +148,7 @@ function render_transparent_objects((; renderer)::RenderingSystem, ecs::ECSDatab
   commands = Command[]
 
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
-    location = Point3f(location..., z)
+    location = Point3f(location..., -1/z)
     command = @match object.type begin
       &RENDER_OBJECT_TEXT => begin
         text = object.primitive_data::ShaderLibrary.Text
@@ -180,7 +221,7 @@ end
 function update_overlays!(system::EventSystem, ecs::ECSDatabase)
   updated = Set{InputArea}()
   for (entity, location, geometry, input, z) in components(ecs, (ENTITY_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, INPUT_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{EntityID, P2, GeometryComponent, InputComponent, ZCoordinateComponent})
-    zindex = round(Float64, 1/z)
+    zindex = Float64(z)
     area = get(system.ui.areas, entity, nothing)
     contains = x -> in(x .- location, geometry)
     if isnothing(area)
@@ -194,8 +235,7 @@ function update_overlays!(system::EventSystem, ecs::ECSDatabase)
       push!(updated, area)
     end
   end
-  get!(Set{InputArea}, system.ui.overlay.areas, system.ui.window)
-  system.ui.overlay.areas[system.ui.window] = updated
+  set!(system.ui.overlay.areas, system.ui.window, updated)
 end
 
 struct Systems

@@ -33,8 +33,10 @@ using XCB
 using Entities
 using MLStyle
 using AbstractGUI
-using AbstractGUI: Input, consume!
+using AbstractGUI: Input, consume!, propagate!
 using InteractiveUtils: subtypes
+using Dictionaries
+using StaticArrays: @SVector
 
 const Window = XCBWindow
 const WindowManager = XWindowManager
@@ -51,16 +53,19 @@ include("renderer.jl")
 include("components.jl")
 include("layout.jl")
 include("systems.jl")
-include("application.jl")
 include("widgets.jl")
+include("application.jl")
 include("theme.jl")
 include("main.jl")
 
 const app = Application()
+const WINDOW_ENTITY_COUNTER = Entities.Counter()
 
 @compile_traces "precompilation_traces.jl"
 
-export main, reset_mpi_state
+export main, reset_mpi_state, app,
+       RenderComponent,
+       InputComponent
 
 
 end

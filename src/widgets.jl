@@ -7,10 +7,16 @@ Common examples include clickable buttons, static text displays, checkboxes, dro
 """
 abstract type Widget end
 
+function synchronize!(widget::Widget)
+  synchronize(widget)
+  widget.modified = false
+end
+synchronize(::Widget) = nothing
+
 Base.convert(::Type{WidgetID}, widget::Widget) = widget.id
 
 function Base.setproperty!(widget::Widget, name::Symbol, value)
-  (name === :modified || name === :id) && return setfield!(widget, name, value)
+  (name === :modified || name === :id || name === :disabled) && return setfield!(widget, name, value)
   prev = getproperty(widget, name)
   prev === value && return value
   widget.modified = true
@@ -18,15 +24,44 @@ function Base.setproperty!(widget::Widget, name::Symbol, value)
 end
 
 function new_widget(::Type{T}, args...) where {T<:Widget}
-  entity = new_entity!()
+  entity = new_entity()
   set_location(entity, zero(LocationComponent))
   widget = T(entity, args...)
-  synchronize(widget)
-  app.ecs[entity, WIDGET_COMPONENT_ID] = widget
+  set_widget(entity, widget)
+  synchronize!(widget)
   widget
 end
 
-(T::Type{<:Widget})(args...) = new_widget(T, args...)
+disable!(widget::WidgetID) = disable!(get_widget(widget))
+function disable!(widget::Widget)
+  for part in constituents(widget)
+    disable!(part)
+  end
+  unset_render(widget)
+  unset_input_handler(widget)
+  remove_constraints(widget)
+  widget.disabled = true
+  widget
+end
+
+enable!(widget::WidgetID) = enable!(get_widget(widget))
+function enable!(widget::Widget)
+  for part in constituents(widget)
+    enable!(part)
+  end
+  synchronize(widget)
+  widget.disabled = false
+  widget
+end
+
+function set_name(widget::Widget, name::Symbol)
+  set_name(widget.id, name)
+  parts = constituents(widget)
+  for (i, part) in enumerate(parts)
+    part = isa(part, WidgetID) ? get_widget(part) : part
+    set_name(part, Symbol(name, :_, i))
+  end
+end
 
 """
     @widget struct Rectangle
@@ -53,18 +88,22 @@ macro widget(ex)
         _ => :new
       end
       !Meta.isexpr(name, :(<:)) && (ex.args[2] = Expr(:(<:), ex.args[2], Widget)) # force subtyping `Widget`.
-      pushfirst!(block.args, Expr(:const, :(id::$WidgetID)), :(modified::Bool))
-      push!(block.args, :($name(id::$WidgetID, args...) = $new(id, true, args...)))
+      pushfirst!(block.args, Expr(:const, :(id::$WidgetID)), :(modified::Bool), :(disabled::Bool))
+      push!(block.args, :($name(id::$WidgetID, args...) = $new(id, false, false, args...)))
     end
     _ => error("Expected a struct declaration, got `$ex`")
   end
   esc(ex)
 end
 
+constituents(widget::Widget) = Widget[]
+
 @widget struct Rectangle
   geometry::Box2
   color::RGB{Float32}
 end
+
+Rectangle(geometry, color) = new_widget(Rectangle, geometry, color)
 
 function synchronize(rect::Rectangle)
   (; r, g, b) = rect.color
@@ -92,7 +131,7 @@ function synchronize(text::Text)
 end
 
 function Text(text::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ")
-  Text(text, size, font, script, language)
+  new_widget(Text, text, size, font, script, language)
 end
 
 @widget struct Button
@@ -102,22 +141,28 @@ end
   text::Optional{Text}
 end
 
+constituents(button::Button) = [button.text]
+
 function Button(on_click, geometry::Box{2}; background_color = BUTTON_BACKGROUND_COLOR, text = nothing)
   on_input = function (input::Input)
     input.type === BUTTON_PRESSED && on_click()
   end
-  widget = new_widget(Button, on_input, geometry, background_color, text)
-  !isnothing(text) && add_constraint(attach(at(text, :center), at(widget, :center)))
-  widget
+  new_widget(Button, on_input, geometry, background_color, text)
 end
 
 function synchronize(button::Button)
   rect = Rectangle(button.id, button.geometry, button.background_color)
   synchronize(rect)
-  app.ecs[button, INPUT_COMPONENT_ID] = InputComponent(button.on_input, BUTTON_PRESSED, NO_ACTION)
+  set_input_handler(button, InputComponent(button.on_input, BUTTON_PRESSED, NO_ACTION))
   isnothing(button.text) && return
   synchronize(button.text)
   put_behind(rect, button.text)
+  add_constraint(attach(at(button.text, :center), at(button, :center)))
+end
+
+function put_behind(button::Button, of)
+  put_behind(button.text, of)
+  put_behind(button.id, button.text)
 end
 
 @widget struct Checkbox
@@ -140,15 +185,79 @@ function Checkbox(on_toggle, value::Bool, geometry::Box{2}; active_color = CHECK
 end
 
 function synchronize(checkbox::Checkbox)
-  app.ecs[checkbox, INPUT_COMPONENT_ID] = InputComponent(checkbox.on_toggle, BUTTON_PRESSED, NO_ACTION)
+  set_input_handler(checkbox, InputComponent(checkbox.on_toggle, BUTTON_PRESSED, NO_ACTION))
   rect = Rectangle(checkbox.id, checkbox.geometry, checkbox.value ? checkbox.active_color : checkbox.inactive_color)
   synchronize(rect)
+end
+
+@widget struct Menu
+  on_input::Function
+  head::WidgetID
+  items::Vector{WidgetID}
+  direction::Direction
+  expanded::Bool
+end
+
+constituents(menu::Menu) = [menu.head; menu.items]
+
+Menu(head, items, direction::Direction = DIRECTION_VERTICAL) = Menu(head, convert(Vector{WidgetID}, items), direction)
+function Menu(head, items::Vector{WidgetID}, direction::Direction = DIRECTION_VERTICAL)
+  menu = new_widget(Menu, identity, head, items, direction, false)
+  menu.on_input = function (input::Input)
+    !menu.expanded && return input.type === BUTTON_PRESSED && expand!(menu)
+    propagate!(input, [app.systems.event.ui.areas[item] for item in [menu.head; menu.items]]) || return
+    input.type === BUTTON_PRESSED && collapse!(menu)
+  end
+  menu
+end
+
+function expand!(menu::Menu)
+  ret = menu.expanded ≠ (menu.expanded = true)
+  ret && synchronize!(menu)
+  ret
+end
+function collapse!(menu::Menu)
+  ret = menu.expanded ≠ (menu.expanded = false)
+  ret && synchronize!(menu)
+  ret
+end
+
+function synchronize(menu::Menu)
+  foreach(menu.expanded ? enable! : disable!, menu.items)
+  set_geometry(menu, menu_geometry(menu))
+  place_items(menu)
+  # Capture all events because we don't know what the menu items will react to.
+  set_input_handler(menu, InputComponent(menu.on_input, ALL_EVENTS, NO_ACTION))
+end
+
+function menu_geometry(menu::Menu)
+  box = get_geometry(menu.head)
+  !menu.expanded && return box
+  bottom_left = box.bottom_left .- @SVector [0.0, sum(item -> get_geometry(item).height, menu.items; init = 0.0)]
+  Box(bottom_left, box.top_right)
+end
+
+function place_items(menu::Menu)
+  menu.direction === DIRECTION_VERTICAL || error("Unsupported direction $direction")
+  add_constraint(attach(menu.head, menu))
+  prev_item = menu.head
+  for item in menu.items
+    constraint = attach(at(item, :corner, :top_left), at(prev_item, :corner, :bottom_left))
+    add_constraint(constraint)
+    prev_item = item
+  end
+
+  for part in constituents(menu)
+    put_behind(get_widget(part), menu)
+  end
 end
 
 @widget struct Dropdown
   background::Rectangle
   choices::Vector{Text}
 end
+
+constituents(dropdown::Dropdown) = dropdown.choices
 
 function Dropdown(box::Box{2}; background_color = DROPDOWN_BACKGROUND_COLOR, choices = Text[])
   background = Rectangle(box, background_color)
@@ -161,12 +270,10 @@ function Dropdown(box::Box{2}; background_color = DROPDOWN_BACKGROUND_COLOR, cho
   Dropdown(background)
 end
 
-Base.getindex(ecs::ECSDatabase, widget::Widget, args...) = getindex(ecs, widget.id, args...)
-Base.setindex!(ecs::ECSDatabase, value, widget::Widget, args...) = setindex!(ecs, value, widget.id, args...)
-
 attach(object::Widget, onto::Widget) = attach(object.id, onto.id)
 attach(object, onto::Widget) = attach(object, onto.id)
 attach(object::Widget, onto) = attach(object.id, onto)
 at(object::Widget, location::FeatureLocation, args...) = at(object.id, location, args...)
+at(object::Widget, location::Symbol, args...) = at(object.id, location, args...)
 
 const WidgetComponent = Union{subtypes(Widget)...}

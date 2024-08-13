@@ -29,7 +29,7 @@ mutable struct Renderer
   program_cache::ProgramCache
   frame_diagnostics::FrameDiagnostics
   task::Task
-  function Renderer(window::Window; release = get(ENV, "GIVRE_RELEASE", "false") == "true")
+  function Renderer(window::Window; release = is_release())
     instance, device = Lava.init(; debug = !release, with_validation = !release, instance_extensions = ["VK_KHR_xcb_surface"])
     color = color_attachment(device, window)
     new(instance, device, FrameCycle(device, Surface(instance, window); n = 2), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())

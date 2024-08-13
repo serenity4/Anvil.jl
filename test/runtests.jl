@@ -1,13 +1,18 @@
-using Givre, Test, ConcurrencyGraph
+using Givre, Test, ConcurrencyGraph, Logging, DataFrames
 
+Logging.disable_logging(Logging.Info)
 ENV["JULIA_DEBUG"] = "Givre"
 # ENV["JULIA_DEBUG"] = "Givre,ConcurrencyGraph"
 # ENV["GIVRE_LOG_FRAMECOUNT"] = false
 # ENV["GIVRE_RELEASE"] = true # may circumvent issues with validation layers
 
 #= Known issues:
-- The dragging effect may be stuck, i.e. it sometimes doesn't release on button release and there is no way to undo it (besides waiting for some other bug later which apparently unsticks it).
 - `at(model_text, :center)` seems broken, as the dropdown background is not positioned correctly.
 =# main()
+
+df = DataFrame(Givre.app.ecs)
+select(df, :Entity, :Render, :Input)
+select(df, :Entity, :Z)
+df.Name .=> df.Input
 
 GC.gc()

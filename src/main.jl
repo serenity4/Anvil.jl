@@ -35,7 +35,7 @@ function initialize_components()
   app.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
 
   # TODO: Use a `Widget` for this.
-  texture = new_entity!()
+  texture = new_entity()
   set_location(texture, P2(-0.5, 0))
   set_geometry(texture, Box(P2(0.5, 0.5)))
   image = image_resource(app.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
@@ -71,7 +71,17 @@ function initialize_components()
       end
     end
   end
-  insert!(app.ecs, texture, INPUT_COMPONENT_ID, InputComponent(on_input, BUTTON_PRESSED, DRAG))
+  set_input_handler(texture, InputComponent(on_input, BUTTON_PRESSED, DRAG))
+
+  file_menu_head = Button(() -> collapse!(file_menu), Box(P2(0.15, 0.05)); text = Text("File"))
+  file_menu_item_1 = Button(Box(P2(0.15, 0.05)); text = Text("New file")) do
+    button.background_color = RGB{Float32}(0.1, 0.3, 0.2)
+  end
+  file_menu_item_2 = Button(Box(P2(0.15, 0.05)); text = Text("Open...")) do
+    button.background_color = RGB{Float32}(0.3, 0.2, 0.1)
+  end
+  file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2])
+  add_constraint(attach(at(file_menu, :corner, :top_left), at(app.windows[app.window], :corner, :top_left)))
 
   vline_left = at(at(settings_background, :edge, :left), P2(0.2, 0))
   vline_right = at(vline_left, P2(0.05, 0))
