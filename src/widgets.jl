@@ -190,6 +190,37 @@ function synchronize(checkbox::Checkbox)
   synchronize(rect)
 end
 
+@widget struct MenuItem
+  on_selected::Function
+  background::Rectangle
+  text::Text
+end
+
+constituents(item::MenuItem) = [item.background, item.text]
+
+function MenuItem(on_selected, text, geometry)
+  background = Rectangle(geometry, MENU_ITEM_COLOR)
+  new_widget(MenuItem, on_selected, background, text)
+end
+
+function synchronize(item::MenuItem)
+  set_input_handler(item.background, InputComponent(POINTER_ENTERED | POINTER_EXITED, NO_ACTION) do input::Input
+    color = input.type === POINTER_ENTERED ? MENU_ITEM_HOVER_COLOR : MENU_ITEM_COLOR
+    if item.background.color ≠ color
+      item.background.color = color
+      synchronize(item.background)
+    end
+  end)
+  set_input_handler(item, InputComponent(input -> item.on_selected(), BUTTON_EVENT, NO_ACTION))
+  set_geometry(item, item.background.geometry)
+  put_behind(item.text, item)
+  put_behind(item.background, item.text)
+  add_constraint(attach(item.background, item))
+  add_constraint(attach(at(item.text, :center), item))
+  synchronize(item.background)
+  synchronize(item.text)
+end
+
 @widget struct Menu
   on_input::Function
   head::WidgetID
@@ -204,9 +235,9 @@ Menu(head, items, direction::Direction = DIRECTION_VERTICAL) = Menu(head, conver
 function Menu(head, items::Vector{WidgetID}, direction::Direction = DIRECTION_VERTICAL)
   menu = new_widget(Menu, identity, head, items, direction, false)
   menu.on_input = function (input::Input)
-    !menu.expanded && return input.type === BUTTON_PRESSED && expand!(menu)
+    !menu.expanded && return expand!(menu)
     propagate!(input, [app.systems.event.ui.areas[item] for item in [menu.head; menu.items]]) || return
-    input.type === BUTTON_PRESSED && collapse!(menu)
+    collapse!(menu)
   end
   menu
 end
@@ -227,7 +258,7 @@ function synchronize(menu::Menu)
   set_geometry(menu, menu_geometry(menu))
   place_items(menu)
   # Capture all events because we don't know what the menu items will react to.
-  set_input_handler(menu, InputComponent(menu.on_input, ALL_EVENTS, NO_ACTION))
+  set_input_handler(menu, InputComponent(menu.on_input, BUTTON_PRESSED, NO_ACTION))
 end
 
 function menu_geometry(menu::Menu)

@@ -111,7 +111,7 @@ end
 function (rendering::RenderingSystem)(ecs::ECSDatabase, target::Resource)
   nodes = RenderNode[]
   depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, dimensions(target.attachment))
-  color_clear = [ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1.0))]
+  color_clear = [ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1f0))]
   parameters = ShaderParameters(target; depth, color_clear)
   push!(nodes, render_opaque_objects(rendering, ecs, @set parameters.depth_clear = ClearValue(1f0)))
   push!(nodes, render_transparent_objects(rendering, ecs, @set parameters.color_clear[1] = nothing))
@@ -213,9 +213,7 @@ end
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
   event.type == KEY_PRESSED && matches(key"ctrl+q", event) && return 0
   update_overlays!(system, ecs)
-  input = input_from_event(system.ui.overlay, event)
-  isnothing(input) && return
-  consume!(input)
+  consume!(system.ui.overlay, event)
 end
 
 function update_overlays!(system::EventSystem, ecs::ECSDatabase)

@@ -38,7 +38,8 @@ function initialize_components()
   texture = new_entity()
   set_location(texture, P2(-0.5, 0))
   set_geometry(texture, Box(P2(0.5, 0.5)))
-  image = image_resource(app.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
+  random_image() = image_resource(app.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
+  image = random_image()
   set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
 
   settings_background = Rectangle(Box(P2(0.4, 0.9)), RGB(0.01, 0.01, 0.01))
@@ -53,35 +54,49 @@ function initialize_components()
     button.background_color = rand(RGB{Float32})
   end
 
-  on_input = let threshold = Ref((0.0, 0.0)), origin = Ref{P2}()
+  on_input = let origin = Ref(zero(P2)), last_displacement = Ref(zero(P2)), total_drag = Ref(zero(P2))
     function (input::Input)
       if input.type === BUTTON_PRESSED
-        threshold[] = (0.0, 0.0)
         origin[] = get_location(texture)
+        last_displacement[] = origin[]
         dropdown_bg.color = rand(RGB{Float32})
       elseif input.type === DRAG
-        target, event = input.dragged
-        drag_amount = event.location .- input.source.event.location
-        set_location(texture, origin[] .+ drag_amount)
-        if sqrt(sum((drag_amount .- threshold[]) .^ 2)) > 0.5
-          threshold[] = drag_amount
+        target, event = input.drag
+        displacement = event.location .- input.source.event.location
+        segment = displacement .- last_displacement[]
+        last_displacement[] = SVector(displacement)
+        total_drag[] = total_drag[] .+ abs.(segment)
+        set_location(texture, origin[] .+ displacement)
+        if norm(total_drag) > 1.0
+          total_drag[] = (0.0, 0.0)
           renderable = get_render(texture)
-          set_render(texture, @set renderable.vertex_data = fill(Vec3(rand(3)), 4))
+          new_image = fetch(execute(random_image, app.systems.rendering.renderer.task))
+          set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image)))
         end
       end
     end
   end
   set_input_handler(texture, InputComponent(on_input, BUTTON_PRESSED, DRAG))
 
+  # File menu.
   file_menu_head = Button(() -> collapse!(file_menu), Box(P2(0.15, 0.05)); text = Text("File"))
-  file_menu_item_1 = Button(Box(P2(0.15, 0.05)); text = Text("New file")) do
+  file_menu_item_1 = MenuItem(Text("New file"), Box(P2(0.15, 0.05))) do
     button.background_color = RGB{Float32}(0.1, 0.3, 0.2)
   end
-  file_menu_item_2 = Button(Box(P2(0.15, 0.05)); text = Text("Open...")) do
+  file_menu_item_2 = MenuItem(Text("Open..."), Box(P2(0.15, 0.05))) do
     button.background_color = RGB{Float32}(0.3, 0.2, 0.1)
   end
   file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2])
   add_constraint(attach(at(file_menu, :corner, :top_left), at(app.windows[app.window], :corner, :top_left)))
+
+  # Edit menu.
+  edit_menu_head = Button(() -> collapse!(edit_menu), Box(P2(0.15, 0.05)); text = Text("Edit"))
+  edit_menu_item_1 = MenuItem(Text("Regenerate"), Box(P2(0.15, 0.05))) do
+    new_image = fetch(execute(random_image, app.systems.rendering.renderer.task))
+    set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image)))
+  end
+  edit_menu = Menu(edit_menu_head, [edit_menu_item_1])
+  add_constraint(attach(at(edit_menu, :corner, :top_left), at(file_menu, :corner, :top_right)))
 
   vline_left = at(at(settings_background, :edge, :left), P2(0.2, 0))
   vline_right = at(vline_left, P2(0.05, 0))
