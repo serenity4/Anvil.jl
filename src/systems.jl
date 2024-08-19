@@ -147,12 +147,14 @@ function render_transparent_objects((; renderer)::RenderingSystem, ecs::ECSDatab
   (; program_cache) = renderer
   commands = Command[]
 
+  parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
+
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
     location = Point3f(location..., -1/z)
     command = @match object.type begin
       &RENDER_OBJECT_TEXT => begin
         text = object.primitive_data::ShaderLibrary.Text
-        renderables(program_cache, text, parameters, location)
+        renderables(program_cache, text, parameters_ssaa, location)
       end
       _ => continue
     end
@@ -212,6 +214,7 @@ end
 
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
   event.type == KEY_PRESSED && matches(key"ctrl+q", event) && return 0
+  event.type == WINDOW_RESIZED && (set_geometry(app.windows[event.win], window_geometry(event.win)))
   update_overlays!(system, ecs)
   consume!(system.ui.overlay, event)
 end

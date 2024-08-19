@@ -232,10 +232,10 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
   T = eltype(C)
   @match feature.location begin
     &FEATURE_LOCATION_ORIGIN => zero(C)
-    &FEATURE_LOCATION_CENTER => centroid(get_geometry(engine, feature.object))
-    &FEATURE_LOCATION_CORNER => coordinates(get_geometry(engine, feature.object)::Box{2,T}, feature.data::Corner)
+    &FEATURE_LOCATION_CENTER => centroid(get_geometry(engine, feature[]))
+    &FEATURE_LOCATION_CORNER => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Corner)
     &FEATURE_LOCATION_EDGE => begin
-        geometry = get_geometry(engine, feature.object)::Box{2,T}
+        geometry = get_geometry(engine, feature[])::Box{2,T}
         (x, y) = @match edge = feature.data::Edge begin
           &EDGE_BOTTOM => (coordinates(geometry, CORNER_BOTTOM_LEFT), coordinates(geometry, CORNER_BOTTOM_RIGHT))
           &EDGE_TOP => (coordinates(geometry, CORNER_TOP_LEFT), coordinates(geometry, CORNER_TOP_RIGHT))
@@ -421,9 +421,9 @@ function compute_spacing(engine::LayoutEngine, constraint::Constraint)
   isa(spacing.amount, Float64) && return spacing.amount
   spacings = [get_coordinates(engine, at(y, :edge, edges[1])).a[i] - get_coordinates(engine, at(x, :edge, edges[2])).a[i] for (x, y) in zip(xs, ys)]
   @match spacing.amount begin
-    &SPACING_AMOUNT_MINIMUM => minimum(spacings)
-    &SPACING_AMOUNT_MAXIMUM => maximum(spacings)
-    &SPACING_AMOUNT_AVERAGE => sum(spacings)/length(spacings)
+    &SPACING_TARGET_MINIMUM => minimum(spacings)
+    &SPACING_TARGET_MAXIMUM => maximum(spacings)
+    &SPACING_TARGET_AVERAGE => sum(spacings)/length(spacings)
   end
 end
 

@@ -24,7 +24,7 @@ function initialize()
   window = Window(wm, "Givre"; width = 1920, height = 1080, map = false)
   window_id = new_entity(EntityID(Entities.next!(WINDOW_ENTITY_COUNTER)))
   set_location(window_id, zero(P2))
-  set_geometry(window_id, Box(Point2(screen_semidiagonal(aspect_ratio(extent(window))))))
+  set_geometry(window_id, window_geometry(window))
 
   systems = Systems(
     SynchronizationSystem(),
@@ -45,6 +45,8 @@ function initialize()
   map_window(window)
   nothing
 end
+
+window_geometry(window::XCBWindow) = Box(Point2(screen_semidiagonal(aspect_ratio(extent(window)))))
 
 function new_entity(entity::EntityID = new!(app.entity_pool))
   app.ecs[entity, ENTITY_COMPONENT_ID] = entity
@@ -104,29 +106,6 @@ add_constraint(constraint) = add_constraint!(app.systems.layout, constraint)
 remove_constraints(entity::EntityID) = remove_constraints!(app.systems.layout, entity)
 remove_constraints(entity) = remove_constraints!(app.systems.layout, convert(EntityID, entity))
 put_behind(behind, of) = put_behind!(app.systems.drawing_order, behind, of)
-
-function start(renderer::Renderer)
-  options = SpawnOptions(start_threadid = RENDERER_THREADID, allow_task_migration = false, execution_mode = LoopExecution(0.005))
-  renderer.task = spawn(() -> render(app, renderer), options)
-end
-
-function Lava.render(app::Application, rdr::Renderer)
-  state = cycle!(rdr.frame_cycle) do image
-    if collect(Int, extent(app.window)) ≠ dimensions(rdr.color.attachment)
-      rdr.color = color_attachment(rdr.device, app.window)
-    end
-    (; color) = rdr
-    ret = tryfetch(execute(() -> frame_nodes(color), task_owner()))
-    iserror(ret) && shutdown_scheduled() && return draw_and_prepare_for_presentation(rdr.device, RenderNode[], color, image)
-    nodes = unwrap(ret)::Vector{RenderNode}
-    draw_and_prepare_for_presentation(rdr.device, nodes, color, image)
-  end
-  !isnothing(state) && push!(rdr.pending, state)
-  filter!(exec -> !wait(exec, 0), rdr.pending)
-  next!(rdr.frame_diagnostics)
-  get(ENV, "GIVRE_LOG_FRAMECOUNT", "true") == "true" && print_framecount(rdr.frame_diagnostics)
-  nothing
-end
 
 "Run systems that are common to and essential for both rendering and event handling."
 function run_systems()

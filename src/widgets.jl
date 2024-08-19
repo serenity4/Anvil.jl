@@ -126,7 +126,9 @@ function synchronize(text::Text)
   options = TextOptions()
   text = ShaderLibrary.Text(OpenType.Text(text.text, options), get_font(text.font), font_options)
   box = boundingelement(text)
-  set_geometry(id, box)
+  scale = ShaderLibrary.pixel_size(extent(app.window))
+  geometry = Box(box.min .* scale, box.max .* scale)
+  set_geometry(id, geometry)
   set_render(id, RenderComponent(RENDER_OBJECT_TEXT, nothing, text))
 end
 
