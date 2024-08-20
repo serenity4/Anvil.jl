@@ -56,7 +56,7 @@ function initialize_components()
 
   on_input = let origin = Ref(zero(P2)), last_displacement = Ref(zero(P2)), total_drag = Ref(zero(P2))
     function (input::Input)
-      if input.type === BUTTON_PRESSED
+      if is_left_click(input)
         origin[] = get_location(texture)
         last_displacement[] = origin[]
         dropdown_bg.color = rand(RGB{Float32})
