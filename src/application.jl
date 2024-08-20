@@ -51,6 +51,8 @@ window_geometry(window::XCBWindow) = Box(Point2(screen_semidiagonal(aspect_ratio
 is_left_click(event::Event) = event.mouse_event.button == BUTTON_LEFT
 is_left_click(input::Input) = (input.type === BUTTON_PRESSED || input.type === BUTTON_RELEASED) && is_left_click(input.event)
 
+WindowAbstractions.matches(kc::KeyCombination, input::Input) = (input.type === KEY_PRESSED || input.type === KEY_RELEASED) && matches(kc, input.event)
+
 function new_entity(entity::EntityID = new!(app.entity_pool))
   app.ecs[entity, ENTITY_COMPONENT_ID] = entity
   entity

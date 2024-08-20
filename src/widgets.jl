@@ -190,14 +190,19 @@ function synchronize(checkbox::Checkbox)
   synchronize(rect)
 end
 
-@widget struct MenuItem
-  on_selected::Function
-  background::Rectangle
-  text::Text
+@widget mutable struct MenuItem
+  const on_selected::Function
+  const background::Rectangle
+  const text::Text
+  # Whether the item is currently active in navigation (pointer actively over it, navigation via keyboard)
   active::Bool
 end
 
 constituents(item::MenuItem) = [item.background, item.text]
+
+set_active(item::MenuItem) = (item.active = true)
+set_inactive(item::MenuItem) = (item.active = false)
+isactive(item::MenuItem) = item.active
 
 function MenuItem(on_selected, text, geometry)
   background = Rectangle(geometry, MENU_ITEM_COLOR)
@@ -206,16 +211,16 @@ end
 
 function synchronize(item::MenuItem)
   set_input_handler(item, InputComponent(BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED, NO_ACTION) do input::Input
-    is_left_click(input) && return item.on_selected()
-    in(input.type, (POINTER_ENTERED | POINTER_EXITED)) || return
-    item.active = input.type === POINTER_ENTERED
+    is_left_click(input) && item.on_selected()
+    input.type === POINTER_ENTERED && set_active(item)
+    input.type === POINTER_EXITED && set_inactive(item)
   end)
   set_geometry(item, item.background.geometry)
   put_behind(item.text, item)
   put_behind(item.background, item.text)
   add_constraint(attach(item.background, item))
   add_constraint(attach(at(item.text, :center), item))
-  color = ifelse(item.active, MENU_ITEM_HOVER_COLOR, MENU_ITEM_COLOR)
+  color = ifelse(item.active, MENU_ITEM_ACTIVE_COLOR, MENU_ITEM_COLOR)
   item.background.color = color
   synchronize!(item.background)
   synchronize!(item.text)
@@ -224,71 +229,65 @@ end
 @widget struct Menu
   on_input::Function
   head::WidgetID
-  items::Vector{WidgetID}
+  items::Vector{MenuItem}
   direction::Direction
   expanded::Bool
 end
 
 constituents(menu::Menu) = [menu.head; menu.items]
 
-set_active_item!(menu::Menu, i) = setfield!(menu, :active_item, i)
+function active_item(menu::Menu)
+  i = findfirst(isactive, menu.items)
+  isnothing(i) && return
+  menu.items[i]
+end
 
-set_active(menu::Menu, item::WidgetID) = set_active(menu, get_widget(item))
-set_inactive(menu::Menu, item::WidgetID) = set_inactive(menu, get_widget(item))
+function select_item(menu::Menu, item::MenuItem)
+  set_inactive(item)
+  item.on_selected()
+  collapse!(menu)
+end
 
-set_active(menu::Menu, item::Widget) = nothing
-set_inactive(menu::Menu, item::Widget) = nothing
-
-set_active(menu::Menu, item::MenuItem) = (item.active = true)
-set_inactive(menu::Menu, item::MenuItem) = (item.active = false)
-
-isactive(item::MenuItem) = item.active
-isactive(item::Widget) = false
-isactive(item::WidgetID) = isactive(get_widget(item))
-
-Menu(head, items, direction::Direction = DIRECTION_VERTICAL) = Menu(head, convert(Vector{WidgetID}, items), direction)
-function Menu(head, items::Vector{WidgetID}, direction::Direction = DIRECTION_VERTICAL)
+function Menu(head, items::Vector{MenuItem}, direction::Direction = DIRECTION_VERTICAL)
   menu = new_widget(Menu, identity, head, items, direction, false)
   menu.on_input = function (input::Input)
-    if input.type === KEY_PRESSED
-      if matches(key"enter", input.event)
-        i = findfirst(isactive, menu.items)
-        isnothing(i) && return
-        item = get_widget(menu.items[i])::MenuItem
-        set_inactive(menu, item)
-        item.on_selected()
-        collapse!(menu)
-      else
-        direction = matches(key"up", input.event) ? -1 : matches(key"down", input.event) ? 1 : nothing
-        !isnothing(direction) && return select_next(menu, direction)
+    if menu.expanded
+      matches(key"enter", input.event) && return select_active_item(menu)
+      if matches(key"up", input.event) || matches(key"down", input.event)
+        navigate_to_next_item(menu, ifelse(matches(key"up", input.event), -1, 1))
       end
-      return
     end
 
-    # Select next item with the mouse wheel.
     input.type === BUTTON_PRESSED || return
+
     click = input.event.mouse_event.button
-    direction = click === BUTTON_SCROLL_UP ? -1 : click === BUTTON_SCROLL_DOWN ? 1 : nothing
-    !isnothing(direction) && select_next(menu, direction)
+    if in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN))
+      navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
+    end
 
     # Expand the menu if the head is left-clicked (only the head is reachable if collapsed).
     is_left_click(input) && !menu.expanded && return expand!(menu)
 
-    # Propagate the event to menu items.
-    propagate!(input, [app.systems.event.ui.areas[item] for item in [menu.head; menu.items]]) || return
-
-    # At this stage, a menu item was selected, we can now collapse the menu.
-    is_left_click(input) && collapse!(menu)
+    # Propagate the event to menu items, triggering the selection of the target item
+    # and allowing the detection of pointer enters/exits for pointer-based activation.
+    subareas = InputArea[]
+    push!(subareas, app.systems.event.ui.areas[menu.head])
+    append!(subareas, app.systems.event.ui.areas[item.id] for item in menu.items)
+    propagate!(input, subareas) && is_left_click(input) && collapse!(menu)
   end
   menu
 end
 
-function select_next(menu::Menu, direction)
+function select_active_item(menu::Menu)
+  item = active_item(menu)
+  !isnothing(item) && select_item(menu, item)
+end
+
+function navigate_to_next_item(menu::Menu, direction)
   i = findfirst(isactive, menu.items)
-  isnothing(i) && return set_active(menu, menu.items[ifelse(direction == 1, 1, lastindex(menu.items))])
-  set_inactive(menu, menu.items[i])
-  j = mod1(i + direction, length(menu.items))
-  set_active(menu, menu.items[j])
+  next = !isnothing(i) ? mod1(i + direction, length(menu.items)) : ifelse(direction == 1, 1, lastindex(menu.items))
+  !isnothing(i) && set_inactive(menu.items[i])
+  set_active(menu.items[next])
 end
 
 function expand!(menu::Menu)
