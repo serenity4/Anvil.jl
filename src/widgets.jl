@@ -331,24 +331,6 @@ function place_items(menu::Menu)
   end
 end
 
-@widget struct Dropdown
-  background::Rectangle
-  choices::Vector{Text}
-end
-
-constituents(dropdown::Dropdown) = dropdown.choices
-
-function Dropdown(box::Box{2}; background_color = DROPDOWN_BACKGROUND_COLOR, choices = Text[])
-  background = Rectangle(box, background_color)
-  # TODO
-  # on_input = function (input::Input)
-  #   if input.type === BUTTON_PRESSED
-  #
-  #   end
-  # end
-  Dropdown(background)
-end
-
 attach(object::Widget, onto::Widget) = attach(object.id, onto.id)
 attach(object, onto::Widget) = attach(object, onto.id)
 attach(object::Widget, onto) = attach(object.id, onto)
