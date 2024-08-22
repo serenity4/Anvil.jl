@@ -1,4 +1,5 @@
 mutable struct Application
+  task::Task
   wm::WindowManager
   entity_pool::EntityPool
   ecs::ECSDatabase
@@ -12,6 +13,10 @@ end
 
 is_release() = app.is_release
 
+function Base.show(io::IO, app::Application)
+  print(io, Application, '(', isdefined(app, :task) ? app.task : "#undef", ", ", isdefined(app, :wm) ? app.wm : "#undef", ", ", isdefined(app, :ecs) ? app.ecs : "#undef", ", release: ", is_release(), ')')
+end
+
 function initialize()
   app.is_release = get(ENV, "GIVRE_RELEASE", "false") == "true"
 
@@ -23,6 +28,7 @@ function initialize()
   WINDOW_ENTITY_COUNTER.val = typemax(UInt32) - 100U
   window = Window(wm, "Givre"; width = 1920, height = 1080, map = false)
   window_id = new_entity(EntityID(Entities.next!(WINDOW_ENTITY_COUNTER)))
+  ecs[window_id, WINDOW_COMPONENT_ID] = window
   set_location(window_id, zero(P2))
   set_geometry(window_id, window_geometry(window))
 
@@ -74,6 +80,12 @@ macro set_name(exs::Symbol...)
   ret
 end
 get_name(entity::EntityID) = get(app.ecs.entity_names, entity, nothing)
+function get_entity(name::Symbol)
+  # This function is slow. Use for tests or non-performance critical code only.
+  for (entity, entity_name) in pairs(app.ecs.entity_names)
+    entity_name === name && return entity
+  end
+end
 
 # Deliberate type piracy.
 function Base.show(io::IO, entity::EntityID)
@@ -100,6 +112,7 @@ get_input_handler(entity) = app.ecs[entity, INPUT_COMPONENT_ID]::InputComponent
 set_input_handler(entity, input::InputComponent) = app.ecs[entity, INPUT_COMPONENT_ID] = input
 unset_input_handler(entity) = unset!(app.ecs, entity, INPUT_COMPONENT_ID)
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID]::WidgetComponent
+get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
 set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID] = widget
 get_window(entity) = app.ecs[entity, WINDOW_COMPONENT_ID]::Window
 set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID] = window
@@ -129,3 +142,5 @@ function shutdown(app::Application)
   shutdown(app.systems)
   wait(shutdown_children())
 end
+
+Base.wait(app::Application) = monitor_children()

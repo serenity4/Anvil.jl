@@ -20,15 +20,18 @@ function (app::Application)()
   end
 end
 
-function main()
+function main(; async = false)
   nthreads() ≥ 3 || error("Three threads or more are required to execute the application.")
   reset_mpi_state()
-  application_thread = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
+  app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
     initialize()
     LoopExecution(0.001; shutdown = false)(app)()
   end
-  monitor_children()
+  async && return false
+  wait(app)
 end
+
+synchronize() = fetch(execute(Returns(true), app.task))
 
 function initialize_components()
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
@@ -87,6 +90,7 @@ function initialize_components()
     button.background_color = RGB{Float32}(0.3, 0.2, 0.1)
   end
   file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2])
+  @set_name file_menu
   add_constraint(attach(at(file_menu, :corner, :top_left), at(app.windows[app.window], :corner, :top_left)))
 
   # Edit menu.

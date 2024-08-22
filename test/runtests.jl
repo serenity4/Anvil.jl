@@ -1,4 +1,4 @@
-using Givre, Test, ConcurrencyGraph, Logging, DataFrames
+using Givre, Test, Logging, DataFrames
 
 Logging.disable_logging(Logging.Info)
 ENV["JULIA_DEBUG"] = "Givre"

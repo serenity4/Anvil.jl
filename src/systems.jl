@@ -204,12 +204,21 @@ function (system::EventSystem)(ecs::ECSDatabase)
 end
 
 function to_rendering_coordinate_system(event::Event)
-  ar = aspect_ratio(extent(event.win))
+  @set event.location = to_rendering_coordinate_system(event.location, event.win)
+end
+
+function to_rendering_coordinate_system((x, y), window::Window)
+  ar = aspect_ratio(extent(window))
   xmax, ymax = (max(1.0, ar), max(1.0, 1/ar))
-  x, y = event.location
   y = 1 - y # make bottom-left at (0, 0) and top-right at (1, 1)
-  location = remap.((x, y), 0, 1, (-xmax, -ymax), (xmax, ymax))
-  @set event.location = location
+  remap.((x, y), 0, 1, (-xmax, -ymax), (xmax, ymax))
+end
+function to_window_coordinate_system((x, y), window::Window)
+  ar = aspect_ratio(extent(window))
+  xmax, ymax = (max(1.0, ar), max(1.0, 1/ar))
+  (x, y) = remap.((x, y), (-xmax, -ymax), (xmax, ymax), 0.0, 1.0)
+  y = 1 - y # make bottom-left at (0, 0) and top-right at (1, 1)
+  (x, y)
 end
 
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)

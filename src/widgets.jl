@@ -297,6 +297,7 @@ function expand!(menu::Menu)
 end
 function collapse!(menu::Menu)
   ret = menu.expanded ≠ (menu.expanded = false)
+  foreach(set_inactive, menu.items)
   ret && synchronize!(menu)
   ret
 end
