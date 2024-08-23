@@ -33,7 +33,6 @@ function initialize()
   set_geometry(window_id, window_geometry(window))
 
   systems = Systems(
-    SynchronizationSystem(),
     LayoutSystem(ecs),
     DrawingOrderSystem(),
     RenderingSystem(Renderer(window)),
@@ -127,7 +126,6 @@ put_behind(behind, of) = put_behind!(app.systems.drawing_order, behind, of)
 
 "Run systems that are common to and essential for both rendering and event handling."
 function run_systems()
-  app.systems.synchronization(app.ecs)
   app.systems.layout(app.ecs)
   app.systems.drawing_order(app.ecs)
 end

@@ -13,6 +13,7 @@ ENV["JULIA_DEBUG"] = "Givre"
 df = DataFrame(Givre.app.ecs)
 select(df, :Entity, :Render, :Input)
 select(df, :Entity, :Z)
+select(df, :Entity, :Location)
 df.Name .=> df.Input
 
 GC.gc()

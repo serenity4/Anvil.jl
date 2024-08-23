@@ -2,16 +2,6 @@ abstract type System end
 
 shutdown(::System) = nothing
 
-struct SynchronizationSystem <: System end
-
-function (::SynchronizationSystem)(ecs::ECSDatabase)
-  for widget in components(ecs, WIDGET_COMPONENT_ID, WidgetComponent)
-    widget.modified || continue
-    widget.disabled && continue
-    synchronize!(widget)
-  end
-end
-
 struct LayoutSystem <: System
   engine::ECSLayoutEngine{P2, Box{2,Float64}, LocationComponent, GeometryComponent}
   constraints::Vector{Constraint{EntityID}}
@@ -249,7 +239,6 @@ function update_overlays!(system::EventSystem, ecs::ECSDatabase)
 end
 
 struct Systems
-  synchronization::SynchronizationSystem
   layout::LayoutSystem
   drawing_order::DrawingOrderSystem
   rendering::RenderingSystem
@@ -263,5 +252,4 @@ function shutdown(systems::Systems)
   shutdown(systems.rendering)
   shutdown(systems.drawing_order)
   shutdown(systems.layout)
-  shutdown(systems.synchronization)
 end

@@ -31,7 +31,7 @@ function main(; async = false)
   wait(app)
 end
 
-synchronize() = fetch(execute(Returns(true), app.task))
+synchronize() = fetch(execute(() -> (app(); true), app.task))
 
 function initialize_components()
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
@@ -44,6 +44,7 @@ function initialize_components()
   random_image() = image_resource(app.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
   image = random_image()
   set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
+  @set_name texture
 
   settings_background = Rectangle(Box(P2(0.4, 0.9)), RGB(0.01, 0.01, 0.01))
   model_text = Text("Model")
@@ -54,8 +55,9 @@ function initialize_components()
 
   checkbox = Checkbox(identity, false, Box(P2(0.02, 0.02)))
   button = Button(Box(P2(0.15, 0.05)); text = Text("Save")) do
-    button.background_color = rand(RGB{Float32})
+    button.background.color = rand(RGB{Float32})
   end
+  @set_name checkbox button
 
   on_input = let origin = Ref(zero(P2)), last_displacement = Ref(zero(P2)), total_drag = Ref(zero(P2))
     function (input::Input)
@@ -84,14 +86,14 @@ function initialize_components()
   # File menu.
   file_menu_head = Button(() -> collapse!(file_menu), Box(P2(0.15, 0.05)); text = Text("File"))
   file_menu_item_1 = MenuItem(Text("New file"), Box(P2(0.15, 0.05))) do
-    button.background_color = RGB{Float32}(0.1, 0.3, 0.2)
+    button.background.color = RGB{Float32}(0.1, 0.3, 0.2)
   end
   file_menu_item_2 = MenuItem(Text("Open..."), Box(P2(0.15, 0.05))) do
-    button.background_color = RGB{Float32}(0.3, 0.2, 0.1)
+    button.background.color = RGB{Float32}(0.3, 0.2, 0.1)
   end
   file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2])
-  @set_name file_menu
   add_constraint(attach(at(file_menu, :corner, :top_left), at(app.windows[app.window], :corner, :top_left)))
+  @set_name file_menu
 
   # Edit menu.
   edit_menu_head = Button(() -> collapse!(edit_menu), Box(P2(0.15, 0.05)); text = Text("Edit"))
@@ -101,6 +103,7 @@ function initialize_components()
   end
   edit_menu = Menu(edit_menu_head, [edit_menu_item_1])
   add_constraint(attach(at(edit_menu, :corner, :top_left), at(file_menu, :corner, :top_right)))
+  @set_name edit_menu
 
   vline_left = at(at(settings_background, :edge, :left), P2(0.2, 0))
   vline_right = at(vline_left, P2(0.05, 0))

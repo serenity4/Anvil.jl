@@ -21,6 +21,8 @@ function Base.setproperty!(widget::Widget, name::Symbol, value)
   prev === value && return value
   widget.modified = true
   setfield!(widget, name, value)
+  synchronize(widget)
+  value
 end
 
 function new_widget(::Type{T}, args...) where {T<:Widget}
@@ -108,8 +110,8 @@ Rectangle(geometry, color) = new_widget(Rectangle, geometry, color)
 function synchronize(rect::Rectangle)
   (; r, g, b) = rect.color
   vertex_data = [Vec3(r, g, b) for _ in 1:4]
-  set_geometry(rect.id, rect.geometry)
-  set_render(rect.id, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient()))
+  set_geometry(rect, rect.geometry)
+  set_render(rect, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient()))
 end
 
 @widget struct Text
@@ -136,28 +138,32 @@ end
 
 @widget struct Button
   on_input::Function
-  geometry::Box2
-  background_color::RGB{Float32}
+  background::Rectangle
   text::Optional{Text}
 end
 
-constituents(button::Button) = [button.text]
+constituents(button::Button) = [button.background, button.text]
 
-function Button(on_click, geometry::Box{2}; background_color = BUTTON_BACKGROUND_COLOR, text = nothing)
+function set_name(button::Button, name::Symbol)
+  set_name(button.id, name)
+  set_name(button.background, Symbol(name, :_background))
+end
+
+Button(on_click, geometry::Box{2}; background_color = BUTTON_BACKGROUND_COLOR, text = nothing) = Button(on_click, Rectangle(geometry, background_color); text)
+function Button(on_click, background::Rectangle; text = nothing)
   on_input = function (input::Input)
     is_left_click(input) && on_click()
   end
-  new_widget(Button, on_input, geometry, background_color, text)
+  new_widget(Button, on_input, background, text)
 end
 
 function synchronize(button::Button)
-  rect = Rectangle(button.id, button.geometry, button.background_color)
-  synchronize(rect)
   set_input_handler(button, InputComponent(input -> is_left_click(input) && button.on_input(input), BUTTON_PRESSED, NO_ACTION))
   isnothing(button.text) && return
-  synchronize(button.text)
-  put_behind(rect, button.text)
-  add_constraint(attach(at(button.text, :center), at(button, :center)))
+  put_behind(button.background, button.text)
+  set_geometry(button, get_geometry(button.background))
+  add_constraint(attach(button.background, button))
+  add_constraint(attach(at(button.text, :center), button))
 end
 
 function put_behind(button::Button, of)
@@ -168,13 +174,21 @@ end
 @widget struct Checkbox
   on_toggle::Function
   value::Bool
-  geometry::Box2
+  background::Rectangle
   active_color::RGB{Float32}
   inactive_color::RGB{Float32}
 end
 
+constituents(checkbox::Checkbox) = [checkbox.background]
+
+function set_name(checkbox::Checkbox, name::Symbol)
+  set_name(checkbox.id, name)
+  set_name(checkbox.background, Symbol(name, :_background))
+end
+
 function Checkbox(on_toggle, value::Bool, geometry::Box{2}; active_color = CHECKBOX_ACTIVE_COLOR, inactive_color = CHECKBOX_INACTIVE_COLOR)
-  checkbox = new_widget(Checkbox, identity, value, geometry, active_color, inactive_color)
+  background = Rectangle(geometry, inactive_color)
+  checkbox = new_widget(Checkbox, identity, value, background, active_color, inactive_color)
   checkbox.on_toggle = function (input::Input)
     if is_left_click(input)
       checkbox.value = !checkbox.value
@@ -185,9 +199,10 @@ function Checkbox(on_toggle, value::Bool, geometry::Box{2}; active_color = CHECK
 end
 
 function synchronize(checkbox::Checkbox)
+  set_geometry(checkbox, get_geometry(checkbox.background))
+  add_constraint(attach(checkbox.background, checkbox))
   set_input_handler(checkbox, InputComponent(input -> is_left_click(input) && checkbox.on_toggle(input), BUTTON_PRESSED, NO_ACTION))
-  rect = Rectangle(checkbox.id, checkbox.geometry, checkbox.value ? checkbox.active_color : checkbox.inactive_color)
-  synchronize(rect)
+  checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
 end
 
 @widget mutable struct MenuItem
@@ -199,6 +214,11 @@ end
 end
 
 constituents(item::MenuItem) = [item.background, item.text]
+
+function set_name(item::MenuItem, name::Symbol)
+  set_name(item.id, name)
+  set_name(item.background, Symbol(name, :_background))
+end
 
 set_active(item::MenuItem) = (item.active = true)
 set_inactive(item::MenuItem) = (item.active = false)
@@ -222,8 +242,6 @@ function synchronize(item::MenuItem)
   add_constraint(attach(at(item.text, :center), item))
   color = ifelse(item.active, MENU_ITEM_ACTIVE_COLOR, MENU_ITEM_COLOR)
   item.background.color = color
-  synchronize!(item.background)
-  synchronize!(item.text)
 end
 
 @widget struct Menu
@@ -235,6 +253,14 @@ end
 end
 
 constituents(menu::Menu) = [menu.head; menu.items]
+
+function set_name(menu::Menu, name::Symbol)
+  set_name(menu.id, name)
+  set_name(menu.head, Symbol(name, :_head))
+  for (i, item) in enumerate(menu.items)
+    set_name(item, Symbol(name, :_item_, i))
+  end
+end
 
 function active_item(menu::Menu)
   i = findfirst(isactive, menu.items)
@@ -291,15 +317,11 @@ function navigate_to_next_item(menu::Menu, direction)
 end
 
 function expand!(menu::Menu)
-  ret = menu.expanded ≠ (menu.expanded = true)
-  ret && synchronize!(menu)
-  ret
+  menu.expanded = true
 end
 function collapse!(menu::Menu)
-  ret = menu.expanded ≠ (menu.expanded = false)
   foreach(set_inactive, menu.items)
-  ret && synchronize!(menu)
-  ret
+  menu.expanded = false
 end
 
 function synchronize(menu::Menu)
