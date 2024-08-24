@@ -2,6 +2,14 @@ struct Exit
   code::Int
 end
 
+function quit()
+  execute(app.task) do
+    exit(0)
+    schedule_shutdown()
+  end
+  wait(app)
+end
+
 function exit(code::Int)
   shutdown(app)
   close(app.wm, app.window)

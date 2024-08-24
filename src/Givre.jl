@@ -63,7 +63,7 @@ const WINDOW_ENTITY_COUNTER = Entities.Counter()
 
 @compile_traces "precompilation_traces.jl"
 
-export main, reset_mpi_state, app,
+export main, reset_mpi_state, app, quit,
        RenderComponent,
        InputComponent
 

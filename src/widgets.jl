@@ -230,11 +230,6 @@ function MenuItem(on_selected, text, geometry)
 end
 
 function synchronize(item::MenuItem)
-  set_input_handler(item, InputComponent(BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED, NO_ACTION) do input::Input
-    is_left_click(input) && item.on_selected()
-    input.type === POINTER_ENTERED && set_active(item)
-    input.type === POINTER_EXITED && set_inactive(item)
-  end)
   set_geometry(item, item.background.geometry)
   put_behind(item.text, item)
   put_behind(item.background, item.text)
@@ -316,6 +311,12 @@ function navigate_to_next_item(menu::Menu, direction)
   set_active(menu.items[next])
 end
 
+function set_active(menu::Menu, item::MenuItem)
+  prev = active_item(menu)
+  !isnothing(prev) && set_inactive(prev)
+  set_active(item)
+end
+
 function expand!(menu::Menu)
   menu.expanded = true
 end
@@ -325,7 +326,18 @@ function collapse!(menu::Menu)
 end
 
 function synchronize(menu::Menu)
-  foreach(menu.expanded ? enable! : disable!, menu.items)
+  if menu.expanded
+    for item in menu.items
+      enable!(item)
+      set_input_handler(item, InputComponent(BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED, NO_ACTION) do input::Input
+        is_left_click(input) && item.on_selected()
+        input.type === POINTER_ENTERED && set_active(menu, item)
+        input.type === POINTER_EXITED && set_inactive(item)
+      end)
+    end
+  else
+    foreach(disable!, menu.items)
+  end
   set_geometry(menu, menu_geometry(menu))
   place_items(menu)
   set_input_handler(menu, InputComponent(menu.on_input, BUTTON_PRESSED | KEY_PRESSED, NO_ACTION))

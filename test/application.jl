@@ -1,5 +1,6 @@
 using Givre
-using Givre: app, EntityID, get_widget, get_entity, get_location, synchronize, Widget, exit, to_rendering_coordinate_system, to_window_coordinate_system
+using Givre: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_rendering_coordinate_system, to_window_coordinate_system
+using CooperativeTasks: execute
 using LinearAlgebra: norm
 using XCB
 using WindowAbstractions
@@ -128,6 +129,32 @@ end
     @test !file_menu.expanded
     @test Givre.active_item(file_menu) === nothing
 
+    ## Key-based navigation.
+    move_cursor(file_menu)
+    left_click()
+    press_key(:UP)
+    synchronize()
+    @test Givre.active_item(file_menu) === item_2
+    press_key(:RTRN)
+    synchronize()
+    @test Givre.active_item(file_menu) === nothing
+    @test !file_menu.expanded
+
+    left_click()
+    press_key(:UP)
+    press_key(:UP)
+    synchronize()
+    @test count(Givre.isactive, file_menu.items) == 1
+    @test Givre.active_item(file_menu) === item_1
+    press_key(:DOWN)
+    synchronize()
+    @test count(Givre.isactive, file_menu.items) == 1
+    @test Givre.active_item(file_menu) === item_2
+    move_cursor(item_1)
+    synchronize()
+    @test count(Givre.isactive, file_menu.items) == 1
+    @test Givre.active_item(file_menu) === item_1
+
     # Checkbox.
 
     checkbox = get_widget(:checkbox)
@@ -155,7 +182,7 @@ end
     to = get_location(texture)
     @test to - from ≈ [0.5, 0.5] atol=0.02
 
-    exit(0)
+    @test quit()
     @test istaskdone(app.task)
   end
 end;
