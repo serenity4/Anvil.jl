@@ -94,7 +94,7 @@ struct RenderingSystem <: System
 end
 
 function shutdown(system::RenderingSystem)
-  wait(ConcurrencyGraph.shutdown(system.renderer.task))
+  wait(CooperativeTasks.shutdown(system.renderer.task))
   wait(system.renderer.device)
 end
 

@@ -28,7 +28,7 @@
             "path": "../GeometryExperiments",
         },
         {
-            "path": "../ConcurrencyGraph"
+            "path": "../CooperativeTasks"
         },
         {
             "path": "../OpenType"

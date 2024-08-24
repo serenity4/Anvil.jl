@@ -2,7 +2,7 @@ using Givre, Test, Logging, DataFrames
 
 Logging.disable_logging(Logging.Info)
 ENV["JULIA_DEBUG"] = "Givre"
-# ENV["JULIA_DEBUG"] = "Givre,ConcurrencyGraph"
+# ENV["JULIA_DEBUG"] = "Givre,CooperativeTasks"
 # ENV["GIVRE_LOG_FRAMECOUNT"] = false
 # ENV["GIVRE_RELEASE"] = true # may circumvent issues with validation layers
 

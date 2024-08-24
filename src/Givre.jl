@@ -20,7 +20,7 @@ const RENDERER_THREADID = 3
 using CompileTraces
 using ColorTypes
 using Lava
-using ConcurrencyGraph
+using CooperativeTasks
 using Lava: Command
 using ShaderLibrary
 using ShaderLibrary: Instance, aspect_ratio
