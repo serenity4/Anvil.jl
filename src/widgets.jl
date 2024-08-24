@@ -245,6 +245,7 @@ end
   items::Vector{MenuItem}
   direction::Direction
   expanded::Bool
+  overlay::EntityID # entity that overlays the whole window on menu expand
 end
 
 constituents(menu::Menu) = [menu.head; menu.items]
@@ -270,22 +271,8 @@ function select_item(menu::Menu, item::MenuItem)
 end
 
 function Menu(head, items::Vector{MenuItem}, direction::Direction = DIRECTION_VERTICAL)
-  menu = new_widget(Menu, identity, head, items, direction, false)
+  menu = new_widget(Menu, identity, head, items, direction, false, new_entity())
   menu.on_input = function (input::Input)
-    if menu.expanded
-      matches(key"enter", input.event) && return select_active_item(menu)
-      if matches(key"up", input.event) || matches(key"down", input.event)
-        navigate_to_next_item(menu, ifelse(matches(key"up", input.event), -1, 1))
-      end
-    end
-
-    input.type === BUTTON_PRESSED || return
-
-    click = input.event.mouse_event.button
-    if in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN))
-      navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
-    end
-
     # Expand the menu if the head is left-clicked (only the head is reachable if collapsed).
     is_left_click(input) && !menu.expanded && return expand!(menu)
 
@@ -334,12 +321,36 @@ function synchronize(menu::Menu)
         input.type === POINTER_EXITED && set_inactive(item)
       end)
     end
+    window = app.windows[app.window]
+    set_location(menu.overlay, get_location(window))
+    set_geometry(menu.overlay, get_geometry(window))
+    set_z(menu.overlay, 100)
+    set_input_handler(menu.overlay, InputComponent(BUTTON_PRESSED | KEY_PRESSED, NO_ACTION) do input::Input
+      propagate!(input, app.systems.event.ui.areas[menu.id]) && return
+
+      if input.type === KEY_PRESSED
+        matches(key"enter", input.event) && return select_active_item(menu)
+        if matches(key"up", input.event) || matches(key"down", input.event)
+          navigate_to_next_item(menu, ifelse(matches(key"up", input.event), -1, 1))
+        end
+      end
+
+      input.type === BUTTON_PRESSED || return
+
+      click = input.event.mouse_event.button
+      if in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN))
+        navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
+      else
+        collapse!(menu)
+      end
+    end)
   else
     foreach(disable!, menu.items)
+    unset_input_handler(menu.overlay)
   end
   set_geometry(menu, menu_geometry(menu))
   place_items(menu)
-  set_input_handler(menu, InputComponent(menu.on_input, BUTTON_PRESSED | KEY_PRESSED, NO_ACTION))
+  set_input_handler(menu, InputComponent(menu.on_input, BUTTON_PRESSED, NO_ACTION))
 end
 
 function menu_geometry(menu::Menu)

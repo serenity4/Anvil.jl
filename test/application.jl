@@ -142,6 +142,7 @@ end
     ## Key-based navigation.
     move_cursor(file_menu)
     left_click()
+    move_cursor(get_location(file_menu) .+ (1.0, 0.0))
     press_key(:UP)
     synchronize()
     @test Givre.active_item(file_menu) === item_2
@@ -150,7 +151,9 @@ end
     @test Givre.active_item(file_menu) === nothing
     @test !file_menu.expanded
 
+    move_cursor(file_menu)
     left_click()
+    move_cursor(get_location(file_menu) .+ (1.0, 0.0))
     press_key(:UP)
     press_key(:UP)
     synchronize()
@@ -172,6 +175,7 @@ end
     ## Wheel-based navigation.
     move_cursor(file_menu)
     left_click()
+    move_cursor(get_location(file_menu) .+ (1.0, 0.0))
     scroll_up()
     synchronize()
     @test Givre.active_item(file_menu) === item_2
