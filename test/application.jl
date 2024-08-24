@@ -30,11 +30,21 @@ function send(event_type, data = nothing; location = CURSOR[], time = time())
   sleep(0.01)
 end
 
-press_key(key; modifiers = NO_MODIFIERS) = send(KEY_PRESSED, KeyEvent(app.wm.keymap, PhysicalKey(app.wm.keymap, key), modifiers))
-function left_click()
-  send(BUTTON_PRESSED, MouseEvent(BUTTON_LEFT, BUTTON_STATE[]); location = CURSOR[])
-  send(BUTTON_RELEASED, MouseEvent(BUTTON_LEFT, BUTTON_STATE[]); location = CURSOR[])
+function press_button(button; release = true)
+  send(BUTTON_PRESSED, MouseEvent(button, BUTTON_STATE[]); location = CURSOR[])
+  release && send(BUTTON_RELEASED, MouseEvent(button, BUTTON_STATE[]); location = CURSOR[])
+  nothing
 end
+
+function press_key(key; modifiers = NO_MODIFIERS, release = true)
+  send(KEY_PRESSED, KeyEvent(app.wm.keymap, PhysicalKey(app.wm.keymap, key), modifiers))
+  release && send(KEY_RELEASED, KeyEvent(app.wm.keymap, PhysicalKey(app.wm.keymap, key), modifiers))
+  nothing
+end
+
+left_click() = press_button(BUTTON_LEFT)
+scroll_up(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_UP), 1:n)
+scroll_down(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_UP), 1:n)
 
 function drag(to)
   send(BUTTON_PRESSED, MouseEvent(BUTTON_LEFT, BUTTON_STATE[]); location = CURSOR[])
@@ -154,6 +164,24 @@ end
     synchronize()
     @test count(Givre.isactive, file_menu.items) == 1
     @test Givre.active_item(file_menu) === item_1
+    press_key(:RTRN)
+    synchronize()
+    @test Givre.active_item(file_menu) === nothing
+    @test !file_menu.expanded
+
+    ## Wheel-based navigation.
+    move_cursor(file_menu)
+    left_click()
+    scroll_up()
+    synchronize()
+    @test Givre.active_item(file_menu) === item_2
+    scroll_down()
+    synchronize()
+    @test Givre.active_item(file_menu) === item_1
+    press_key(:RTRN)
+    synchronize()
+    @test Givre.active_item(file_menu) === nothing
+    @test !file_menu.expanded
 
     # Checkbox.
 

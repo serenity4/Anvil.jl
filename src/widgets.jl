@@ -289,8 +289,7 @@ function Menu(head, items::Vector{MenuItem}, direction::Direction = DIRECTION_VE
     # Expand the menu if the head is left-clicked (only the head is reachable if collapsed).
     is_left_click(input) && !menu.expanded && return expand!(menu)
 
-    # Propagate the event to menu items, triggering the selection of the target item
-    # and allowing the detection of pointer enters/exits for pointer-based activation.
+    # Propagate the event to menu items, triggering the selection of the target item.
     subareas = InputArea[]
     push!(subareas, app.systems.event.ui.areas[menu.head])
     append!(subareas, app.systems.event.ui.areas[item.id] for item in menu.items)
