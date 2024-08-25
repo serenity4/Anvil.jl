@@ -37,6 +37,7 @@ using AbstractGUI: Input, consume!, propagate!
 using InteractiveUtils: subtypes
 using Dictionaries
 using StaticArrays: @SVector, SVector
+using StyledStrings
 
 const Window = XCBWindow
 const WindowManager = XWindowManager

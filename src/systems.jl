@@ -141,14 +141,11 @@ function render_transparent_objects((; renderer)::RenderingSystem, ecs::ECSDatab
 
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
     location = Point3f(location..., -1/z)
-    command = @match object.type begin
-      &RENDER_OBJECT_TEXT => begin
-        text = object.primitive_data::ShaderLibrary.Text
-        renderables(program_cache, text, parameters_ssaa, location)
-      end
-      _ => continue
+    @tryswitch object.type begin
+      @case &RENDER_OBJECT_TEXT
+      text = object.primitive_data::ShaderLibrary.Text
+      append!(commands, renderables(program_cache, text, parameters_ssaa, location))
     end
-    push!(commands, command)
   end
   RenderNode(commands)
 end

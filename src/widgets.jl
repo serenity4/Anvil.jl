@@ -115,7 +115,7 @@ function synchronize(rect::Rectangle)
 end
 
 @widget struct Text
-  text::String
+  text::Base.AnnotatedString{String}
   size::Float64
   font::String
   script::Tag4
@@ -123,13 +123,12 @@ end
 end
 
 function synchronize(text::Text)
-  (; id) = text
   font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
   options = TextOptions()
-  text = ShaderLibrary.Text(OpenType.Text(text.text, options), get_font(text.font), font_options)
-  geometry = boundingelement(text, extent(app.window))
-  set_geometry(id, geometry)
-  set_render(id, RenderComponent(RENDER_OBJECT_TEXT, nothing, text))
+  shader = ShaderLibrary.Text(OpenType.Text(text.text, options), get_font(text.font), font_options)
+  geometry = boundingelement(shader, extent(app.window))
+  set_geometry(text, geometry)
+  set_render(text, RenderComponent(RENDER_OBJECT_TEXT, nothing, shader))
 end
 
 function Text(text::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ")
