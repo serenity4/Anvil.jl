@@ -8,6 +8,8 @@ mutable struct Application
   systems::Systems
   fonts::Dict{String, OpenTypeFont}
   is_release::Bool
+  bindings::KeyBindings
+  show_shortcuts::Bool
   Application() = new()
 end
 
@@ -44,6 +46,13 @@ function initialize()
   app.windows = Dict(window => window_id)
   app.systems = systems
   app.fonts = Dict()
+  app.show_shortcuts = false
+
+  bind(exit, key"ctrl+q")
+  bind(key"alt_left") do
+    app.show_shortcuts = !app.show_shortcuts
+    set_contextual_shortcuts_visibility(app.show_shortcuts)
+  end
 
   initialize_components()
   start(systems.rendering.renderer)
@@ -115,6 +124,12 @@ get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
 set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID] = widget
 get_window(entity) = app.ecs[entity, WINDOW_COMPONENT_ID]::Window
 set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID] = window
+
+bind(f::Callable, key::KeyCombination) = bind(key => f)
+bind(f::Callable, bindings::Pair...) = bind!(f, app.systems.event.ui.bindings, bindings...)
+bind(bindings::Pair...) = bind!(app.systems.event.ui.bindings, bindings...)
+bind(bindings::AbstractVector) = bind!(app.systems.event.ui.bindings, bindings)
+unbind(token) = unbind!(app.systems.event.ui.bindings, token)
 
 font_file(font_name) = joinpath(pkgdir(Givre), "assets", "fonts", font_name * ".ttf")
 get_font(name::AbstractString) = get!(() -> OpenTypeFont(font_file(name)), app.fonts, name)

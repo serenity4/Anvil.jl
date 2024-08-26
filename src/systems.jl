@@ -157,8 +157,9 @@ struct UserInterface
   entities::Dict{InputArea, EntityID}
   areas::Dict{EntityID, InputArea}
   window::Window
+  bindings::KeyBindings
 end
-UserInterface(window::Window) = UserInterface(UIOverlay{Window}(), Dict(), Dict(), window)
+UserInterface(window::Window) = UserInterface(UIOverlay{Window}(), Dict(), Dict(), window, KeyBindings())
 
 function Base.insert!(ui::UserInterface, entity::EntityID, area::InputArea)
   ui.entities[area] = entity
@@ -209,7 +210,7 @@ function to_window_coordinate_system((x, y), window::Window)
 end
 
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
-  event.type == KEY_PRESSED && matches(key"ctrl+q", event) && return 0
+  event.type == KEY_PRESSED && execute_binding(system.ui.bindings, event.key_event)
   event.type == WINDOW_RESIZED && (set_geometry(app.windows[event.win], window_geometry(event.win)))
   update_overlays!(system, ecs)
   consume!(system.ui.overlay, event)

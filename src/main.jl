@@ -1,31 +1,27 @@
-struct Exit
-  code::Int
-end
-
-function quit()
-  execute(app.task) do
-    exit(0)
-    schedule_shutdown()
+function exit(code::Int = 0)
+  if current_task() === app.task
+    _exit(code)
+    true
+  else
+    execute(_exit, app.task, code)
+    wait(app)
   end
-  wait(app)
 end
 
-function exit(code::Int)
+function _exit(code::Int)
   shutdown(app)
   close(app.wm, app.window)
-  @debug "Exiting application" * (!iszero(code) ? "(exit code: $(code))" : "")
-  Exit(code)
+  @debug "Exiting application" * (!iszero(code) ? " (exit code: $(code))" : "")
+  schedule_shutdown()
+  code
 end
 
 function (app::Application)()
+  shutdown_scheduled() && return
   # Make sure that the drawing order (which also defines interaction order)
   # has been resolved prior to resolving which object receives which event based on that order.
   run_systems()
-  code = app.systems.event(app.ecs)
-  if isa(code, Int)
-    exit(code)
-    schedule_shutdown()
-  end
+  app.systems.event(app.ecs)
 end
 
 function main(; async = false)
@@ -99,7 +95,7 @@ function initialize_components()
   file_menu_item_2 = MenuItem(Text("Open..."), Box(P2(0.15, 0.05))) do
     button.background.color = RGB{Float32}(0.3, 0.2, 0.1)
   end
-  file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2])
+  file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2], 'F')
   add_constraint(attach(at(file_menu, :corner, :top_left), at(app.windows[app.window], :corner, :top_left)))
   @set_name file_menu
 
@@ -109,7 +105,7 @@ function initialize_components()
     new_image = fetch(execute(random_image, app.systems.rendering.renderer.task))
     set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image)))
   end
-  edit_menu = Menu(edit_menu_head, [edit_menu_item_1])
+  edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
   add_constraint(attach(at(edit_menu, :corner, :top_left), at(file_menu, :corner, :top_right)))
   @set_name edit_menu
 

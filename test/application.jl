@@ -1,5 +1,5 @@
 using Givre
-using Givre: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_rendering_coordinate_system, to_window_coordinate_system
+using Givre: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_rendering_coordinate_system, to_window_coordinate_system, exit
 using CooperativeTasks: execute
 using LinearAlgebra: norm
 using XCB
@@ -7,73 +7,15 @@ using WindowAbstractions
 using Test
 using Logging: Logging
 using MLStyle: @match
+using StyledStrings: annotations, getface
 
 Logging.disable_logging(Logging.Info)
 ENV["GIVRE_LOG_FRAMECOUNT"] = false
 
-CURSOR = Ref((0.5, 0.5))
-BUTTON_STATE = Ref(BUTTON_NONE)
-MODIFIER_STATE = Ref(NO_MODIFIERS)
+include("virtual_inputs.jl")
 
-function send(event_type, data = nothing; location = CURSOR[], time = time())
-  event = Event(event_type, data, location, time, app.window)
-  @match event.type begin
-    &BUTTON_PRESSED => (BUTTON_STATE[] |= event.mouse_event.button)
-    &BUTTON_RELEASED => (BUTTON_STATE[] = BUTTON_STATE[] & ~event.mouse_event.button)
-    &KEY_PRESSED || &KEY_RELEASED => begin
-      modifier = ModifierState(event.key_event.key)
-      event.type == KEY_PRESSED ? (MODIFIER_STATE[] |= modifier) : (MODIFIER_STATE[] &= ~modifier)
-    end
-  end
-  send_event(app.wm, event)
-  # Let some time for the X server to process the event and send it to the application.
-  sleep(0.01)
-end
-
-function press_button(button; release = true)
-  send(BUTTON_PRESSED, MouseEvent(button, BUTTON_STATE[]); location = CURSOR[])
-  release && send(BUTTON_RELEASED, MouseEvent(button, BUTTON_STATE[]); location = CURSOR[])
-  nothing
-end
-
-function press_key(key; modifiers = NO_MODIFIERS, release = true)
-  send(KEY_PRESSED, KeyEvent(app.wm.keymap, PhysicalKey(app.wm.keymap, key), modifiers))
-  release && send(KEY_RELEASED, KeyEvent(app.wm.keymap, PhysicalKey(app.wm.keymap, key), modifiers))
-  nothing
-end
-
-left_click() = press_button(BUTTON_LEFT)
-scroll_up(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_UP), 1:n)
-scroll_down(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_UP), 1:n)
-
-function drag(to)
-  send(BUTTON_PRESSED, MouseEvent(BUTTON_LEFT, BUTTON_STATE[]); location = CURSOR[])
-  move_cursor(to)
-end
-drop() = send(BUTTON_RELEASED, MouseEvent(BUTTON_LEFT, BUTTON_STATE[]); location = CURSOR[])
-
-move_cursor(widget::Widget; spatial_resolution = 0.01) = move_cursor(get_location(widget); spatial_resolution)
-move_cursor(entity::EntityID; spatial_resolution = 0.01) = move_cursor(get_location(entity); spatial_resolution)
-
-function move_cursor(location; spatial_resolution = 0.01)
-  from = CURSOR[]
-  to = to_window_coordinate_system(location, app.window)
-  from == to && return
-  CURSOR[] = to
-  points = linear_path(from, to, spatial_resolution)
-  for point in points
-    send_event(app.wm, app.window, POINTER_MOVED, PointerState(BUTTON_STATE[], MODIFIER_STATE[]); location = point)
-  end
-  sleep(0.01)
-end
-
-function linear_path(from::NTuple{2}, to::NTuple{2}, spatial_resolution::Real)
-  diag = to .- from
-  steps = collect(0.0:spatial_resolution:1.0)
-  !in(1.0, steps) && push!(steps, 1.0)
-  popfirst!(steps) # remove `from`
-  unique!([from .+ step .* diag for step in steps])
-end
+# While executing this testset, do not provide any input of any sort to the windows that pop up.
+# Otherwise, tests will fail due to unexpected interactions.
 
 @testset "Application" begin
   @testset "Application start/exit" begin
@@ -187,6 +129,15 @@ end
     @test Givre.active_item(file_menu) === nothing
     @test !file_menu.expanded
 
+    ## Shortcut navigation.
+    move_cursor(file_menu)
+    left_click()
+    synchronize()
+    @test file_menu.expanded
+    press_key(:AB06)
+    synchronize()
+    @test !file_menu.expanded
+
     # Checkbox.
 
     checkbox = get_widget(:checkbox)
@@ -214,7 +165,32 @@ end
     to = get_location(texture)
     @test to - from ≈ [0.5, 0.5] atol=0.02
 
-    @test quit()
+    # Shortcut display.
+
+    (; text) = item_1.text
+    @test annotations(text, 1) == []
+    move_cursor(file_menu)
+    left_click()
+    press_key(:LALT)
+    synchronize()
+    @test annotations(text, 1) == [(1:1, :face => :application_shortcut_show)]
+    face = getface(last.(annotations(text)))
+    @test face.underline === true
+    press_key(:LALT)
+    synchronize()
+    @test annotations(text, 1) == [(1:1, :face => :application_shortcut_hide)]
+    face = getface(last.(annotations(text)))
+    @test face.underline === false
+    press_key(:LALT)
+    synchronize()
+    @test annotations(text, 1) == [(1:1, :face => :application_shortcut_show)]
+    face = getface(last.(annotations(text)))
+    @test face.underline === true
+    left_click() # close menu
+    synchronize()
+    @test annotations(text, 1) == []
+
+    @test exit()
     @test istaskdone(app.task)
   end
 end;

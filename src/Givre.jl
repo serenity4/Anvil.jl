@@ -10,6 +10,7 @@ This list is assumed to be owned by the renderer when returned by the applicatio
 ## Environment variables
 
 - `GIVRE_LOG_FRAMECOUNT = "true"`: When set to `true`, log the current frame and related timings in the REPL while executing `main`.
+- `GIVRE_LOG_KEY_PRESS = "false"`: When set to `true`, log all key presses to stdout.
 - `GIVRE_RELEASE = "false"`: When set to `true`, the renderer will not use validation layers and will not use debugging utilities.
 """
 module Givre
@@ -20,24 +21,26 @@ const RENDERER_THREADID = 3
 using CompileTraces
 using ColorTypes
 using Lava
-using CooperativeTasks
 using Lava: Command
+using CooperativeTasks: CooperativeTasks, nthreads, execute, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, reset_mpi_state, monitor_children, shutdown_scheduled, schedule_shutdown, shutdown_children, task_owner
 using ShaderLibrary
 using ShaderLibrary: Instance, aspect_ratio
 using OpenType
 using OpenType: Tag4
 using Accessors: @set, setproperties
 using GeometryExperiments
-using Accessors
 using XCB
 using Entities
 using MLStyle
 using AbstractGUI
 using AbstractGUI: Input, consume!, propagate!
-using InteractiveUtils: subtypes
 using Dictionaries
 using StaticArrays: @SVector, SVector
+
+using Base: Callable, annotate!, annotations
 using StyledStrings
+using StyledStrings: eachregion, Face, addface!
+using InteractiveUtils: subtypes
 
 const Window = XCBWindow
 const WindowManager = XWindowManager
@@ -53,6 +56,7 @@ const P2f = Point2f
 include("renderer.jl")
 include("components.jl")
 include("layout.jl")
+include("bindings.jl")
 include("widgets.jl")
 include("systems.jl")
 include("application.jl")
@@ -64,7 +68,12 @@ const WINDOW_ENTITY_COUNTER = Entities.Counter()
 
 @compile_traces "precompilation_traces.jl"
 
-export main, reset_mpi_state, app, quit,
+function __init__()
+  addface!(:application_shortcut_show => Face(underline = true))
+  addface!(:application_shortcut_hide => Face(underline = false))
+end
+
+export main, app,
        RenderComponent,
        InputComponent
 

@@ -135,6 +135,51 @@ function Text(text::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, scr
   new_widget(Text, text, size, font, script, language)
 end
 
+function unset_shortcut((; text)::Text, shortcut::Char)
+  for i in eachindex(text)
+    char = text[i]
+    if lowercase(char) == shortcut
+      range = i:(nextind(text, i) - 1)
+      prev = annotations(text, range)
+      j = findfirst(prev) do (_, (label, value))
+        label === :face && in(value, (:application_shortcut_show, :application_shortcut_hide))
+      end
+      isnothing(j) && return false
+      region = prev[j][1]
+      faces = findall(prev) do (_region, (label, value))
+        label === :face && _region == region
+      end
+      if length(faces) == 1
+        annotate!(text, region, :face => nothing)
+      else
+        annotate!(text, region, :face => nothing)
+        for face in faces
+          face == j && continue
+          annotate!(text, region, :face => prev[face][2][2])
+        end
+      end
+      return true
+    end
+  end
+end
+
+function set_shortcut((; text)::Text, shortcut::Char)
+  for i in eachindex(text)
+    char = text[i]
+    if lowercase(char) == shortcut
+      range = i:(nextind(text, i) - 1)
+      prev = annotations(text, range)
+      any(prev) do (range, (label, value))
+        label === :face && in(value, (:application_shortcut_show, :application_shortcut_hide))
+      end && return true
+      annotation = ifelse(app.show_shortcuts, :application_shortcut_show, :application_shortcut_hide)
+      annotate!(text, range, :face => annotation)
+      return true
+    end
+  end
+  false
+end
+
 @widget struct Button
   on_input::Function
   background::Rectangle
@@ -210,6 +255,7 @@ end
   const text::Text
   # Whether the item is currently active in navigation (pointer actively over it, navigation via keyboard)
   active::Bool
+  shortcut::Char
 end
 
 constituents(item::MenuItem) = [item.background, item.text]
@@ -223,9 +269,9 @@ set_active(item::MenuItem) = (item.active = true)
 set_inactive(item::MenuItem) = (item.active = false)
 isactive(item::MenuItem) = item.active
 
-function MenuItem(on_selected, text, geometry)
+function MenuItem(on_selected, text, geometry; shortcut = first(text.text))
   background = Rectangle(geometry, MENU_ITEM_COLOR)
-  new_widget(MenuItem, on_selected, background, text, false)
+  new_widget(MenuItem, on_selected, background, text, false, lowercase(shortcut))
 end
 
 function synchronize(item::MenuItem)
@@ -245,6 +291,8 @@ end
   direction::Direction
   expanded::Bool
   overlay::EntityID # entity that overlays the whole window on menu expand
+  shortcuts::Union{Nothing, KeyBindingsToken}
+  shortcut::Char
 end
 
 constituents(menu::Menu) = [menu.head; menu.items]
@@ -269,8 +317,8 @@ function select_item(menu::Menu, item::MenuItem)
   collapse!(menu)
 end
 
-function Menu(head, items::Vector{MenuItem}, direction::Direction = DIRECTION_VERTICAL)
-  menu = new_widget(Menu, identity, head, items, direction, false, new_entity())
+function Menu(head, items::Vector{MenuItem}, shortcut::Char, direction::Direction = DIRECTION_VERTICAL)
+  menu = new_widget(Menu, identity, head, items, direction, false, new_entity(), 0, lowercase(shortcut))
   menu.on_input = function (input::Input)
     # Expand the menu if the head is left-clicked (only the head is reachable if collapsed).
     is_left_click(input) && !menu.expanded && return expand!(menu)
@@ -289,11 +337,11 @@ function select_active_item(menu::Menu)
   !isnothing(item) && select_item(menu, item)
 end
 
-function navigate_to_next_item(menu::Menu, direction)
-  i = findfirst(isactive, menu.items)
-  next = !isnothing(i) ? mod1(i + direction, length(menu.items)) : ifelse(direction == 1, 1, lastindex(menu.items))
-  !isnothing(i) && set_inactive(menu.items[i])
-  set_active(menu.items[next])
+function navigate_to_next_item(menu::Menu, direction, items = menu.items)
+  i = findfirst(isactive, items)
+  next = !isnothing(i) ? mod1(i + direction, length(items)) : ifelse(direction == 1, 1, lastindex(items))
+  !isnothing(i) && set_inactive(items[i])
+  set_active(items[next])
 end
 
 function set_active(menu::Menu, item::MenuItem)
@@ -303,11 +351,45 @@ function set_active(menu::Menu, item::MenuItem)
 end
 
 function expand!(menu::Menu)
+  menu.expanded && return false
+  register_shortcuts!(menu)
   menu.expanded = true
 end
+
 function collapse!(menu::Menu)
   foreach(set_inactive, menu.items)
+  unregister_shortcuts!(menu)
   menu.expanded = false
+end
+
+function register_shortcuts!(menu::Menu)
+  menu.shortcuts === nothing || unbind(menu.shortcuts)
+  shortcuts = [item.shortcut for item in menu.items]
+  bindings = Pair{KeyCombination, Callable}[]
+  for (item, shortcut) in zip(menu.items, shortcuts)
+    set_shortcut(item.text, shortcut)
+    indices = findall(==(shortcut), shortcuts)
+    key = KeyCombination(string(shortcut))
+    if length(indices) == 1
+      push!(bindings, key => let item = item
+        () -> select_item(menu, item)
+      end)
+    else
+      push!(bindings, key => let items = menu.items[indices]
+        () -> navigate_to_next_item(menu, 1, items)
+      end)
+    end
+  end
+  menu.shortcuts = bind(bindings)
+end
+
+function unregister_shortcuts!(menu::Menu)
+  menu.shortcuts === nothing && return
+  unbind(menu.shortcuts)
+  for item in menu.items
+    unset_shortcut(item.text, item.shortcut)
+  end
+  menu.shortcuts = nothing
 end
 
 function synchronize(menu::Menu)
