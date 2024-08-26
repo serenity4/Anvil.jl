@@ -269,7 +269,7 @@ set_active(item::MenuItem) = (item.active = true)
 set_inactive(item::MenuItem) = (item.active = false)
 isactive(item::MenuItem) = item.active
 
-function MenuItem(on_selected, text, geometry; shortcut = first(text.text))
+function MenuItem(on_selected, text, geometry, shortcut = first(text.text))
   background = Rectangle(geometry, MENU_ITEM_COLOR)
   new_widget(MenuItem, on_selected, background, text, false, lowercase(shortcut))
 end

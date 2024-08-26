@@ -95,7 +95,8 @@ function initialize_components()
   file_menu_item_2 = MenuItem(Text("Open..."), Box(P2(0.15, 0.05))) do
     button.background.color = RGB{Float32}(0.3, 0.2, 0.1)
   end
-  file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2], 'F')
+  file_menu_item_3 = MenuItem(exit, Text("Exit"), Box(P2(0.15, 0.05)), 'x')
+  file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2, file_menu_item_3], 'F')
   add_constraint(attach(at(file_menu, :corner, :top_left), at(app.windows[app.window], :corner, :top_left)))
   @set_name file_menu
 

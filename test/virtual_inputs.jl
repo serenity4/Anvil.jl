@@ -31,7 +31,7 @@ end
 
 left_click() = press_button(BUTTON_LEFT)
 scroll_up(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_UP), 1:n)
-scroll_down(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_UP), 1:n)
+scroll_down(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_DOWN), 1:n)
 
 function drag(to)
   send(BUTTON_PRESSED, MouseEvent(BUTTON_LEFT, BUTTON_STATE[]); location = CURSOR[])

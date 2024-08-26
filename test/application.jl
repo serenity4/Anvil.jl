@@ -48,95 +48,96 @@ include("virtual_inputs.jl")
 
     # Menu.
 
-    file_menu = get_widget(:file_menu)
-    @test !file_menu.expanded
+    menu = get_widget(:file_menu)
+    @test !menu.expanded
 
-    move_cursor(file_menu)
+    move_cursor(menu)
     left_click()
     synchronize()
-    @test file_menu.expanded
-    @test Givre.active_item(file_menu) === nothing
-
-    left_click()
-    synchronize()
-    @test !file_menu.expanded
-    @test Givre.active_item(file_menu) === nothing
+    @test menu.expanded
+    @test Givre.active_item(menu) === nothing
 
     left_click()
     synchronize()
-    @test file_menu.expanded
+    @test !menu.expanded
+    @test Givre.active_item(menu) === nothing
 
-    item_1 = get_widget(:file_menu_item_1)
+    left_click()
+    synchronize()
+    @test menu.expanded
+
+    item_1 = menu.items[1]
     move_cursor(item_1)
     synchronize()
-    @test Givre.active_item(file_menu) === item_1
+    @test Givre.active_item(menu) === item_1
 
-    item_2 = get_widget(:file_menu_item_2)
+    item_2 = menu.items[2]
     move_cursor(item_2)
     synchronize()
-    @test Givre.active_item(file_menu) === item_2
+    @test Givre.active_item(menu) === item_2
 
     left_click()
     synchronize()
-    @test !file_menu.expanded
-    @test Givre.active_item(file_menu) === nothing
+    @test !menu.expanded
+    @test Givre.active_item(menu) === nothing
 
     ## Key-based navigation.
-    move_cursor(file_menu)
+    move_cursor(menu)
     left_click()
-    move_cursor(get_location(file_menu) .+ (1.0, 0.0))
+    move_cursor(get_location(menu) .+ (1.0, 0.0))
     press_key(:UP)
     synchronize()
-    @test Givre.active_item(file_menu) === item_2
+    @test Givre.active_item(menu) === menu.items[end]
+    press_key(:UP)
     press_key(:RTRN)
     synchronize()
-    @test Givre.active_item(file_menu) === nothing
-    @test !file_menu.expanded
+    @test Givre.active_item(menu) === nothing
+    @test !menu.expanded
 
-    move_cursor(file_menu)
+    move_cursor(menu)
     left_click()
-    move_cursor(get_location(file_menu) .+ (1.0, 0.0))
+    move_cursor(get_location(menu) .+ (1.0, 0.0))
     press_key(:UP)
     press_key(:UP)
     synchronize()
-    @test count(Givre.isactive, file_menu.items) == 1
-    @test Givre.active_item(file_menu) === item_1
+    @test count(Givre.isactive, menu.items) == 1
+    @test Givre.active_item(menu) === menu.items[end - 1]
     press_key(:DOWN)
     synchronize()
-    @test count(Givre.isactive, file_menu.items) == 1
-    @test Givre.active_item(file_menu) === item_2
+    @test count(Givre.isactive, menu.items) == 1
+    @test Givre.active_item(menu) === menu.items[end]
     move_cursor(item_1)
     synchronize()
-    @test count(Givre.isactive, file_menu.items) == 1
-    @test Givre.active_item(file_menu) === item_1
+    @test count(Givre.isactive, menu.items) == 1
+    @test Givre.active_item(menu) === item_1
     press_key(:RTRN)
     synchronize()
-    @test Givre.active_item(file_menu) === nothing
-    @test !file_menu.expanded
+    @test Givre.active_item(menu) === nothing
+    @test !menu.expanded
 
     ## Wheel-based navigation.
-    move_cursor(file_menu)
+    move_cursor(menu)
     left_click()
-    move_cursor(get_location(file_menu) .+ (1.0, 0.0))
+    move_cursor(get_location(menu) .+ (1.0, 0.0))
     scroll_up()
     synchronize()
-    @test Givre.active_item(file_menu) === item_2
+    @test Givre.active_item(menu) === menu.items[end]
     scroll_down()
     synchronize()
-    @test Givre.active_item(file_menu) === item_1
+    @test Givre.active_item(menu) === item_1
     press_key(:RTRN)
     synchronize()
-    @test Givre.active_item(file_menu) === nothing
-    @test !file_menu.expanded
+    @test Givre.active_item(menu) === nothing
+    @test !menu.expanded
 
     ## Shortcut navigation.
-    move_cursor(file_menu)
+    move_cursor(menu)
     left_click()
     synchronize()
-    @test file_menu.expanded
+    @test menu.expanded
     press_key(:AB06)
     synchronize()
-    @test !file_menu.expanded
+    @test !menu.expanded
 
     # Checkbox.
 
@@ -169,7 +170,7 @@ include("virtual_inputs.jl")
 
     (; text) = item_1.text
     @test annotations(text, 1) == []
-    move_cursor(file_menu)
+    move_cursor(menu)
     left_click()
     press_key(:LALT)
     synchronize()
@@ -190,7 +191,10 @@ include("virtual_inputs.jl")
     synchronize()
     @test annotations(text, 1) == []
 
-    @test exit()
+    move_cursor(menu)
+    left_click()
+    press_key(:AB02) # 'x' to exit
+    wait(app)
     @test istaskdone(app.task)
   end
 end;
