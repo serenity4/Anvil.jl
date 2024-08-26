@@ -380,6 +380,9 @@ function register_shortcuts!(menu::Menu)
       end)
     end
   end
+  push!(bindings, key"enter" => () -> select_active_item(menu))
+  push!(bindings, key"up" => () -> navigate_to_next_item(menu, -1))
+  push!(bindings, key"down" => () -> navigate_to_next_item(menu, 1))
   menu.shortcuts = bind(bindings)
 end
 
@@ -406,24 +409,11 @@ function synchronize(menu::Menu)
     set_location(menu.overlay, get_location(window))
     set_geometry(menu.overlay, get_geometry(window))
     set_z(menu.overlay, 100)
-    set_input_handler(menu.overlay, InputComponent(BUTTON_PRESSED | KEY_PRESSED, NO_ACTION) do input::Input
+    set_input_handler(menu.overlay, InputComponent(BUTTON_PRESSED, NO_ACTION) do input::Input
       propagate!(input, app.systems.event.ui.areas[menu.id]) && return
-
-      if input.type === KEY_PRESSED
-        matches(key"enter", input.event) && return select_active_item(menu)
-        if matches(key"up", input.event) || matches(key"down", input.event)
-          navigate_to_next_item(menu, ifelse(matches(key"up", input.event), -1, 1))
-        end
-      end
-
-      input.type === BUTTON_PRESSED || return
-
       click = input.event.mouse_event.button
-      if in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN))
-        navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
-      else
-        collapse!(menu)
-      end
+      !in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN)) && return collapse!(menu)
+      navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
     end)
   else
     foreach(disable!, menu.items)
