@@ -8,7 +8,6 @@ mutable struct Application
   systems::Systems
   fonts::Dict{String, OpenTypeFont}
   is_release::Bool
-  bindings::KeyBindings
   show_shortcuts::Bool
   Application() = new()
 end

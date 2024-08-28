@@ -269,9 +269,9 @@ set_active(item::MenuItem) = (item.active = true)
 set_inactive(item::MenuItem) = (item.active = false)
 isactive(item::MenuItem) = item.active
 
-function MenuItem(on_selected, text, geometry, shortcut = first(text.text))
+function MenuItem(on_selected, text, geometry, shortcut = lowercase(first(text.text)))
   background = Rectangle(geometry, MENU_ITEM_COLOR)
-  new_widget(MenuItem, on_selected, background, text, false, lowercase(shortcut))
+  new_widget(MenuItem, on_selected, background, text, false, shortcut)
 end
 
 function synchronize(item::MenuItem)
@@ -369,7 +369,7 @@ function register_shortcuts!(menu::Menu)
   for (item, shortcut) in zip(menu.items, shortcuts)
     set_shortcut(item.text, shortcut)
     indices = findall(==(shortcut), shortcuts)
-    key = KeyCombination(string(shortcut))
+    key = KeyCombination(shortcut)
     if length(indices) == 1
       push!(bindings, key => let item = item
         () -> select_item(menu, item)

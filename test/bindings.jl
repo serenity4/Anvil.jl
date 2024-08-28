@@ -33,13 +33,13 @@ key_event(key::Symbol) = KeyEvent(km, PhysicalKey(km, key))
   end
   @test isempty(kb)
 
-  token = bind!(kb, key"f" => set(2), [key"g", key"h"] => set(3))
+  token = bind!(kb, key"f" => set(2), [key"g", key")"] => set(3))
   token2 = bind!(kb, key"g" => set(4))
   execute_binding(kb, key_event(:AC04))
   @test value[] == 2
   execute_binding(kb, key_event(:AC05))
   @test value[] == 4
-  execute_binding(kb, key_event(:AC06))
+  execute_binding(kb, key_event(:AE11))
   @test value[] == 3
 
   unbind!(kb, token)
