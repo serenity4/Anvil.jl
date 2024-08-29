@@ -1,4 +1,4 @@
-using Givre, Test, Logging, DataFrames
+using Givre, Test, Logging
 using Givre: exit
 
 Logging.disable_logging(Logging.Info)
@@ -17,11 +17,13 @@ ENV["JULIA_DEBUG"] = "Givre"
   include("layout.jl")
   include("bindings.jl")
   include("application.jl")
-end
+end;
+
+using DataFrames
 df = DataFrame(Givre.app.ecs)
-select(df, :Entity, :Render, :Input)
-select(df, :Entity, :Z)
-select(df, :Entity, :Location)
+select(df, :Name, :Render, :Input)
+select(df, :Name, :Z)
+select(df, :Name, :Location)
 df.Name .=> df.Input
 
 GC.gc()
