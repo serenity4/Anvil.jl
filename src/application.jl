@@ -79,6 +79,16 @@ function set_name(entity::EntityID, name::Symbol)
   nothing
 end
 
+macro set_name(ex::Expr)
+  Meta.isexpr(ex, :(=), 2) || error("Expected assignment of the form `lhs = rhs`, got $(repr(ex))")
+  name = ex.args[1]::Symbol
+  lhs = esc(name)
+  ex = esc(ex)
+  quote
+    $ex
+    set_name($lhs, $(QuoteNode(name)))
+  end
+end
 macro set_name(exs::Symbol...)
   ret = Expr(:block)
   for ex in exs

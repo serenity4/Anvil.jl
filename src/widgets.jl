@@ -230,7 +230,8 @@ function set_name(checkbox::Checkbox, name::Symbol)
   set_name(checkbox.background, Symbol(name, :_background))
 end
 
-function Checkbox(on_toggle, value::Bool, geometry::Box{2}; active_color = CHECKBOX_ACTIVE_COLOR, inactive_color = CHECKBOX_INACTIVE_COLOR)
+function Checkbox(on_toggle, value::Bool = false; size::Float64 = CHECKBOX_SIZE, active_color = CHECKBOX_ACTIVE_COLOR, inactive_color = CHECKBOX_INACTIVE_COLOR)
+  geometry = Box(Point2(0.5size, 0.5size))
   background = Rectangle(geometry, inactive_color)
   checkbox = new_widget(Checkbox, identity, value, background, active_color, inactive_color)
   checkbox.on_toggle = function (input::Input)

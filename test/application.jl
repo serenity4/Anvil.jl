@@ -141,7 +141,7 @@ include("virtual_inputs.jl")
 
     # Checkbox.
 
-    checkbox = get_widget(:checkbox)
+    checkbox = get_widget(:node_hide_value)
     @test !checkbox.value
 
     move_cursor(checkbox)

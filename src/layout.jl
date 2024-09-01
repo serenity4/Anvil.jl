@@ -244,14 +244,27 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
         end
         Segment(x, y)
       end
-    &FEATURE_LOCATION_CUSTOM => feature.data::C
+    &FEATURE_LOCATION_CUSTOM => feature.data::Union{C,T}
   end
 end
 
 add_coordinates(x, y) = x .+ y
 add_coordinates(x::Segment, y::Segment) = Segment(x.a + y.a, x.b + y.b)
 add_coordinates(x::Segment, y) = Segment(x.a + y, x.b + y)
-add_coordinates(x, y::Segment) = Segment(x + y.a, x + y.b)
+add_coordinates(x, y::Segment) = add_coordinates(y, x)
+add_coordinates(x::Number, y::Segment{2,T}) where {T} = add_coordinates(y, x)
+function add_coordinates(x::Segment{2,T}, y::Number) where {T}
+  if x.a.y == x.b.y
+    # Offset the segment in the Y direction.
+    offset = Point{2,T}(zero(T), y)
+  elseif x.a.x == x.b.x
+    # Offset the segment in the X direction.
+    offset = Point{2,T}(y, zero(T))
+  else
+    error("Segment is neither horizontal nor vertical")
+  end
+  Segment(x.a + offset, x.b + offset)
+end
 
 get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = add_coordinates(get_coordinates(engine, feature.object), get_relative_coordinates(engine, feature))
 
@@ -418,13 +431,19 @@ function compute_spacing(engine::LayoutEngine, constraint::Constraint)
   xs, ys = @view(objects[1:(end - 1)]), @view(objects[2:end])
   i = 3 - Int64(spacing.direction)
   edges = ((:left, :right), (:top, :bottom))[i]
-  isa(spacing.amount, Float64) && return spacing.amount
-  spacings = [get_coordinates(engine, at(y, :edge, edges[1])).a[i] - get_coordinates(engine, at(x, :edge, edges[2])).a[i] for (x, y) in zip(xs, ys)]
-  @match spacing.amount begin
-    &SPACING_TARGET_MINIMUM => minimum(spacings)
-    &SPACING_TARGET_MAXIMUM => maximum(spacings)
-    &SPACING_TARGET_AVERAGE => sum(spacings)/length(spacings)
+  if isa(spacing.amount, Float64)
+    value = spacing.amount
+  else
+    spacings = [get_coordinates(engine, at(y, :edge, edges[1])).a[i] - get_coordinates(engine, at(x, :edge, edges[2])).a[i] for (x, y) in zip(xs, ys)]
+    value = @match spacing.amount begin
+      &SPACING_TARGET_MINIMUM => minimum(spacings)
+      &SPACING_TARGET_MAXIMUM => maximum(spacings)
+      &SPACING_TARGET_AVERAGE => sum(spacings)/length(spacings)
+    end
   end
+  # Negate vertical spacing so that objects are laid out from top to bottom
+  spacing.direction == DIRECTION_VERTICAL && (value = -value)
+  value
 end
 
 function apply_spacing(engine::LayoutEngine, constraint::Constraint, x::PositionalFeature, y::PositionalFeature, spacing)

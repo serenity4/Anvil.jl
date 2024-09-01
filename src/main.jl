@@ -42,33 +42,25 @@ function initialize_components()
   app.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
 
   # TODO: Use a `Widget` for this.
-  texture = new_entity()
+  @set_name texture = new_entity()
   set_location(texture, P2(-0.5, 0))
   set_geometry(texture, Box(P2(0.5, 0.5)))
   random_image() = image_resource(app.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
   image = random_image()
   set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
-  @set_name texture
 
-  settings_background = Rectangle(Box(P2(0.4, 0.9)), RGB(0.01, 0.01, 0.01))
-  model_text = Text("Model")
-  path_text = Text("Path")
-  box = get_geometry(model_text)
-  dropdown_bg = Rectangle(box, RGB(0.3, 0.2, 0.9))
-  put_behind(dropdown_bg, model_text)
+  @set_name side_panel = Rectangle(Box(P2(0.4, 0.9)), RGB(0.01, 0.01, 0.01))
 
-  checkbox = Checkbox(identity, false, Box(P2(0.02, 0.02)))
-  button = Button(Box(P2(0.15, 0.05)); text = Text("Save")) do
-    button.background.color = rand(RGB{Float32})
+  @set_name save_button = Button(Box(P2(0.15, 0.05)); text = Text("Save")) do
+    save_button.background.color = rand(RGB{Float32})
   end
-  @set_name checkbox button
 
   on_input = let origin = Ref(zero(P2)), last_displacement = Ref(zero(P2)), total_drag = Ref(zero(P2))
     function (input::Input)
       if is_left_click(input)
         origin[] = get_location(texture)
         last_displacement[] = origin[]
-        dropdown_bg.color = rand(RGB{Float32})
+        node_color_value.color = rand(RGB{Float32})
       elseif input.type === DRAG
         target, event = input.drag
         displacement = event.location .- input.source.event.location
@@ -90,15 +82,14 @@ function initialize_components()
   # File menu.
   file_menu_head = Button(() -> collapse!(file_menu), Box(P2(0.15, 0.05)); text = Text("File"))
   file_menu_item_1 = MenuItem(Text("New file"), Box(P2(0.15, 0.05))) do
-    button.background.color = RGB{Float32}(0.1, 0.3, 0.2)
+    save_button.background.color = RGB{Float32}(0.1, 0.3, 0.2)
   end
   file_menu_item_2 = MenuItem(Text("Open..."), Box(P2(0.15, 0.05))) do
-    button.background.color = RGB{Float32}(0.3, 0.2, 0.1)
+    save_button.background.color = RGB{Float32}(0.3, 0.2, 0.1)
   end
   file_menu_item_3 = MenuItem(exit, Text("Exit"), Box(P2(0.15, 0.05)), 'x')
-  file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2, file_menu_item_3], 'F')
+  @set_name file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2, file_menu_item_3], 'F')
   add_constraint(attach(at(file_menu, :corner, :top_left), at(app.windows[app.window], :corner, :top_left)))
-  @set_name file_menu
 
   # Edit menu.
   edit_menu_head = Button(() -> collapse!(edit_menu), Box(P2(0.15, 0.05)); text = Text("Edit"))
@@ -106,24 +97,37 @@ function initialize_components()
     new_image = fetch(execute(random_image, app.systems.rendering.renderer.task))
     set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image)))
   end
-  edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
+  @set_name edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
   add_constraint(attach(at(edit_menu, :corner, :top_left), at(file_menu, :corner, :top_right)))
-  @set_name edit_menu
 
-  vline_left = at(at(settings_background, :edge, :left), P2(0.2, 0))
-  vline_right = at(vline_left, P2(0.05, 0))
+  vline_left = at(at(side_panel, :edge, :left), 0.2)
+  vline_right = at(vline_left, 0.05)
   vspacing = 0.1
 
-  add_constraint(attach(at(at(settings_background, :center), P2(-0.4, 0.0)), at(at(texture, :center), P2(0.5, 0.0))))
+  add_constraint(attach(at(at(side_panel, :center), P2(-0.4, 0.0)), at(at(texture, :center), P2(0.5, 0.0))))
 
-  add_constraint(align(at.([model_text, path_text], :edge, :right), :vertical, vline_left))
-  add_constraint(align(at.([checkbox, dropdown_bg], :edge, :left), :vertical, vline_right))
-  left_column = EntityID[model_text, path_text]
-  right_column = EntityID[checkbox, dropdown_bg]
+  @set_name node_name_text = Text("Name")
+  @set_name node_name_value = Rectangle(Box(P2(0.05, 0.02)), RGB(0.2, 0.2, 0.2))
+  @set_name node_color_text = Text("Color")
+  @set_name node_color_value = Rectangle(Box(P2(0.05, 0.02)), RGB(0.3, 0.2, 0.9))
+  @set_name node_hide_text = Text("Hide")
+  @set_name node_hide_value = Checkbox(_ -> nothing)
+  left_column = EntityID[
+    node_name_text,
+    node_color_text,
+    node_hide_text,
+  ]
+  right_column = EntityID[
+    node_name_value,
+    node_color_value,
+    node_hide_value,
+  ]
+  add_constraint(align(at.(left_column, :edge, :right), :vertical, vline_left))
+  add_constraint(align(at.(right_column, :edge, :left), :vertical, vline_right))
 
   for column in (left_column, right_column)
     add_constraint(distribute(column, :vertical, vspacing, :point))
   end
 
-  add_constraint(attach(button, at(checkbox, P2(0.0, -0.2))))
+  add_constraint(attach(save_button, at(left_column[end], P2(0.2, -0.2))))
 end

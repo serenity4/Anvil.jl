@@ -71,6 +71,7 @@ test_engine_interface!(ArrayLayoutEngine{Int64}(locations, geometries), eachinde
   @test get_coordinates(engine, at(objects[1], :edge, :right)) == Segment(P2(11, 8), P2(11, 12))
   @test get_coordinates(engine, at(objects[1], :edge, :bottom)) == Segment(P2(9, 8), P2(11, 8))
   @test get_coordinates(engine, at(objects[1], :edge, :top)) == Segment(P2(9, 12), P2(11, 12))
+  @test get_coordinates(engine, at(at(objects[1], :edge, :top), 0.2)) == Segment(P2(9, 12.2), P2(11, 12.2))
 end
 
 @testset "Layout computations" begin
@@ -171,8 +172,8 @@ end
   ])
   xs = get_coordinates.(engine, objects)
   @test xs[1] == locations[1]
-  @test xs[2] == P2(locations[2].x, 12)
-  @test xs[3] == P2(locations[3].x, 14)
+  @test xs[2] == P2(locations[2].x, 8)
+  @test xs[3] == P2(locations[3].x, 6)
 
   reset_location.([1, 2, 3])
   reset_geometry.([1, 2, 3])
@@ -191,8 +192,8 @@ end
   ])
   xs = get_coordinates.(engine, objects)
   @test xs[1] == locations[1]
-  @test xs[2] == P2(locations[2].x, 59)
-  @test xs[3] == P2(locations[3].x, 106.5)
+  @test xs[2] == P2(locations[2].x, 55)
+  @test xs[3] == P2(locations[3].x, 98.5)
 
   reset_location.([1, 2, 3])
   reset_geometry.([1, 2, 3])
