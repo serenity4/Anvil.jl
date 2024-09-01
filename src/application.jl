@@ -96,7 +96,7 @@ macro set_name(exs::Symbol...)
   end
   ret
 end
-get_name(entity::EntityID) = get(app.ecs.entity_names, entity, nothing)
+get_name(entity::EntityID) = isdefined(app, :ecs) ? get(app.ecs.entity_names, entity, nothing) : nothing
 function get_entity(name::Symbol)
   # This function is slow. Use for tests or non-performance critical code only.
   for (entity, entity_name) in pairs(app.ecs.entity_names)

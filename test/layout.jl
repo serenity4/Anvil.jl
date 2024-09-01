@@ -6,8 +6,8 @@ using Entities
 using Entities: new!
 using Test
 
-function test_engine_interface!(engine::LayoutEngine, objects)
-  @testset "`LayoutEngine` interface for $(nameof(typeof(engine)))" begin
+function test_storage_interface!(engine::LayoutStorage, objects)
+  @testset "`LayoutStorage` interface for $(nameof(typeof(engine)))" begin
     O, P, C, G = object_type(engine), position_type(engine), coordinate_type(engine), geometry_type(engine)
     for object in objects
       @test isa(object, O)
@@ -30,7 +30,7 @@ end
 
 pool = EntityPool()
 ecs = ECSDatabase()
-engine = ECSLayoutEngine{P2,Box{2,Float64},P2,Box{2,Float64}}(ecs)
+engine = LayoutEngine(ECSLayoutStorage{P2,Box{2,Float64},P2,Box{2,Float64}}(ecs))
 
 objects = [new!(pool) for _ in 1:3]
 locations = P2[(10, 10), (30, 30), (76, 54)]
@@ -43,8 +43,8 @@ reset_geometries() = reset_geometry.(eachindex(objects))
 reset_locations()
 reset_geometries()
 
-test_engine_interface!(engine, objects)
-test_engine_interface!(ArrayLayoutEngine{Int64}(locations, geometries), eachindex(objects))
+test_storage_interface!(engine.storage, objects)
+test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachindex(objects))
 
 @testset "Features" begin
   feature = positional_feature(nothing)

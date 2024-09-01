@@ -1,7 +1,8 @@
 using Graphs
 
 export
-  LayoutEngine, ECSLayoutEngine, ArrayLayoutEngine,
+  LayoutEngine,
+  LayoutStorage, ECSLayoutStorage, ArrayLayoutStorage,
   PositionalFeature, at,
   Constraint, attach, align, distribute,
   compute_layout!,
@@ -37,9 +38,9 @@ export
   SPACING_MODE_GEOMETRY
 
 """
-    LayoutEngine{O,P,C,G}
+    LayoutStorage{O,P,C,G}
 
-Abstract type for a layout engine where:
+Abstract type for a layout storage where:
 - `O` represents the type of objects to be laid out by the engine, e.g. `Widget`.
 - `P` is the type of position values to be manipulated, e.g. `Point{2,Float64}`.
 - `C` is the coordinate type for the position, which will usually be the same as `P`.
@@ -48,70 +49,121 @@ Abstract type for a layout engine where:
 !!! note
     `P` and `C` were made to be different parameters such that a given position type is allowed to differ from the numerical type that represents its data. For example, with `struct LocationComponent; metadata::Any; coords::Point{2,Float64}; end`, `LocationComponent` is the position type `P`, while `Point{2,Float64}` is the coordinate type `C`. This relaxation is meant to facilitate integration with larger codebases that may have their custom data structures.
 """
-abstract type LayoutEngine{O,P,C,G} end
+abstract type LayoutStorage{O,P,C,G} end
 
-object_type(::LayoutEngine{O}) where {O} = O
-position_type(::LayoutEngine{<:Any,P}) where {P} = P
-coordinate_type(::LayoutEngine{<:Any,<:Any,C}) where {C} = C
-geometry_type(::LayoutEngine{<:Any,<:Any,<:Any,G}) where {G} = G
+object_type(::LayoutStorage{O}) where {O} = O
+position_type(::LayoutStorage{<:Any,P}) where {P} = P
+coordinate_type(::LayoutStorage{<:Any,<:Any,C}) where {C} = C
+geometry_type(::LayoutStorage{<:Any,<:Any,<:Any,G}) where {G} = G
 
-Base.broadcastable(engine::LayoutEngine) = Ref(engine)
+Base.broadcastable(storage::LayoutStorage) = Ref(storage)
 
 """
-    coordinates(engine::LayoutEngine{<:Any,P,C}, position::P)::C where {P,C}
+    coordinates(storage::LayoutStorage{<:Any,P,C}, position::P)::C where {P,C}
 """
 function coordinates end
 
 """
-    get_position(engine::LayoutEngine{O,P}, object::O)::P where {O,P}
+    get_position(storage::LayoutStorage{O,P}, object::O)::P where {O,P}
 """
 function get_position end
 
 """
-    set_position!(engine::LayoutEngine{O,P}, object::O, position::P) where {O,P}
+    set_position!(storage::LayoutStorage{O,P}, object::O, position::P) where {O,P}
 """
 function set_position! end
 
 """
-    get_geometry(engine::LayoutEngine{O,<:Any,<:Any,G}, object::O)::G where {O,G}
+    get_geometry(storage::LayoutStorage{O,<:Any,<:Any,G}, object::O)::G where {O,G}
 """
 function get_geometry end
 
-coordinates(engine::LayoutEngine{<:Any,P,P}, position::P) where {P} = position
-get_coordinates(engine::LayoutEngine{O,P}, object::O) where {O,P} = coordinates(engine, get_position(engine, object))
-set_coordinates(engine::LayoutEngine{<:Any,T,T}, position::T, coords::T) where {T} = coords
-report_unsolvable_decision(engine::LayoutEngine) = error("No solution was found which satisfies all requested constraints.")
+coordinates(storage::LayoutStorage{<:Any,P,P}, position::P) where {P} = position
+get_coordinates(storage::LayoutStorage{O,P}, object::O) where {O,P} = coordinates(storage, get_position(storage, object))
+set_coordinates(storage::LayoutStorage{<:Any,T,T}, position::T, coords::T) where {T} = coords
+report_unsolvable_decision(storage::LayoutStorage) = error("No solution was found which satisfies all requested constraints.")
 # will also need similar functions to access geometry
 
+@enum FeatureLocation begin
+  FEATURE_LOCATION_CENTER = 1
+  FEATURE_LOCATION_ORIGIN = 2
+  FEATURE_LOCATION_CORNER = 3
+  FEATURE_LOCATION_EDGE = 4
+  FEATURE_LOCATION_CUSTOM = 5
+end
+
+function FeatureLocation(name::Symbol)
+  names = (:center, :origin, :corner, :edge, :custom)
+  i = findfirst(==(name), names)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  FeatureLocation(i)
+end
+
+struct PositionalFeature{O}
+  "Object the feature is attached to."
+  object::Union{PositionalFeature{O},O}
+  location::FeatureLocation
+  "Position of the feature relative to the origin (position) of the object."
+  data::Any
+end
+
+PositionalFeature(object, location::FeatureLocation) = PositionalFeature(object, location, nothing)
+PositionalFeature(object, location::Symbol, data = nothing) = PositionalFeature(object, FeatureLocation(location), data)
+
+function Base.getindex(feature::PositionalFeature{O}) where {O}
+  (; object) = feature
+  while !isa(object, O)
+    (; object) = object
+  end
+  object
+end
+
+struct Group{O}
+  objects::Vector{Union{O,PositionalFeature{O}}}
+end
+
+group(objects...) = Group(objects)
+Group(objects::Tuple) = Group([objects...])
+
+struct LayoutEngine{O,S<:LayoutStorage{O}}
+  storage::S
+  groups::Vector{Group{O}}
+end
+LayoutEngine(storage::LayoutStorage{O}) where {O} = LayoutEngine{O,typeof(storage)}(storage, Group{O}[])
+
+@forward_methods LayoutEngine field = :storage object_type position_type coordinate_type geometry_type get_geometry(_, object) set_geometry!(_, object, geometry) coordinates(_, x) get_coordinates(_, object) set_coordinates(_, position, coords) get_position(_, object) set_position!(_, object, position)
+
+Base.broadcastable(engine::LayoutEngine) = Ref(engine)
+
 """
-Array-backed layout engine, where "objects" are indices to `Vector`s of positions and geometries.
+Array-backed layout storage, where "objects" are indices to `Vector`s of positions and geometries.
 """
-struct ArrayLayoutEngine{O,P,C,G} <: LayoutEngine{O,P,C,G}
+struct ArrayLayoutStorage{O,P,C,G} <: LayoutStorage{O,P,C,G}
   positions::Vector{P}
   geometries::Vector{G}
 end
 
-get_position(engine::ArrayLayoutEngine{O}, object::O) where {O} = engine.positions[object]
-set_position!(engine::ArrayLayoutEngine{O,P}, object::O, position::P) where {O,P} = engine.positions[object] = position
-get_geometry(engine::ArrayLayoutEngine{O}, object::O) where {O} = engine.geometries[object]
-set_geometry!(engine::ArrayLayoutEngine{O,<:Any,<:Any,G}, object::O, geometry::G) where {O,G} = engine.geometries[object] = geometry
+get_position(storage::ArrayLayoutStorage{O}, object::O) where {O} = storage.positions[object]
+set_position!(storage::ArrayLayoutStorage{O,P}, object::O, position::P) where {O,P} = storage.positions[object] = position
+get_geometry(storage::ArrayLayoutStorage{O}, object::O) where {O} = storage.geometries[object]
+set_geometry!(storage::ArrayLayoutStorage{O,<:Any,<:Any,G}, object::O, geometry::G) where {O,G} = storage.geometries[object] = geometry
 
-ArrayLayoutEngine{P,G}() where {P,G} = ArrayLayoutEngine{P,P,G}()
-ArrayLayoutEngine{P,C,G}() where {P,C,G} = ArrayLayoutEngine{Int64,P,C,G}()
-ArrayLayoutEngine{O,P,C,G}() where {O,P,C,G} = ArrayLayoutEngine{O,P,C,G}(P[], G[])
-ArrayLayoutEngine(positions, geometries) = ArrayLayoutEngine{Int64}(positions, geometries)
-ArrayLayoutEngine{O}(positions::AbstractVector{P}, geometries::AbstractVector{G}) where {O,P,G} = ArrayLayoutEngine{O,P,P,G}(positions, geometries)
+ArrayLayoutStorage{P,G}() where {P,G} = ArrayLayoutStorage{P,P,G}()
+ArrayLayoutStorage{P,C,G}() where {P,C,G} = ArrayLayoutStorage{Int64,P,C,G}()
+ArrayLayoutStorage{O,P,C,G}() where {O,P,C,G} = ArrayLayoutStorage{O,P,C,G}(P[], G[])
+ArrayLayoutStorage(positions, geometries) = ArrayLayoutStorage{Int64}(positions, geometries)
+ArrayLayoutStorage{O}(positions::AbstractVector{P}, geometries::AbstractVector{G}) where {O,P,G} = ArrayLayoutStorage{O,P,P,G}(positions, geometries)
 
-struct ECSLayoutEngine{C,G,PC,GC} <: LayoutEngine{EntityID,C,C,G}
+struct ECSLayoutStorage{C,G,PC,GC} <: LayoutStorage{EntityID,C,C,G}
   ecs::ECSDatabase
 end
 
-position(engine::ECSLayoutEngine{C,<:Any,C}, position::C) where {C} = position
-get_position(engine::ECSLayoutEngine{<:Any,<:Any,PC}, object::EntityID) where {PC} = position(engine, engine.ecs[object, LOCATION_COMPONENT_ID]::PC)
-set_position!(engine::ECSLayoutEngine{C}, object::EntityID, position::C) where {C} = engine.ecs[object, LOCATION_COMPONENT_ID] = position
-geometry(engine::ECSLayoutEngine{<:Any,G,<:Any,G}, geometry::G) where {G} = geometry
-get_geometry(engine::ECSLayoutEngine{<:Any,GC,<:Any,GC}, object::EntityID) where {GC} = engine.ecs[object, GEOMETRY_COMPONENT_ID]::GC
-set_geometry!(engine::ECSLayoutEngine{<:Any,GC}, object::EntityID, geometry::GC) where {GC} = engine.ecs[object, GEOMETRY_COMPONENT_ID] = geometry
+position(storage::ECSLayoutStorage{C,<:Any,C}, position::C) where {C} = position
+get_position(storage::ECSLayoutStorage{<:Any,<:Any,PC}, object::EntityID) where {PC} = position(storage, storage.ecs[object, LOCATION_COMPONENT_ID]::PC)
+set_position!(storage::ECSLayoutStorage{C}, object::EntityID, position::C) where {C} = storage.ecs[object, LOCATION_COMPONENT_ID] = position
+geometry(storage::ECSLayoutStorage{<:Any,G,<:Any,G}, geometry::G) where {G} = geometry
+get_geometry(storage::ECSLayoutStorage{<:Any,GC,<:Any,GC}, object::EntityID) where {GC} = storage.ecs[object, GEOMETRY_COMPONENT_ID]::GC
+set_geometry!(storage::ECSLayoutStorage{<:Any,GC}, object::EntityID, geometry::GC) where {GC} = storage.ecs[object, GEOMETRY_COMPONENT_ID] = geometry
 
 function compute_layout!(engine::LayoutEngine, constraints)
   O = object_type(engine)
@@ -155,40 +207,6 @@ function compute_layout!(engine::LayoutEngine, constraints)
       end
     end
   end
-end
-
-@enum FeatureLocation begin
-  FEATURE_LOCATION_CENTER = 1
-  FEATURE_LOCATION_ORIGIN = 2
-  FEATURE_LOCATION_CORNER = 3
-  FEATURE_LOCATION_EDGE = 4
-  FEATURE_LOCATION_CUSTOM = 5
-end
-
-function FeatureLocation(name::Symbol)
-  names = (:center, :origin, :corner, :edge, :custom)
-  i = findfirst(==(name), names)
-  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
-  FeatureLocation(i)
-end
-
-struct PositionalFeature{O}
-  "Object the feature is attached to."
-  object::Union{PositionalFeature{O},O}
-  location::FeatureLocation
-  "Position of the feature relative to the origin (position) of the object."
-  data::Any
-end
-
-PositionalFeature(object, location::FeatureLocation) = PositionalFeature(object, location, nothing)
-PositionalFeature(object, location::Symbol, data = nothing) = PositionalFeature(object, FeatureLocation(location), data)
-
-function Base.getindex(feature::PositionalFeature{O}) where {O}
-  (; object) = feature
-  while !isa(object, O)
-    (; object) = object
-  end
-  object
 end
 
 @enum Edge begin
@@ -267,6 +285,7 @@ function add_coordinates(x::Segment{2,T}, y::Number) where {T}
 end
 
 get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = add_coordinates(get_coordinates(engine, feature.object), get_relative_coordinates(engine, feature))
+get_coordinates(engine::LayoutEngine, group::Group) = get_position(engine, group)
 
 coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry).points[Int64(corner)]
 

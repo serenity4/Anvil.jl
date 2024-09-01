@@ -2,11 +2,15 @@ abstract type System end
 
 shutdown(::System) = nothing
 
-struct LayoutSystem <: System
-  engine::ECSLayoutEngine{P2, Box{2,Float64}, LocationComponent, GeometryComponent}
+struct LayoutSystem{E<:LayoutEngine} <: System
+  engine::E
   constraints::Vector{Constraint{EntityID}}
 end
-LayoutSystem(ecs::ECSDatabase) = LayoutSystem(ECSLayoutEngine{P2, Box{2,Float64}, LocationComponent, GeometryComponent}(ecs), [])
+function LayoutSystem(ecs::ECSDatabase)
+  storage = ECSLayoutStorage{P2, Box{2,Float64}, LocationComponent, GeometryComponent}(ecs)
+  engine = LayoutEngine(storage)
+  LayoutSystem{typeof(engine)}(engine, [])
+end
 
 add_constraint!(layout::LayoutSystem, constraint::Constraint{EntityID}) = push!(layout.constraints, constraint)
 function remove_constraints!(layout::LayoutSystem, entity::EntityID)

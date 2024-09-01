@@ -36,6 +36,7 @@ using AbstractGUI
 using AbstractGUI: Input, consume!, propagate!
 using Dictionaries
 using StaticArrays: @SVector, SVector
+using ForwardMethods: @forward_methods
 
 using Base: Callable, annotate!, annotations
 using StyledStrings
