@@ -35,7 +35,7 @@
         }
     ],
     "settings": {
-        "julia.environmentPath": "/home/serenity4/.julia/dev/Givre",
+        "julia.environmentPath": "/home/serenity4/.julia/dev/Anvil",
         "julia.additionalArgs": [
             "--threads=auto",
             "--gcthreads=20,1",

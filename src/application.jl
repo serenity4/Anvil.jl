@@ -19,7 +19,7 @@ function Base.show(io::IO, app::Application)
 end
 
 function initialize()
-  app.is_release = get(ENV, "GIVRE_RELEASE", "false") == "true"
+  app.is_release = get(ENV, "ANVIL_RELEASE", "false") == "true"
 
   ecs = new_database()
   app.ecs = ecs
@@ -27,7 +27,7 @@ function initialize()
   wm = XWindowManager()
 
   WINDOW_ENTITY_COUNTER.val = typemax(UInt32) - 100U
-  window = Window(wm, "Givre"; width = 1920, height = 1080, map = false)
+  window = Window(wm, "Anvil"; width = 1920, height = 1080, map = false)
   window_id = new_entity(EntityID(Entities.next!(WINDOW_ENTITY_COUNTER)))
   ecs[window_id, WINDOW_COMPONENT_ID] = window
   set_location(window_id, zero(P2))
@@ -140,7 +140,7 @@ bind(bindings::Pair...) = bind!(app.systems.event.ui.bindings, bindings...)
 bind(bindings::AbstractVector) = bind!(app.systems.event.ui.bindings, bindings)
 unbind(token) = unbind!(app.systems.event.ui.bindings, token)
 
-font_file(font_name) = joinpath(pkgdir(Givre), "assets", "fonts", font_name * ".ttf")
+font_file(font_name) = joinpath(pkgdir(Anvil), "assets", "fonts", font_name * ".ttf")
 get_font(name::AbstractString) = get!(() -> OpenTypeFont(font_file(name)), app.fonts, name)
 
 add_constraint(constraint) = add_constraint!(app.systems.layout, constraint)

@@ -1,4 +1,4 @@
-using Givre: bind!, unbind!, KeyBindings, KeyBindingsToken, Callable, execute_binding
+using Anvil: bind!, unbind!, KeyBindings, KeyBindingsToken, Callable, execute_binding
 using WindowAbstractions: @key_str, KeyEvent, KeyCombination
 using XCB: Keymap, Connection, PhysicalKey
 using Test

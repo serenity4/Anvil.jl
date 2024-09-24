@@ -20,7 +20,7 @@ KeyBindings() = KeyBindings(Dictionary(), Dictionary(), Dictionary(), Counter{Ke
 Base.isempty(kb::KeyBindings) = isempty(kb.active) && isempty(kb.inactive) && isempty(kb.bindings)
 
 function execute_binding(kb::KeyBindings, event::KeyEvent)
-  if get(ENV, "GIVRE_LOG_KEY_PRESS", "false") == "true"
+  if get(ENV, "ANVIL_LOG_KEY_PRESS", "false") == "true"
     print_key_info(stdout, app.wm.keymap, event)
     println()
   end

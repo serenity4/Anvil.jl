@@ -1,5 +1,5 @@
-using Givre
-using Givre: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_rendering_coordinate_system, to_window_coordinate_system, exit
+using Anvil
+using Anvil: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_rendering_coordinate_system, to_window_coordinate_system, exit
 using CooperativeTasks: execute
 using LinearAlgebra: norm
 using XCB
@@ -10,7 +10,7 @@ using MLStyle: @match
 using StyledStrings: annotations, getface
 
 Logging.disable_logging(Logging.Info)
-ENV["GIVRE_LOG_FRAMECOUNT"] = false
+ENV["ANVIL_LOG_FRAMECOUNT"] = false
 
 include("virtual_inputs.jl")
 
@@ -20,11 +20,11 @@ include("virtual_inputs.jl")
 @testset "Application" begin
   @testset "Application start/exit" begin
     GC.gc()
-    @test isa(sprint(show, Givre.app), String)
+    @test isa(sprint(show, Anvil.app), String)
     main(async = true)
     synchronize()
     @test isa(sprint(show, app), String)
-    @test app.ecs[app.windows[app.window], Givre.WINDOW_COMPONENT_ID] == app.window
+    @test app.ecs[app.windows[app.window], Anvil.WINDOW_COMPONENT_ID] == app.window
 
     @testset "Location mapping" begin
       for location in [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0), (0.5, 0.5), (0.4, 0.6)]
@@ -55,12 +55,12 @@ include("virtual_inputs.jl")
     left_click()
     synchronize()
     @test menu.expanded
-    @test Givre.active_item(menu) === nothing
+    @test Anvil.active_item(menu) === nothing
 
     left_click()
     synchronize()
     @test !menu.expanded
-    @test Givre.active_item(menu) === nothing
+    @test Anvil.active_item(menu) === nothing
 
     left_click()
     synchronize()
@@ -69,17 +69,17 @@ include("virtual_inputs.jl")
     item_1 = menu.items[1]
     move_cursor(item_1)
     synchronize()
-    @test Givre.active_item(menu) === item_1
+    @test Anvil.active_item(menu) === item_1
 
     item_2 = menu.items[2]
     move_cursor(item_2)
     synchronize()
-    @test Givre.active_item(menu) === item_2
+    @test Anvil.active_item(menu) === item_2
 
     left_click()
     synchronize()
     @test !menu.expanded
-    @test Givre.active_item(menu) === nothing
+    @test Anvil.active_item(menu) === nothing
 
     ## Key-based navigation.
     move_cursor(menu)
@@ -87,11 +87,11 @@ include("virtual_inputs.jl")
     move_cursor(get_location(menu) .+ (1.0, 0.0))
     press_key(:UP)
     synchronize()
-    @test Givre.active_item(menu) === menu.items[end]
+    @test Anvil.active_item(menu) === menu.items[end]
     press_key(:UP)
     press_key(:RTRN)
     synchronize()
-    @test Givre.active_item(menu) === nothing
+    @test Anvil.active_item(menu) === nothing
     @test !menu.expanded
 
     move_cursor(menu)
@@ -100,19 +100,19 @@ include("virtual_inputs.jl")
     press_key(:UP)
     press_key(:UP)
     synchronize()
-    @test count(Givre.isactive, menu.items) == 1
-    @test Givre.active_item(menu) === menu.items[end - 1]
+    @test count(Anvil.isactive, menu.items) == 1
+    @test Anvil.active_item(menu) === menu.items[end - 1]
     press_key(:DOWN)
     synchronize()
-    @test count(Givre.isactive, menu.items) == 1
-    @test Givre.active_item(menu) === menu.items[end]
+    @test count(Anvil.isactive, menu.items) == 1
+    @test Anvil.active_item(menu) === menu.items[end]
     move_cursor(item_1)
     synchronize()
-    @test count(Givre.isactive, menu.items) == 1
-    @test Givre.active_item(menu) === item_1
+    @test count(Anvil.isactive, menu.items) == 1
+    @test Anvil.active_item(menu) === item_1
     press_key(:RTRN)
     synchronize()
-    @test Givre.active_item(menu) === nothing
+    @test Anvil.active_item(menu) === nothing
     @test !menu.expanded
 
     ## Wheel-based navigation.
@@ -121,13 +121,13 @@ include("virtual_inputs.jl")
     move_cursor(get_location(menu) .+ (1.0, 0.0))
     scroll_up()
     synchronize()
-    @test Givre.active_item(menu) === menu.items[end]
+    @test Anvil.active_item(menu) === menu.items[end]
     scroll_down()
     synchronize()
-    @test Givre.active_item(menu) === item_1
+    @test Anvil.active_item(menu) === item_1
     press_key(:RTRN)
     synchronize()
-    @test Givre.active_item(menu) === nothing
+    @test Anvil.active_item(menu) === nothing
     @test !menu.expanded
 
     ## Shortcut navigation.

@@ -9,11 +9,11 @@ This list is assumed to be owned by the renderer when returned by the applicatio
 
 ## Environment variables
 
-- `GIVRE_LOG_FRAMECOUNT = "true"`: When set to `true`, log the current frame and related timings in the REPL while executing `main`.
-- `GIVRE_LOG_KEY_PRESS = "false"`: When set to `true`, log all key presses to stdout.
-- `GIVRE_RELEASE = "false"`: When set to `true`, the renderer will not use validation layers and will not use debugging utilities.
+- `ANVIL_LOG_FRAMECOUNT = "true"`: When set to `true`, log the current frame and related timings in the REPL while executing `main`.
+- `ANVIL_LOG_KEY_PRESS = "false"`: When set to `true`, log all key presses to stdout.
+- `ANVIL_RELEASE = "false"`: When set to `true`, the renderer will not use validation layers and will not use debugging utilities.
 """
-module Givre
+module Anvil
 
 const APPLICATION_THREADID = 2
 const RENDERER_THREADID = 3

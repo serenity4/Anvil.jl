@@ -57,6 +57,6 @@ function Lava.render(app, rdr::Renderer)
   !isnothing(state) && push!(rdr.pending, state)
   filter!(exec -> !wait(exec, 0), rdr.pending)
   next!(rdr.frame_diagnostics)
-  get(ENV, "GIVRE_LOG_FRAMECOUNT", "true") == "true" && print_framecount(rdr.frame_diagnostics)
+  get(ENV, "ANVIL_LOG_FRAMECOUNT", "true") == "true" && print_framecount(rdr.frame_diagnostics)
   nothing
 end
