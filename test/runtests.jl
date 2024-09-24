@@ -1,6 +1,9 @@
 using Anvil, Test, Logging
 using Anvil: exit
 
+!@isdefined(includet) && (includet = include)
+includet("main.jl")
+
 Logging.disable_logging(Logging.Info)
 # Logging.disable_logging(Logging.BelowMinLevel)
 ENV["JULIA_DEBUG"] = "Anvil"

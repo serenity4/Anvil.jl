@@ -19,24 +19,26 @@ const APPLICATION_THREADID = 2
 const RENDERER_THREADID = 3
 
 using CompileTraces
-using ColorTypes
+using Lava: Command, Memory, @task
 using Lava
-using Lava: Command
-using CooperativeTasks: CooperativeTasks, nthreads, execute, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, reset_mpi_state, monitor_children, shutdown_scheduled, schedule_shutdown, shutdown_children, task_owner
 using ShaderLibrary
 using ShaderLibrary: Instance, aspect_ratio
 using OpenType
-using OpenType: Tag4
-using Accessors: @set, setproperties
 using GeometryExperiments
-using XCB
 using Entities
 using MLStyle
-using AbstractGUI
-using AbstractGUI: Input, consume!, propagate!
 using Dictionaries
-using StaticArrays: @SVector, SVector
 using ForwardMethods: @forward_methods
+
+using Reexport
+@reexport using ColorTypes
+@reexport using CooperativeTasks: CooperativeTasks, nthreads, execute, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, reset_mpi_state, monitor_children, shutdown_scheduled, schedule_shutdown, shutdown_children, task_owner
+@reexport using OpenType: Tag4, @tag_str, @tag4_str
+@reexport using Accessors: @set, setproperties
+@reexport using XCB
+@reexport using AbstractGUI
+@reexport using AbstractGUI: Input, consume!, propagate!
+@reexport using StaticArrays: @SVector, SVector
 
 using Base: Callable, annotate!, annotations
 using StyledStrings
@@ -62,7 +64,6 @@ include("widgets.jl")
 include("systems.jl")
 include("application.jl")
 include("theme.jl")
-include("main.jl")
 
 const app = Application()
 const WINDOW_ENTITY_COUNTER = Entities.Counter()
@@ -74,9 +75,31 @@ function __init__()
   addface!(:application_shortcut_hide => Face(underline = false))
 end
 
-export main, app,
-       RenderComponent,
-       InputComponent
+export
+       app, Application,
 
+       # Components.
+       RenderComponent, InputComponent, LocationComponent, GeometryComponent, ZCoordinateComponent,
+       ENTITY_COMPONENT_ID, RENDER_COMPONENT_ID, INPUT_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID, WIDGET_COMPONENT_ID, WINDOW_COMPONENT_ID,
+
+       RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT,
+
+       # Widgets.
+       Rectangle, Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
+
+       # Application state.
+       get_entity, get_location, get_geometry, get_z, get_render, get_input_handler, get_widget, get_window,
+       set_location, set_geometry, set_z, has_z, set_render, has_render, unset_render, set_input_handler, unset_input_handler, set_widget, set_window,
+
+       bind, unbind,
+
+       font_file, get_font,
+
+       is_left_click,
+
+       add_constraint, remove_constraints, put_behind, synchronize,
+
+       is_release, @set_name, EntityID, new_entity,
+       P2, P2f, Box
 
 end

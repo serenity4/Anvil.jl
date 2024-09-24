@@ -18,7 +18,7 @@ function Base.show(io::IO, app::Application)
   print(io, Application, '(', isdefined(app, :task) ? app.task : "#undef", ", ", isdefined(app, :wm) ? app.wm : "#undef", ", ", isdefined(app, :ecs) ? app.ecs : "#undef", ", release: ", is_release(), ')')
 end
 
-function initialize()
+function initialize(f::Function)
   app.is_release = get(ENV, "ANVIL_RELEASE", "false") == "true"
 
   ecs = new_database()
@@ -53,7 +53,10 @@ function initialize()
     set_contextual_shortcuts_visibility(app.show_shortcuts)
   end
 
-  initialize_components()
+  # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
+  app.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
+  f()
+
   start(systems.rendering.renderer)
   map_window(window)
   nothing
@@ -166,3 +169,42 @@ function shutdown(app::Application)
 end
 
 Base.wait(app::Application) = monitor_children()
+
+function exit(code::Int = 0)
+  if current_task() === app.task
+    _exit(code)
+    true
+  else
+    execute(_exit, app.task, code)
+    wait(app)
+  end
+end
+
+function _exit(code::Int)
+  shutdown(app)
+  close(app.wm, app.window)
+  @debug "Exiting application" * (!iszero(code) ? " (exit code: $(code))" : "")
+  schedule_shutdown()
+  code
+end
+
+function (app::Application)()
+  shutdown_scheduled() && return
+  # Make sure that the drawing order (which also defines interaction order)
+  # has been resolved prior to resolving which object receives which event based on that order.
+  run_systems()
+  app.systems.event(app.ecs)
+end
+
+function main(f; async = false)
+  nthreads() ≥ 3 || error("Three threads or more are required to execute the application.")
+  reset_mpi_state()
+  app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
+    initialize(f)
+    LoopExecution(0.001; shutdown = false)(app)()
+  end
+  async && return false
+  wait(app)
+end
+
+synchronize() = fetch(execute(() -> (app(); true), app.task))
