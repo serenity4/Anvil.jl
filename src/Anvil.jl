@@ -35,7 +35,7 @@ using Reexport
 @reexport using CooperativeTasks: CooperativeTasks, nthreads, execute, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, reset_mpi_state, monitor_children, shutdown_scheduled, schedule_shutdown, shutdown_children, task_owner
 @reexport using OpenType: Tag4, @tag_str, @tag4_str
 @reexport using Accessors: @set, setproperties
-@reexport using XCB
+using XCB
 @reexport using AbstractGUI
 @reexport using AbstractGUI: Input, consume!, propagate!
 @reexport using StaticArrays: @SVector, SVector
@@ -74,6 +74,8 @@ function __init__()
   addface!(:application_shortcut_show => Face(underline = true))
   addface!(:application_shortcut_hide => Face(underline = false))
 end
+
+@reexport using XCB
 
 export
        app, Application,
