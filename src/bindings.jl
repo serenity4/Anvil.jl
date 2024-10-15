@@ -24,7 +24,8 @@ function execute_binding(kb::KeyBindings, event::KeyEvent)
     print_key_info(stdout, app.wm.keymap, event)
     println()
   end
-  key = KeyCombination(event.key, (event.modifiers & ~event.consumed_modifiers))
+  # Ignore consumed modifiers, as well as MOD2 (NumLock) in the case it was not consumed during the keysym translation.
+  key = KeyCombination(event.key, (event.modifiers & ~(event.consumed_modifiers | MOD2_MODIFIER)))
   matches(key, event) || return
   callable = get(kb.active, key, nothing)
   isnothing(callable) && return
