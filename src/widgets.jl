@@ -105,7 +105,8 @@ constituents(widget::Widget) = Widget[]
   color::RGB{Float32}
 end
 
-Rectangle(geometry, color) = new_widget(Rectangle, geometry, color)
+Rectangle((width, height)::Tuple, color) = Rectangle(geometry(width, height), color)
+Rectangle(geometry::Box, color) = new_widget(Rectangle, geometry, color)
 
 function synchronize(rect::Rectangle)
   (; r, g, b) = rect.color
@@ -193,6 +194,7 @@ function set_name(button::Button, name::Symbol)
   set_name(button.background, Symbol(name, :_background))
 end
 
+Button(on_click, (width, height)::Tuple; background_color = BUTTON_BACKGROUND_COLOR, text = nothing) = Button(on_click, geometry(width, height); background_color, text)
 Button(on_click, geometry::Box{2}; background_color = BUTTON_BACKGROUND_COLOR, text = nothing) = Button(on_click, Rectangle(geometry, background_color); text)
 function Button(on_click, background::Rectangle; text = nothing)
   on_input = function (input::Input)

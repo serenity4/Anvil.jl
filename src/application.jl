@@ -117,10 +117,13 @@ end
 
 unset!(collection, indices...) = haskey(collection, indices...) ? delete!(collection, indices...) : nothing
 
+geometry(width, height) = Box(P2(width/2, height/2))
+
 get_location(entity) = app.ecs[entity, LOCATION_COMPONENT_ID]::LocationComponent
 set_location(entity, location::LocationComponent) = app.ecs[entity, LOCATION_COMPONENT_ID] = location
 get_geometry(entity) = app.ecs[entity, GEOMETRY_COMPONENT_ID]::GeometryComponent
 set_geometry(entity, geometry::GeometryComponent) = app.ecs[entity, GEOMETRY_COMPONENT_ID] = geometry
+set_geometry(entity, (width, height)::Tuple) = set_geometry(entity, geometry(width, height))
 get_z(entity) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID]::ZCoordinateComponent
 set_z(entity, z::Real) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID] = convert(ZCoordinateComponent, z)
 has_z(entity) = haskey(app.ecs, entity, ZCOORDINATE_COMPONENT_ID)
