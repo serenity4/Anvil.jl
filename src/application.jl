@@ -198,6 +198,7 @@ end
 
 function main(f; async = false)
   nthreads() ≥ 3 || error("Three threads or more are required to execute the application.")
+  GC.gc(true)
   reset_mpi_state()
   app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
     initialize(f)
