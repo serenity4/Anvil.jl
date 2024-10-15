@@ -216,6 +216,7 @@ end
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
   event.type == KEY_PRESSED && execute_binding(system.ui.bindings, event.key_event)
   event.type == WINDOW_RESIZED && (set_geometry(app.windows[event.win], window_geometry(event.win)))
+  event.type == WINDOW_CLOSED && return exit()
   update_overlays!(system, ecs)
   consume!(system.ui.overlay, event)
 end
