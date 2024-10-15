@@ -289,6 +289,14 @@ get_coordinates(engine::LayoutEngine, group::Group) = get_position(engine, group
 
 coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry).points[Int64(corner)]
 
+# Closures.
+at(x::Real, y::Real) = at((x, y))
+at((x, y)::Tuple) = at(P2(x, y))
+at(p::P2) = x -> at(x, p)
+at(coord::Real) = x -> at(x, coord)
+at(location::Symbol, argument = nothing) = x -> at(x, location, argument)
+at(location::Symbol, argument::Symbol) = x -> at(x, location, argument)
+
 at(object) = positional_feature(object)
 at(object, position) = at(object, FEATURE_LOCATION_CUSTOM, position)
 function at(object, location::FeatureLocation, argument = nothing)

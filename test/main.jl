@@ -7,7 +7,7 @@ function start_app()
   # TODO: Use a `Widget` for this.
   @set_name texture = new_entity()
   set_location(texture, P2(-0.5, 0))
-  set_geometry(texture, Box(P2(0.5, 0.5)))
+  set_geometry(texture, (1.0, 1.0))
   random_image() = image_resource(app.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
   image = random_image()
   set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
@@ -52,7 +52,7 @@ function start_app()
   end
   file_menu_item_3 = MenuItem(exit, Text("Exit"), (0.3, 0.1), 'x')
   @set_name file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2, file_menu_item_3], 'F')
-  add_constraint(attach(at(file_menu, :corner, :top_left), at(app.windows[app.window], :corner, :top_left)))
+  add_constraint(attach(file_menu |> at(:corner, :top_left), app.windows[app.window] |> at(:corner, :top_left)))
 
   # Edit menu.
   edit_menu_head = Button(() -> collapse!(edit_menu), (0.3, 0.1); text = Text("Edit"))
@@ -61,13 +61,13 @@ function start_app()
     set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image)))
   end
   @set_name edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
-  add_constraint(attach(at(edit_menu, :corner, :top_left), at(file_menu, :corner, :top_right)))
+  add_constraint(attach(edit_menu |> at(:corner, :top_left), file_menu |> at(:corner, :top_right)))
 
-  vline_left = at(at(side_panel, :edge, :left), 0.2)
-  vline_right = at(vline_left, 0.05)
+  vline_left = side_panel |> at(:edge, :left) |> at(0.2)
+  vline_right = vline_left |> at(0.05)
   vspacing = 0.1
 
-  add_constraint(attach(at(at(side_panel, :center), P2(-0.4, 0.0)), at(at(texture, :center), P2(0.5, 0.0))))
+  add_constraint(attach(side_panel |> at(-0.4, 0.0), texture |> at(0.5, 0.0)))
 
   @set_name node_name_text = Text("Name")
   @set_name node_name_value = Rectangle((0.1, 0.04), RGB(0.2, 0.2, 0.2))
@@ -85,14 +85,14 @@ function start_app()
     node_color_value,
     node_hide_value,
   ]
-  add_constraint(align(at.(left_column, :edge, :right), :vertical, vline_left))
-  add_constraint(align(at.(right_column, :edge, :left), :vertical, vline_right))
+  add_constraint(align(left_column .|> at(:edge, :right), :vertical, vline_left))
+  add_constraint(align(right_column .|> at(:edge, :left), :vertical, vline_right))
 
   for column in (left_column, right_column)
     add_constraint(distribute(column, :vertical, vspacing, :point))
   end
 
-  add_constraint(attach(save_button, at(left_column[end], P2(0.2, -0.2))))
+  add_constraint(attach(save_button, left_column[end] |> at(0.2, -0.2)))
 end
 
 main(; async = false) = Anvil.main(start_app; async)
