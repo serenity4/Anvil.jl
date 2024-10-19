@@ -107,54 +107,32 @@ function (rendering::RenderingSystem)(ecs::ECSDatabase, target::Resource)
   depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, dimensions(target.attachment))
   color_clear = [ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1f0))]
   parameters = ShaderParameters(target; depth, color_clear)
-  push!(nodes, render_opaque_objects(rendering, ecs, @set parameters.depth_clear = ClearValue(1f0)))
-  push!(nodes, render_transparent_objects(rendering, ecs, @set parameters.color_clear[1] = nothing))
+  render_opaque_objects!(nodes, rendering, ecs, @set parameters.depth_clear = ClearValue(1f0))
+  render_transparent_objects!(nodes, rendering, ecs, @set parameters.color_clear[1] = nothing)
   nodes
 end
 
-function render_opaque_objects((; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
-  (; program_cache) = renderer
+function render_opaque_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
   commands = Command[]
-
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+    object.is_opaque || continue
     location = Point3f(location..., -1/z)
-    command = @match object.type begin
-      &RENDER_OBJECT_RECTANGLE => begin
-        rect = ShaderLibrary.Rectangle(geometry, object.vertex_data, nothing)
-        gradient = object.primitive_data::Gradient
-        Command(program_cache, gradient, parameters, Primitive(rect, location))
-      end
-      &RENDER_OBJECT_IMAGE => begin
-        # Assume that images are opaque for now.
-        rect = ShaderLibrary.Rectangle(geometry, FULL_IMAGE_UV, nothing)
-        sprite = object.primitive_data::Sprite
-        Command(program_cache, sprite, parameters, Primitive(rect, location))
-      end
-      _ => continue
-    end
-    push!(commands, command)
+    add_renderables!(commands, renderer.program_cache, object, location, geometry, parameters)
   end
-  RenderNode(commands)
+  !isempty(commands) && push!(nodes, RenderNode(commands))
 end
 
-function render_transparent_objects((; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
-  (; program_cache) = renderer
+function render_transparent_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
   commands = Command[]
-
-  parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
-
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+    object.is_opaque && continue
     location = Point3f(location..., -1/z)
-    @tryswitch object.type begin
-      @case &RENDER_OBJECT_TEXT
-      text = object.primitive_data::ShaderLibrary.Text
-      append!(commands, renderables(program_cache, text, parameters_ssaa, location))
-    end
+    add_renderables!(commands, renderer.program_cache, object, location, geometry, parameters)
   end
-  RenderNode(commands)
+  !isempty(commands) && push!(nodes, RenderNode(commands))
 end
 
-const FULL_IMAGE_UV = Vec2[(0, 0), (0, 1), (1, 0), (1, 1)]
+const FULL_IMAGE_UV = Vec2[(0, 1), (1, 1), (0, 0), (1, 0)]
 
 struct UserInterface
   overlay::UIOverlay

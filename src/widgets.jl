@@ -112,7 +112,36 @@ function synchronize(rect::Rectangle)
   (; r, g, b) = rect.color
   vertex_data = [Vec3(r, g, b) for _ in 1:4]
   set_geometry(rect, rect.geometry)
-  set_render(rect, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient()))
+  set_render(rect, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient(); is_opaque = true))
+end
+
+@widget struct Image
+  geometry::GeometryComponent
+  texture::Texture
+  is_opaque::Bool
+end
+
+Image(geometry::GeometryComponent, texture::Texture, is_opaque::Bool) = new_widget(Image, geometry, texture, is_opaque)
+Image((width, height)::Tuple, texture::Texture, is_opaque::Bool) = Image(geometry(width, height), texture, is_opaque)
+Image(geometry, data; is_opaque::Bool = false) = Image(geometry, texture(data), is_opaque)
+
+function Image(data, scale::Real = 1; is_opaque::Bool = false)
+  data = texture(data)
+  width, height = dimensions(data.image) .* scale * 0.001
+  Image((width, height), data, is_opaque)
+end
+
+texture(data::Texture) = data
+texture(data::AbstractMatrix) = load_texture(data)
+
+function Base.setproperty!(image::Image, name::Symbol, value)
+  name === :texture && (value = texture(value))
+  @invoke setproperty!(image::Widget, name::Symbol, value)
+end
+
+function synchronize(image::Image)
+  set_geometry(image, image.geometry)
+  set_render(image, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image.texture); image.is_opaque))
 end
 
 @widget struct Text

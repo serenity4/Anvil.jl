@@ -29,6 +29,7 @@ using Entities
 using MLStyle
 using Dictionaries
 using ForwardMethods: @forward_methods
+using FileIO
 
 using Reexport
 @reexport using ColorTypes
@@ -41,7 +42,7 @@ using XCB
 @reexport using StaticArrays: @SVector, SVector
 
 using Base: Callable, annotate!, annotations
-using StyledStrings
+@reexport using StyledStrings
 using StyledStrings: eachregion, Face, addface!
 using InteractiveUtils: subtypes
 
@@ -62,6 +63,7 @@ include("layout.jl")
 include("bindings.jl")
 include("widgets.jl")
 include("systems.jl")
+include("assets.jl")
 include("application.jl")
 include("theme.jl")
 
@@ -70,15 +72,19 @@ const WINDOW_ENTITY_COUNTER = Entities.Counter()
 
 @compile_traces "precompilation_traces.jl"
 
+const ASSET_DIRECTORY = Ref{String}()
+
 function __init__()
   addface!(:application_shortcut_show => Face(underline = true))
   addface!(:application_shortcut_hide => Face(underline = false))
+  ASSET_DIRECTORY[] = joinpath(dirname(@__DIR__), "assets")
 end
 
 @reexport using XCB
 
 export
        app, Application,
+       ASSET_DIRECTORY,
 
        # Components.
        RenderComponent, InputComponent, LocationComponent, GeometryComponent, ZCoordinateComponent,
@@ -87,7 +93,7 @@ export
        RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT,
 
        # Widgets.
-       Rectangle, Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
+       Rectangle, Image, Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
 
        # Application state.
        get_entity, get_location, get_geometry, get_z, get_render, get_input_handler, get_widget, get_window,
@@ -96,6 +102,7 @@ export
        bind, unbind,
 
        font_file, get_font,
+       texture_file, get_texture,
 
        is_left_click,
 

@@ -21,6 +21,34 @@ struct RenderComponent
   type::RenderObjectType
   vertex_data::Any
   primitive_data::Any
+  is_opaque::Bool
+end
+function RenderComponent(type::RenderObjectType, vertex_data, primitive_data; is_opaque::Optional{Bool} = nothing)
+  is_opaque = @something is_opaque type ≠ RENDER_OBJECT_TEXT
+  RenderComponent(type, vertex_data, primitive_data, is_opaque)
+end
+
+function add_renderables!(commands, program_cache::ProgramCache, component::RenderComponent, location, geometry, parameters::ShaderParameters)
+  @switch component.type begin
+    @case &RENDER_OBJECT_RECTANGLE
+    rect = ShaderLibrary.Rectangle(geometry, component.vertex_data, nothing)
+    gradient = component.primitive_data::Gradient
+    primitive = Primitive(rect, location)
+    command = Command(program_cache, gradient, parameters, primitive)
+    push!(commands, command)
+
+    @case &RENDER_OBJECT_IMAGE
+    rect = ShaderLibrary.Rectangle(geometry, FULL_IMAGE_UV, nothing)
+    sprite = component.primitive_data::Sprite
+    primitive = Primitive(rect, location)
+    command = Command(program_cache, sprite, parameters, primitive)
+    push!(commands, command)
+
+    @case &RENDER_OBJECT_TEXT
+    text = component.primitive_data::ShaderLibrary.Text
+    parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
+    append!(commands, renderables(program_cache, text, parameters_ssaa, location))
+  end
 end
 
 Base.show(io::IO, render::RenderComponent) = print(io, RenderComponent, "(", render.type, ", ", typeof(render.vertex_data), ", ", typeof(render.primitive_data))

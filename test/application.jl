@@ -19,7 +19,6 @@ include("virtual_inputs.jl")
 
 @testset "Application" begin
   @testset "Application start/exit" begin
-    GC.gc()
     @test isa(sprint(show, Anvil.app), String)
     main(async = true)
     synchronize()

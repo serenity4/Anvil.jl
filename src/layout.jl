@@ -175,7 +175,8 @@ function compute_layout!(engine::LayoutEngine, constraints)
       @case ::O
       cs = dg.node_constraints[v]
       isnothing(cs) && continue
-      validate_constraints(engine, cs)
+      # TODO: Re-enable when partial constraints are supported, otherwise the check is too restrictive.
+      # validate_constraints(engine, cs)
       original = get_position(engine, node)
       position = foldl(cs; init = original) do position, constraint
         apply_constraint(engine, constraint, position)
@@ -317,6 +318,7 @@ at(object, location::Symbol, argument = nothing) = at(object, FeatureLocation(lo
   DIRECTION_HORIZONTAL = 1
   DIRECTION_VERTICAL = 2
 end
+other_axis(direction) = Direction(3 - Int(direction))
 
 function Direction(name::Symbol)
   names = (:horizontal, :vertical)
@@ -415,7 +417,7 @@ end
 function apply_constraint(engine::LayoutEngine, constraint::Constraint, position)
   C = coordinate_type(engine)
   @match constraint.type begin
-    &CONSTRAINT_TYPE_ATTACH => set_coordinates(engine, position, attach_point(engine, constraint))
+    &CONSTRAINT_TYPE_ATTACH => set_coordinates(engine, position, apply_attach_constraint(engine, constraint, coordinates(engine, position)))
   end
 end
 
@@ -481,16 +483,16 @@ function apply_spacing(engine::LayoutEngine, constraint::Constraint, x::Position
   @when &SPACING_MODE_GEOMETRY = constraint.spacing.mode begin
     xb, yb = get_geometry(engine, x[]), get_geometry(engine, y[])
     sx, sy = (xb.max - xb.min) ./ 2, (yb.max - yb.min) ./ 2
-    spacing += @match direction begin
+    spacing -= @match direction begin
       &DIRECTION_HORIZONTAL => sx[1] + sy[1]
       &DIRECTION_VERTICAL => sx[2] + sy[2]
     end
   end
   xc, yr = get_coordinates(engine, x), get_relative_coordinates(engine, y)
-  (xc, yr) = alignment_or_distribution_target.((xc, yr), Int64(direction))
+  base, offset = alignment_or_distribution_target.((xc, yr), Int64(direction))
   @match direction begin
-    &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(xc - yr + spacing, coords[2]))
-    &DIRECTION_VERTICAL => set_coordinates(engine, position, C(coords[1], xc - yr + spacing))
+    &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(base - offset + spacing, coords[2]))
+    &DIRECTION_VERTICAL => set_coordinates(engine, position, C(coords[1], base - offset + spacing))
   end
 end
 
@@ -526,19 +528,45 @@ align(objects::AbstractVector, direction, target) = align(positional_feature.(ob
 distribute(objects::AbstractVector{<:PositionalFeature}, direction, spacing, mode = SPACING_MODE_POINT) = Constraint(CONSTRAINT_TYPE_DISTRIBUTE, nothing, objects, Spacing(direction, spacing, mode))
 distribute(objects::AbstractVector, direction, spacing, mode = SPACING_MODE_POINT) = distribute(positional_feature.(objects), direction, spacing, mode)
 
-attach_point(engine::LayoutEngine, constraint::Constraint) = get_coordinates(engine, constraint.by) .- get_relative_coordinates(engine, constraint.on)
+function apply_attach_constraint(engine::LayoutEngine, constraint::Constraint, point)
+  on = get_coordinates(engine, constraint.on)
+  to = get_coordinates(engine, constraint.by)
+  displacement = attach_constraint_displacement(on, to)
+  point .+ displacement
+end
+
+attach_constraint_displacement(on, to) = to .- on
+attach_constraint_displacement(on, to::Segment) = axis_aligned_projection(on, to) .- to
+attach_constraint_displacement(on::Segment, to) = to .- axis_aligned_projection(to, on)
+attach_constraint_displacement(on::Segment, to::Segment) = attach_constraint_displacement(on, centroid(to))
+
+function axis_aligned_projection(point::Point, segment::Segment, along_axis::Direction = perpendicular_axis(segment))
+  P = typeof(point)
+  @match along_axis begin
+    &DIRECTION_HORIZONTAL => P(segment.a[1], point[2])
+    &DIRECTION_VERTICAL => P(point[1], segment.a[2])
+  end
+end
+
+aligned_axis(segment::Segment) = other_axis(perpendicular_axis(segment))
+function perpendicular_axis(segment::Segment)
+  segment.a[1] ≈ segment.b[1] && return DIRECTION_HORIZONTAL
+  segment.a[2] ≈ segment.b[2] && return DIRECTION_VERTICAL
+  throw(ArgumentError("Segment $segment is not axis-aligned!"))
+end
 
 positional_feature(feature::PositionalFeature) = feature
 positional_feature(object) = PositionalFeature(object, FEATURE_LOCATION_ORIGIN)
 
 function validate_constraints(engine::LayoutEngine, constraints)
+  # XXX: Handle partial constraints (e.g. where one axis only is affected).
   point = nothing
   for constraint in constraints
     if constraint.type == CONSTRAINT_TYPE_ATTACH
       if isnothing(point)
-        point = attach_point(engine, constraint)
+        point = apply_attach_constraint(engine, constraint)
       else
-        other_point = attach_point(engine, constraint)
+        other_point = apply_attach_constraint(engine, constraint)
         point == other_point || point ≈ other_point || error("Attempting to attach the same object at two different locations")
       end
     end

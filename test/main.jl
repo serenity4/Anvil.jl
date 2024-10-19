@@ -5,12 +5,9 @@ using LinearAlgebra: norm
 
 function start_app()
   # TODO: Use a `Widget` for this.
-  @set_name texture = new_entity()
-  set_location(texture, P2(-0.5, 0))
-  set_geometry(texture, (1.0, 1.0))
-  random_image() = image_resource(app.systems.rendering.renderer.device, RGBA.(rand(AGray{Float32}, 512, 512)))
-  image = random_image()
-  set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image)))
+  random_image() = RGBA.(rand(AGray{Float32}, 512, 512))
+  image = Image((1.0, 1.0), random_image())
+  set_location(image, P2(-0.5, 0))
 
   @set_name side_panel = Rectangle((0.8, 1.8), RGB(0.01, 0.01, 0.01))
 
@@ -21,7 +18,7 @@ function start_app()
   on_input = let origin = Ref(zero(P2)), last_displacement = Ref(zero(P2)), total_drag = Ref(zero(P2))
     function (input::Input)
       if is_left_click(input)
-        origin[] = get_location(texture)
+        origin[] = get_location(image)
         last_displacement[] = origin[]
         node_color_value.color = rand(RGB{Float32})
       elseif input.type === DRAG
@@ -30,17 +27,15 @@ function start_app()
         segment = displacement .- last_displacement[]
         last_displacement[] = SVector(displacement)
         total_drag[] = total_drag[] .+ abs.(segment)
-        set_location(texture, origin[] .+ displacement)
+        set_location(image, origin[] .+ displacement)
         if norm(total_drag) > 1.0
           total_drag[] = (0.0, 0.0)
-          renderable = get_render(texture)
-          new_image = fetch(execute(random_image, app.systems.rendering.renderer.task))
-          set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image)))
+          fetch(execute(() -> image.texture = random_image(), app.systems.rendering.renderer.task))
         end
       end
     end
   end
-  set_input_handler(texture, InputComponent(on_input, BUTTON_PRESSED, DRAG))
+  set_input_handler(image, InputComponent(on_input, BUTTON_PRESSED, DRAG))
 
   # File menu.
   file_menu_head = Button(() -> collapse!(file_menu), (0.3, 0.1); text = Text("File"))
@@ -58,7 +53,7 @@ function start_app()
   edit_menu_head = Button(() -> collapse!(edit_menu), (0.3, 0.1); text = Text("Edit"))
   edit_menu_item_1 = MenuItem(Text("Regenerate"), (0.3, 0.1)) do
     new_image = fetch(execute(random_image, app.systems.rendering.renderer.task))
-    set_render(texture, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image)))
+    set_render(image, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image); is_opaque = true))
   end
   @set_name edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
   add_constraint(attach(edit_menu |> at(:corner, :top_left), file_menu |> at(:corner, :top_right)))
@@ -67,7 +62,7 @@ function start_app()
   vline_right = vline_left |> at(0.05)
   vspacing = 0.1
 
-  add_constraint(attach(side_panel |> at(-0.4, 0.0), texture |> at(0.5, 0.0)))
+  add_constraint(attach(side_panel |> at(-0.4, 0.0), image |> at(0.5, 0.0)))
 
   @set_name node_name_text = Text("Name")
   @set_name node_name_value = Rectangle((0.1, 0.04), RGB(0.2, 0.2, 0.2))

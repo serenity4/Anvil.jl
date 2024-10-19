@@ -7,6 +7,7 @@ mutable struct Application
   windows::Dict{Window, EntityID}
   systems::Systems
   fonts::Dict{String, OpenTypeFont}
+  textures::Dict{String, Texture}
   is_release::Bool
   show_shortcuts::Bool
   Application() = new()
@@ -45,9 +46,11 @@ function initialize(f::Function)
   app.windows = Dict(window => window_id)
   app.systems = systems
   app.fonts = Dict()
+  app.textures = Dict()
   app.show_shortcuts = false
 
   bind(exit, key"ctrl+q")
+  bind(exit, key"ctrl+Q")
   bind(key"alt_left") do
     app.show_shortcuts = !app.show_shortcuts
     set_contextual_shortcuts_visibility(app.show_shortcuts)
@@ -145,9 +148,6 @@ bind(f::Callable, bindings::Pair...) = bind!(f, app.systems.event.ui.bindings, b
 bind(bindings::Pair...) = bind!(app.systems.event.ui.bindings, bindings...)
 bind(bindings::AbstractVector) = bind!(app.systems.event.ui.bindings, bindings)
 unbind(token) = unbind!(app.systems.event.ui.bindings, token)
-
-font_file(font_name) = joinpath(pkgdir(Anvil), "assets", "fonts", font_name * ".ttf")
-get_font(name::AbstractString) = get!(() -> OpenTypeFont(font_file(name)), app.fonts, name)
 
 add_constraint(constraint) = add_constraint!(app.systems.layout, constraint)
 remove_constraints(entity::EntityID) = remove_constraints!(app.systems.layout, entity)
