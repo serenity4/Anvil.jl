@@ -152,11 +152,19 @@ end
   language::Tag4
 end
 
+function line_center(text::Text)
+  shader = get_render(text).primitive_data::ShaderLibrary.Text
+  (; ascender, descender) = shader.font.hhea
+  offset = (ascender + descender) / 2shader.font.units_per_em * text.size
+  P2(0, offset)
+end
+
 function synchronize(text::Text)
   font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
   options = TextOptions()
   shader = ShaderLibrary.Text(OpenType.Text(text.text, options), get_font(text.font), font_options)
-  geometry = boundingelement(shader, extent(app.window))
+  text_span = boundingelement(shader)
+  geometry = text_span - centroid(text_span)
   set_geometry(text, geometry)
   set_render(text, RenderComponent(RENDER_OBJECT_TEXT, nothing, shader))
 end
@@ -238,7 +246,7 @@ function synchronize(button::Button)
   put_behind(button.background, button.text)
   set_geometry(button, get_geometry(button.background))
   add_constraint(attach(button.background, button))
-  add_constraint(attach(at(button.text, :center), button))
+  add_constraint(attach(button.text, button))
 end
 
 function put_behind(button::Button, of)

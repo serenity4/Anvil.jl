@@ -106,10 +106,29 @@ function (rendering::RenderingSystem)(ecs::ECSDatabase, target::Resource)
   nodes = RenderNode[]
   depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, dimensions(target.attachment))
   color_clear = [ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1f0))]
-  parameters = ShaderParameters(target; depth, color_clear)
+  camera = camera_metric_to_viewport(target, rendering.renderer.frame_cycle.swapchain.surface.target)
+  parameters = ShaderParameters(target; depth, color_clear, camera)
   render_opaque_objects!(nodes, rendering, ecs, @set parameters.depth_clear = ClearValue(1f0))
   render_transparent_objects!(nodes, rendering, ecs, @set parameters.color_clear[1] = nothing)
   nodes
+end
+
+function camera_metric_to_viewport(target::Resource, window::Window)
+  viewport_dimensions = 2 .* screen_semidiagonal(aspect_ratio(target))
+  window_size = physical_size(window)
+  metric_to_viewport = viewport_dimensions ./ window_size
+  camera = Camera(; extent = 2 ./ metric_to_viewport)
+end
+
+"Retrieve the physical size of a window, in centimeters."
+function physical_size(window::Window)
+  (; screen) = window
+  screen_size = (screen.width_in_millimeters, screen.height_in_millimeters)
+  screen_dimensions = (screen.width_in_pixels, screen.height_in_pixels)
+  window_dimensions = extent(window)
+  physical_scale = screen_size ./ screen_dimensions
+  physical_scale = physical_scale ./ 10 # mm to cm
+  window_dimensions .* physical_scale
 end
 
 function render_opaque_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
@@ -168,28 +187,43 @@ function (system::EventSystem)(ecs::ECSDatabase)
   isempty(system.queue) && collect_events!(system.queue)
   while !isempty(system.queue)
     event = popfirst!(system.queue)
-    code = system(ecs, to_rendering_coordinate_system(event))
+    code = system(ecs, to_metric_coordinate_system(event))
     isa(code, Int) && return code
   end
 end
 
-function to_rendering_coordinate_system(event::Event)
-  @set event.location = to_rendering_coordinate_system(event.location, event.win)
+function to_metric_coordinate_system(event::Event)
+  @set event.location = to_metric_coordinate_system(event.location, event.win)
 end
 
-function to_rendering_coordinate_system((x, y), window::Window)
-  ar = aspect_ratio(extent(window))
-  xmax, ymax = (max(1.0, ar), max(1.0, 1/ar))
-  y = 1 - y # make bottom-left at (0, 0) and top-right at (1, 1)
-  remap.((x, y), 0, 1, (-xmax, -ymax), (xmax, ymax))
+function to_metric_coordinate_system((x, y), window::Window)
+  # Invert the Y axis (Y descending from top-left to Y ascending from bottom-left).
+  y = 1 - y
+
+  xmax, ymax = physical_size(window)
+  # Put the origin at the center of the window.
+  remap.((x, y), 0, 1, (-xmax/2, -ymax/2), (xmax/2, ymax/2))
 end
 function to_window_coordinate_system((x, y), window::Window)
-  ar = aspect_ratio(extent(window))
-  xmax, ymax = (max(1.0, ar), max(1.0, 1/ar))
-  (x, y) = remap.((x, y), (-xmax, -ymax), (xmax, ymax), 0.0, 1.0)
-  y = 1 - y # make bottom-left at (0, 0) and top-right at (1, 1)
+  xmax, ymax = physical_size(window)
+  # Put the origin at the bottom-left corner of the window.
+  x, y = remap.((x, y), (-xmax/2, -ymax/2), (xmax/2, ymax/2), 0, 1)
+
+  # Invert the Y axis (Y ascending from bottom-left to Y descending from top-left).
+  y = 1 - y
+
   (x, y)
 end
+
+"Convert a point in pixels to a point in centimeters."
+function pixel_to_metric(point::Point{2}, screen = app.window.screen)
+  screen_size = (screen.width_in_millimeters, screen.height_in_millimeters)
+  screen_dimensions = (screen.width_in_pixels, screen.height_in_pixels)
+  physical_scale = screen_size ./ screen_dimensions
+  physical_scale = physical_scale ./ 10 # mm to cm
+  point .* physical_scale
+end
+pixel_to_metric(box::Box{2}) = Box(pixel_to_metric(box.min), pixel_to_metric(box.max))
 
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
   event.type == KEY_PRESSED && execute_binding(system.ui.bindings, event.key_event)

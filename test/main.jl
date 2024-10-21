@@ -4,14 +4,13 @@ using ShaderLibrary: Sprite
 using LinearAlgebra: norm
 
 function start_app()
-  # TODO: Use a `Widget` for this.
   random_image() = RGBA.(rand(AGray{Float32}, 512, 512))
-  image = Image((1.0, 1.0), random_image())
-  set_location(image, P2(-0.5, 0))
+  @set_name image = Image((10, 10), random_image())
+  set_location(image, P2(-5, 0))
 
-  @set_name side_panel = Rectangle((0.8, 1.8), RGB(0.01, 0.01, 0.01))
+  @set_name side_panel = Rectangle((12, 22), RGB(0.01, 0.01, 0.01))
 
-  @set_name save_button = Button((0.3, 0.1); text = Text("Save")) do
+  @set_name save_button = Button((3, 1); text = Text("Save")) do
     save_button.background.color = rand(RGB{Float32})
   end
 
@@ -28,7 +27,7 @@ function start_app()
         last_displacement[] = SVector(displacement)
         total_drag[] = total_drag[] .+ abs.(segment)
         set_location(image, origin[] .+ displacement)
-        if norm(total_drag) > 1.0
+        if norm(total_drag) > 10
           total_drag[] = (0.0, 0.0)
           fetch(execute(() -> image.texture = random_image(), app.systems.rendering.renderer.task))
         end
@@ -38,36 +37,35 @@ function start_app()
   set_input_handler(image, InputComponent(on_input, BUTTON_PRESSED, DRAG))
 
   # File menu.
-  file_menu_head = Button(() -> collapse!(file_menu), (0.3, 0.1); text = Text("File"))
-  file_menu_item_1 = MenuItem(Text("New file"), (0.3, 0.1)) do
+  file_menu_head = Button(() -> collapse!(file_menu), (3, 1); text = Text("File"))
+  file_menu_item_1 = MenuItem(Text("New file"), (3, 1)) do
     save_button.background.color = RGB{Float32}(0.1, 0.3, 0.2)
   end
-  file_menu_item_2 = MenuItem(Text("Open..."), (0.3, 0.1)) do
+  file_menu_item_2 = MenuItem(Text("Open..."), (3, 1)) do
     save_button.background.color = RGB{Float32}(0.3, 0.2, 0.1)
   end
-  file_menu_item_3 = MenuItem(exit, Text("Exit"), (0.3, 0.1), 'x')
+  file_menu_item_3 = MenuItem(exit, Text("Exit"), (3, 1), 'x')
   @set_name file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2, file_menu_item_3], 'F')
   add_constraint(attach(file_menu |> at(:corner, :top_left), app.windows[app.window] |> at(:corner, :top_left)))
 
   # Edit menu.
-  edit_menu_head = Button(() -> collapse!(edit_menu), (0.3, 0.1); text = Text("Edit"))
-  edit_menu_item_1 = MenuItem(Text("Regenerate"), (0.3, 0.1)) do
-    new_image = fetch(execute(random_image, app.systems.rendering.renderer.task))
-    set_render(image, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(new_image); is_opaque = true))
+  edit_menu_head = Button(() -> collapse!(edit_menu), (3, 1); text = Text("Edit"))
+  edit_menu_item_1 = MenuItem(Text("Regenerate"), (3, 1)) do
+    fetch(execute(() -> image.texture = random_image(), app.systems.rendering.renderer.task))
   end
   @set_name edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
   add_constraint(attach(edit_menu |> at(:corner, :top_left), file_menu |> at(:corner, :top_right)))
 
-  vline_left = side_panel |> at(:edge, :left) |> at(0.2)
-  vline_right = vline_left |> at(0.05)
-  vspacing = 0.1
+  vline_left = side_panel |> at(:edge, :left) |> at(3.0)
+  vline_right = vline_left |> at(1.5)
+  vspacing = 1.0
 
-  add_constraint(attach(side_panel |> at(-0.4, 0.0), image |> at(0.5, 0.0)))
+  add_constraint(attach(side_panel |> at(:edge, :left), image |> at(:edge, :right)))
 
   @set_name node_name_text = Text("Name")
-  @set_name node_name_value = Rectangle((0.1, 0.04), RGB(0.2, 0.2, 0.2))
+  @set_name node_name_value = Rectangle((1.0, 0.4), RGB(0.2, 0.2, 0.2))
   @set_name node_color_text = Text("Color")
-  @set_name node_color_value = Rectangle((0.1, 0.04), RGB(0.3, 0.2, 0.9))
+  @set_name node_color_value = Rectangle((1.0, 0.4), RGB(0.3, 0.2, 0.9))
   @set_name node_hide_text = Text("Hide")
   @set_name node_hide_value = Checkbox(_ -> nothing)
   left_column = EntityID[
@@ -83,11 +81,12 @@ function start_app()
   add_constraint(align(left_column .|> at(:edge, :right), :vertical, vline_left))
   add_constraint(align(right_column .|> at(:edge, :left), :vertical, vline_right))
 
-  for column in (left_column, right_column)
-    add_constraint(distribute(column, :vertical, vspacing, :point))
+  add_constraint(distribute(left_column, :vertical, vspacing, :point))
+  for (left, right) in zip(left_column, right_column)
+    add_constraint(attach(right |> at(:edge, :bottom), left |> at(:edge, :bottom)))
   end
 
-  add_constraint(attach(save_button, left_column[end] |> at(0.2, -0.2)))
+  add_constraint(attach(save_button, left_column[end] |> at(3.0, -2.0)))
 end
 
 main(; async = false) = Anvil.main(start_app; async)

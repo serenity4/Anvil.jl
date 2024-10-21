@@ -263,7 +263,7 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
         end
         Segment(x, y)
       end
-    &FEATURE_LOCATION_CUSTOM => feature.data::Union{C,T}
+    &FEATURE_LOCATION_CUSTOM => feature.data
   end
 end
 
@@ -371,6 +371,8 @@ struct Spacing
   direction::Direction
   amount::Union{Float64,SpacingAmount}
   mode::SpacingMode
+  Spacing(direction::Direction, amount::Real, mode) = new(direction, convert(Float64, amount), mode)
+  Spacing(direction::Direction, amount::SpacingAmount, mode) = new(direction, amount, mode)
 end
 Spacing(direction::Symbol, amount, mode) = Spacing(Direction(direction), amount, mode)
 Spacing(direction, amount, mode::Symbol) = Spacing(direction, amount, SpacingMode(mode))
@@ -523,6 +525,8 @@ object_type(::Type{T}) where {O,T<:PositionalFeature{O}} = O
 object_type(::Type{T}) where {T} = T
 
 attach(object, onto) = Constraint(CONSTRAINT_TYPE_ATTACH, positional_feature(onto), positional_feature(object), nothing)
+align(object, direction, target) = align([object], direction, target)
+align(objects::AbstractVector{PositionalFeature{O}}, direction, target::O) where {O} = align(objects, direction, positional_feature(target))
 align(objects::AbstractVector{<:PositionalFeature}, direction, target) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, objects, Alignment{object_type(objects)}(direction, target))
 align(objects::AbstractVector, direction, target) = align(positional_feature.(objects), direction, target)
 distribute(objects::AbstractVector{<:PositionalFeature}, direction, spacing, mode = SPACING_MODE_POINT) = Constraint(CONSTRAINT_TYPE_DISTRIBUTE, nothing, objects, Spacing(direction, spacing, mode))
@@ -613,7 +617,14 @@ function DependencyGraph(engine::LayoutEngine{O}, constraints) where {O}
 
       @case &CONSTRAINT_TYPE_ALIGN || &CONSTRAINT_TYPE_DISTRIBUTE
       v = add_node!(constraint)
-      for to in constraint.on
+      dependencies = @match constraint.type begin
+        &CONSTRAINT_TYPE_ALIGN => begin
+          (; target) = constraint.alignment
+          isa(target, PositionalFeature{O}) ? [constraint.on; target] : constraint.on
+        end
+        &CONSTRAINT_TYPE_DISTRIBUTE => constraint.on
+      end
+      for to in dependencies
         src = to[]
         u = get!(() -> add_node!(src), verts, src)
         existing = get(constraint_proxies, src, nothing)

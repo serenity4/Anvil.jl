@@ -65,7 +65,7 @@ function initialize(f::Function)
   nothing
 end
 
-window_geometry(window::XCBWindow) = Box(Point2(screen_semidiagonal(aspect_ratio(extent(window)))))
+window_geometry(window::Window) = physical_size(window)
 
 is_left_click(event::Event) = event.mouse_event.button == BUTTON_LEFT
 is_left_click(input::Input) = (input.type === BUTTON_PRESSED || input.type === BUTTON_RELEASED) && is_left_click(input.event)

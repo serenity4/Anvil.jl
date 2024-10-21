@@ -47,7 +47,9 @@ function add_renderables!(commands, program_cache::ProgramCache, component::Rend
     @case &RENDER_OBJECT_TEXT
     text = component.primitive_data::ShaderLibrary.Text
     parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
-    append!(commands, renderables(program_cache, text, parameters_ssaa, location))
+    text_span = boundingelement(text)
+    origin = Point3((location[1:2] .- centroid(text_span))..., location[3])
+    append!(commands, renderables(program_cache, text, parameters_ssaa, origin))
   end
 end
 

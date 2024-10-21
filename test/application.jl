@@ -1,5 +1,5 @@
 using Anvil
-using Anvil: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_rendering_coordinate_system, to_window_coordinate_system, exit
+using Anvil: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_metric_coordinate_system, to_window_coordinate_system, exit
 using CooperativeTasks: execute
 using LinearAlgebra: norm
 using XCB
@@ -27,7 +27,7 @@ include("virtual_inputs.jl")
 
     @testset "Location mapping" begin
       for location in [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0), (0.5, 0.5), (0.4, 0.6)]
-        location_2 = to_rendering_coordinate_system(location, app.window)
+        location_2 = to_metric_coordinate_system(location, app.window)
         @test collect(to_window_coordinate_system(location_2, app.window)) == collect(location)
       end
     end
@@ -83,7 +83,7 @@ include("virtual_inputs.jl")
     ## Key-based navigation.
     move_cursor(menu)
     left_click()
-    move_cursor(get_location(menu) .+ (1.0, 0.0))
+    move_cursor(get_location(menu) .+ (10, 0))
     press_key(:UP)
     synchronize()
     @test Anvil.active_item(menu) === menu.items[end]
@@ -95,7 +95,7 @@ include("virtual_inputs.jl")
 
     move_cursor(menu)
     left_click()
-    move_cursor(get_location(menu) .+ (1.0, 0.0))
+    move_cursor(get_location(menu) .+ (10, 0))
     press_key(:UP)
     press_key(:UP)
     synchronize()
@@ -117,7 +117,7 @@ include("virtual_inputs.jl")
     ## Wheel-based navigation.
     move_cursor(menu)
     left_click()
-    move_cursor(get_location(menu) .+ (1.0, 0.0))
+    move_cursor(get_location(menu) .+ (10, 0))
     scroll_up()
     synchronize()
     @test Anvil.active_item(menu) === menu.items[end]
@@ -154,15 +154,15 @@ include("virtual_inputs.jl")
 
     # Dragging.
 
-    texture = get_entity(:texture)
-    from = get_location(texture)
-    move_cursor(texture)
+    image = get_entity(:image)
+    from = get_location(image)
+    move_cursor(image)
     drag(from .+ 0.5)
     @test BUTTON_STATE[] == BUTTON_LEFT
     drop()
     @test BUTTON_STATE[] == BUTTON_NONE
     synchronize()
-    to = get_location(texture)
+    to = get_location(image)
     @test to - from ≈ [0.5, 0.5] atol=0.02
 
     # Shortcut display.

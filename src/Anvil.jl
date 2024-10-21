@@ -94,6 +94,7 @@ export
 
        # Widgets.
        Rectangle, Image, Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
+       line_center,
 
        # Application state.
        get_entity, get_location, get_geometry, get_z, get_render, get_input_handler, get_widget, get_window,
