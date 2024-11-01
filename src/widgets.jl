@@ -132,7 +132,7 @@ function Image(data, scale::Real = 1; is_opaque::Bool = false)
 end
 
 texture(data::Texture) = data
-texture(data::AbstractMatrix) = load_texture(data)
+texture(data::AbstractMatrix) = fetch(execute(load_texture, app.systems.rendering.renderer.task, data))
 
 function Base.setproperty!(image::Image, name::Symbol, value)
   name === :texture && (value = texture(value))

@@ -1,7 +1,7 @@
 name = "Anvil"
 uuid = "3680adac-b468-4089-a5b4-2beb8414818d"
-version = "0.1.0"
 authors = ["Cédric Belmant"]
+version = "0.1.0"
 
 [deps]
 AbstractGUI = "796b4d30-d51d-4664-90d1-7cd8560850fa"
@@ -33,6 +33,7 @@ CompileTraces = "1"
 Dictionaries = "0.4.2"
 FileIO = "1.16.4"
 ForwardMethods = "1.6.0"
+OpenType = "0.1.13"
 Reexport = "1.2.2"
 StaticArrays = "1.9.7"
 StyledStrings = "1.11.0"

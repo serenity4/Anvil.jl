@@ -42,6 +42,7 @@ using XCB
 @reexport using StaticArrays: @SVector, SVector
 
 using Base: Callable, annotate!, annotations
+using .Meta: isexpr
 @reexport using StyledStrings
 using StyledStrings: eachregion, Face, addface!
 using InteractiveUtils: subtypes
@@ -64,6 +65,7 @@ include("bindings.jl")
 include("widgets.jl")
 include("systems.jl")
 include("assets.jl")
+include("observables.jl")
 include("application.jl")
 include("theme.jl")
 

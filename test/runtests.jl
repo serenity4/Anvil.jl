@@ -19,6 +19,7 @@ ENV["JULIA_DEBUG"] = "Anvil"
 @testset "Anvil.jl" begin
   include("layout.jl")
   include("bindings.jl")
+  include("observables.jl")
   include("application.jl")
 end;
 

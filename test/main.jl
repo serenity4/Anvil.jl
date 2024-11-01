@@ -1,16 +1,34 @@
-using Anvil: Text
+using Anvil: Text, @observable, @bind
 using Lava: image_resource
 using ShaderLibrary: Sprite
 using LinearAlgebra: norm
 
-function start_app()
-  random_image() = RGBA.(rand(AGray{Float32}, 512, 512))
-  @set_name image = Image((10, 10), random_image())
+function save(state)
+  state.number_of_saves += 1
+  println("Saved $(state.number_of_saves) times!")
+end
+
+function regenerate_image(state)
+  state.image = random_image()
+end
+
+random_image() = RGBA.(rand(AGray{Float32}, 512, 512))
+
+@observable mutable struct ApplicationState
+  image::Matrix{RGBA{Float32}}
+  number_of_saves::Int64
+  ApplicationState() = new(random_image(), 0)
+end
+
+function generate_user_interface(state::ApplicationState = ApplicationState())
+  @set_name image = Image((10, 10), state.image)
+  @bind image.texture => state.image
   set_location(image, P2(-5, 0))
 
   @set_name side_panel = Rectangle((12, 22), RGB(0.01, 0.01, 0.01))
 
   @set_name save_button = Button((3, 1); text = Text("Save")) do
+    save(state)
     save_button.background.color = rand(RGB{Float32})
   end
 
@@ -29,7 +47,7 @@ function start_app()
         set_location(image, origin[] .+ displacement)
         if norm(total_drag) > 10
           total_drag[] = (0.0, 0.0)
-          fetch(execute(() -> image.texture = random_image(), app.systems.rendering.renderer.task))
+          regenerate_image(state)
         end
       end
     end
@@ -51,7 +69,7 @@ function start_app()
   # Edit menu.
   edit_menu_head = Button(() -> collapse!(edit_menu), (3, 1); text = Text("Edit"))
   edit_menu_item_1 = MenuItem(Text("Regenerate"), (3, 1)) do
-    fetch(execute(() -> image.texture = random_image(), app.systems.rendering.renderer.task))
+    regenerate_image()
   end
   @set_name edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
   add_constraint(attach(edit_menu |> at(:corner, :top_left), file_menu |> at(:corner, :top_right)))
@@ -89,4 +107,4 @@ function start_app()
   add_constraint(attach(save_button, left_column[end] |> at(3.0, -2.0)))
 end
 
-main(; async = false) = Anvil.main(start_app; async)
+main(; async = false) = Anvil.main(generate_user_interface; async)

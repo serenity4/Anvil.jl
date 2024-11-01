@@ -58,9 +58,9 @@ function initialize(f::Function)
 
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
   app.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
+  start(systems.rendering.renderer)
   f()
 
-  start(systems.rendering.renderer)
   map_window(window)
   nothing
 end
