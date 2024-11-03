@@ -41,7 +41,7 @@ function disable!(widget::Widget)
   end
   unset_render(widget)
   unset_input_handler(widget)
-  remove_constraints(widget)
+  remove_layout_operations(widget)
   widget.disabled = true
   widget
 end
@@ -246,8 +246,8 @@ function synchronize(button::Button)
   isnothing(button.text) && return
   put_behind(button.background, button.text)
   set_geometry(button, get_geometry(button.background))
-  add_constraint(attach(button.background, button))
-  add_constraint(attach(button.text, button))
+  place(button.background, button)
+  place(button.text, button)
 end
 
 function put_behind(button::Button, of)
@@ -285,7 +285,7 @@ end
 
 function synchronize(checkbox::Checkbox)
   set_geometry(checkbox, get_geometry(checkbox.background))
-  add_constraint(attach(checkbox.background, checkbox))
+  place(checkbox.background, checkbox)
   set_input_handler(checkbox, InputComponent(input -> is_left_click(input) && checkbox.on_toggle(input), BUTTON_PRESSED, NO_ACTION))
   checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
 end
@@ -319,8 +319,8 @@ function synchronize(item::MenuItem)
   set_geometry(item, item.background.geometry)
   put_behind(item.text, item)
   put_behind(item.background, item.text)
-  add_constraint(attach(item.background, item))
-  add_constraint(attach(at(item.text, :center), item))
+  place(item.background, item)
+  place(at(item.text, :center), item)
   color = ifelse(item.active, MENU_ITEM_ACTIVE_COLOR, MENU_ITEM_COLOR)
   item.background.color = color
 end
@@ -474,11 +474,10 @@ end
 
 function place_items(menu::Menu)
   menu.direction === DIRECTION_VERTICAL || error("Unsupported direction $direction")
-  add_constraint(attach(menu.head, menu))
+  place(menu.head, menu)
   prev_item = menu.head
   for item in menu.items
-    constraint = attach(at(item, :corner, :top_left), at(prev_item, :corner, :bottom_left))
-    add_constraint(constraint)
+    place(item |> at(:corner, :top_left), prev_item |> at(:corner, :bottom_left))
     prev_item = item
   end
 
@@ -490,7 +489,6 @@ end
 attach(object::Widget, onto::Widget) = attach(object.id, onto.id)
 attach(object, onto::Widget) = attach(object, onto.id)
 attach(object::Widget, onto) = attach(object.id, onto)
-at(object::Widget, location::FeatureLocation, args...) = at(object.id, location, args...)
-at(object::Widget, location::Symbol, args...) = at(object.id, location, args...)
+at(arg, args...) = at(app.systems.layout.engine, arg, args...)
 
 const WidgetComponent = Union{subtypes(Widget)...}

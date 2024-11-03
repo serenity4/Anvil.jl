@@ -64,21 +64,21 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
   end
   file_menu_item_3 = MenuItem(exit, Text("Exit"), (3, 1), 'x')
   @set_name file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2, file_menu_item_3], 'F')
-  add_constraint(attach(file_menu |> at(:corner, :top_left), app.windows[app.window] |> at(:corner, :top_left)))
+  place(file_menu |> at(:corner, :top_left), app.windows[app.window] |> at(:corner, :top_left))
 
   # Edit menu.
   edit_menu_head = Button(() -> collapse!(edit_menu), (3, 1); text = Text("Edit"))
   edit_menu_item_1 = MenuItem(Text("Regenerate"), (3, 1)) do
-    regenerate_image()
+    regenerate_image(state)
   end
   @set_name edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
-  add_constraint(attach(edit_menu |> at(:corner, :top_left), file_menu |> at(:corner, :top_right)))
+  place(edit_menu |> at(:corner, :top_left), file_menu |> at(:corner, :top_right))
 
   vline_left = side_panel |> at(:edge, :left) |> at(3.0)
   vline_right = vline_left |> at(1.5)
   vspacing = 1.0
 
-  add_constraint(attach(side_panel |> at(:edge, :left), image |> at(:edge, :right)))
+  place(side_panel |> at(:edge, :left), image |> at(:edge, :right))
 
   @set_name node_name_text = Text("Name")
   @set_name node_name_value = Rectangle((1.0, 0.4), RGB(0.2, 0.2, 0.2))
@@ -96,15 +96,15 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
     node_color_value,
     node_hide_value,
   ]
-  add_constraint(align(left_column .|> at(:edge, :right), :vertical, vline_left))
-  add_constraint(align(right_column .|> at(:edge, :left), :vertical, vline_right))
+  align(left_column .|> at(:edge, :right), :vertical, vline_left)
+  align(right_column .|> at(:edge, :left), :vertical, vline_right)
 
-  add_constraint(distribute(left_column, :vertical, vspacing, :point))
+  distribute(left_column, :vertical, vspacing, :point)
   for (left, right) in zip(left_column, right_column)
-    add_constraint(attach(right |> at(:edge, :bottom), left |> at(:edge, :bottom)))
+    align(right |> at(:edge, :bottom), :horizontal, left |> at(:edge, :bottom))
   end
 
-  add_constraint(attach(save_button, left_column[end] |> at(3.0, -2.0)))
+  place(save_button, left_column[end] |> at(3.0, -2.0))
 end
 
 main(; async = false) = Anvil.main(generate_user_interface; async)

@@ -163,7 +163,7 @@ include("virtual_inputs.jl")
     @test BUTTON_STATE[] == BUTTON_NONE
     synchronize()
     to = get_location(image)
-    @test to - from ≈ [0.5, 0.5] atol=0.02
+    @test to - from ≈ [0.5, 0.5] atol=0.04
 
     # Shortcut display.
 

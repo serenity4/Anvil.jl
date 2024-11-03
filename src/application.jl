@@ -149,10 +149,13 @@ bind(bindings::Pair...) = bind!(app.systems.event.ui.bindings, bindings...)
 bind(bindings::AbstractVector) = bind!(app.systems.event.ui.bindings, bindings)
 unbind(token) = unbind!(app.systems.event.ui.bindings, token)
 
-add_constraint(constraint) = add_constraint!(app.systems.layout, constraint)
-remove_constraints(entity::EntityID) = remove_constraints!(app.systems.layout, entity)
-remove_constraints(entity) = remove_constraints!(app.systems.layout, convert(EntityID, entity))
 put_behind(behind, of) = put_behind!(app.systems.drawing_order, behind, of)
+
+place(object, onto) = place!(app.systems.layout.engine, object, onto)
+place_after(object, onto, direction) = place_after(app.systems.layout.engine, object, onto, direction)
+align(objects, direction, target) = align!(app.systems.layout.engine, objects, direction, target)
+distribute(objects, direction, spacing, mode = SPACING_MODE_POINT) = distribute!(app.systems.layout.engine, objects, direction, spacing, mode)
+remove_layout_operations(entity) = remove_operations!(app.systems.layout.engine, entity)
 
 "Run systems that are common to and essential for both rendering and event handling."
 function run_systems()

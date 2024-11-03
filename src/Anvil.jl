@@ -109,7 +109,7 @@ export
 
        is_left_click,
 
-       add_constraint, remove_constraints, put_behind, synchronize,
+       place, place_after, align, distribute, at, remove_layout_operations, put_behind, synchronize,
 
        is_release, @set_name, EntityID, new_entity,
        P2, P2f, Box

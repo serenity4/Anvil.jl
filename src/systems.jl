@@ -4,33 +4,15 @@ shutdown(::System) = nothing
 
 struct LayoutSystem{E<:LayoutEngine} <: System
   engine::E
-  constraints::Vector{Constraint{EntityID}}
 end
 function LayoutSystem(ecs::ECSDatabase)
   storage = ECSLayoutStorage{P2, Box{2,Float64}, LocationComponent, GeometryComponent}(ecs)
   engine = LayoutEngine(storage)
-  LayoutSystem{typeof(engine)}(engine, [])
+  LayoutSystem{typeof(engine)}(engine)
 end
 
-add_constraint!(layout::LayoutSystem, constraint::Constraint{EntityID}) = push!(layout.constraints, constraint)
-function remove_constraints!(layout::LayoutSystem, entity::EntityID)
-  to_delete = Int[]
-  for (i, constraint) in enumerate(layout.constraints)
-    if !isnothing(constraint.by) && constraint.by[] == entity
-      push!(to_delete, i)
-      continue
-    end
-    (; on) = constraint
-    isa(on, PositionalFeature{EntityID}) && (on = [on])
-    any(target -> target[] == entity, on) && push!(to_delete, i)
-  end
-  isempty(to_delete) && return false
-  splice!(layout.constraints, to_delete)
-  true
-end
-
-function ((; engine, constraints)::LayoutSystem)(ecs::ECSDatabase)
-  compute_layout!(engine, constraints)
+function (layout::LayoutSystem)(ecs::ECSDatabase)
+  compute_layout!(layout.engine)
 end
 
 "System determining which objects are going to be in front of other objects when displayed on the screen."

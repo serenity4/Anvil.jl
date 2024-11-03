@@ -3,14 +3,14 @@ using Graphs
 export
   LayoutEngine,
   LayoutStorage, ECSLayoutStorage, ArrayLayoutStorage,
-  PositionalFeature, at,
-  Constraint, attach, align, distribute,
   compute_layout!,
+  place!, place_after!, align!, distribute!,
+  remove_operations!,
 
-  Constraint,
-  CONSTRAINT_TYPE_ATTACH,
-  CONSTRAINT_TYPE_ALIGN,
-  CONSTRAINT_TYPE_DISTRIBUTE,
+  Operation,
+  OPERATION_TYPE_PLACE,
+  OPERATION_TYPE_ALIGN,
+  OPERATION_TYPE_DISTRIBUTE,
   PositionalFeature,
   FEATURE_LOCATION_ORIGIN,
   FEATURE_LOCATION_CENTER,
@@ -81,14 +81,13 @@ function get_geometry end
 coordinates(storage::LayoutStorage{<:Any,P,P}, position::P) where {P} = position
 get_coordinates(storage::LayoutStorage{O,P}, object::O) where {O,P} = coordinates(storage, get_position(storage, object))
 set_coordinates(storage::LayoutStorage{<:Any,T,T}, position::T, coords::T) where {T} = coords
-report_unsolvable_decision(storage::LayoutStorage) = error("No solution was found which satisfies all requested constraints.")
 # will also need similar functions to access geometry
 
 @enum FeatureLocation begin
   FEATURE_LOCATION_CENTER = 1
   FEATURE_LOCATION_ORIGIN = 2
   FEATURE_LOCATION_CORNER = 3
-  FEATURE_LOCATION_EDGE = 4
+  FEATURE_LOCATION_EDGE   = 4
   FEATURE_LOCATION_CUSTOM = 5
 end
 
@@ -125,15 +124,86 @@ end
 group(objects...) = Group(objects)
 Group(objects::Tuple) = Group([objects...])
 
+
+@enum OperationType begin
+  OPERATION_TYPE_PLACE
+  OPERATION_TYPE_ALIGN
+  OPERATION_TYPE_DISTRIBUTE
+end
+
+# TODO: Update docstrings.
+"Attach two features together, resulting in an identical position for both."
+OPERATION_TYPE_PLACE
+"""
+Position a set of features on a line along a [`Direction`](@ref), either along a horizontal (i.e. the vertical position is set to rest on a horizontal line) or along a vertical (the horizontal position is set to rest on a vertical line).
+"""
+OPERATION_TYPE_ALIGN
+"""
+Evenly space out a set of features along a [`Direction`](@ref).
+
+The notion of "space" may be defined with respect to points, or to geometries: either we talk about the distance between points, or about the distance between geometries.
+
+The desired spacing may be provided as a floating point value. However, for convenience, we also allow a [`SpacingAmount`](@ref) value, which will automatically compute the required spacing depending on the desired behavior.
+
+Automatic spacing includes taking the minimum, maximum or average of the distances between the provided features. Which notion of distance is used depends on the mode (see [`SpacingMode`](@ref)).
+
+Providing any positional feature for a [`SPACING_MODE_GEOMETRY`](@ref) mode will result in considering the geometry of associated objects to be offset by the relative offset between the feature and the center of the geometry. Therefore, the spacing will not appear even if any positional features are not positioned to the center of the objects.
+"""
+OPERATION_TYPE_DISTRIBUTE
+
+struct Operation{O}
+  type::OperationType
+  by::Optional{PositionalFeature{O}}
+  on::Union{PositionalFeature{O}, Vector{PositionalFeature{O}}}
+  data::Any
+end
+
+function Base.getproperty(operation::Operation{O}, name::Symbol) where {O}
+  name === :alignment && return getfield(operation, :data)::Alignment{O}
+  name === :spacing && return getfield(operation, :data)::Spacing
+  getfield(operation, name)
+end
+
 struct LayoutEngine{O,S<:LayoutStorage{O}}
   storage::S
   groups::Vector{Group{O}}
+  operations::Vector{Operation{O}}
 end
-LayoutEngine(storage::LayoutStorage{O}) where {O} = LayoutEngine{O,typeof(storage)}(storage, Group{O}[])
+LayoutEngine(storage::LayoutStorage{O}) where {O} = LayoutEngine{O,typeof(storage)}(storage, Group{O}[], Operation{O}[])
 
 @forward_methods LayoutEngine field = :storage object_type position_type coordinate_type geometry_type get_geometry(_, object) set_geometry!(_, object, geometry) coordinates(_, x) get_coordinates(_, object) set_coordinates(_, position, coords) get_position(_, object) set_position!(_, object, position)
 
 Base.broadcastable(engine::LayoutEngine) = Ref(engine)
+
+to_object(engine::LayoutEngine{O}, object::O) where {O} = object
+to_object(engine::LayoutEngine{O}, feature::PositionalFeature{O}) where {O} = feature
+to_object(engine::LayoutEngine{O}, group::Group{O}) where {O} = group
+to_object(engine::LayoutEngine{O}, object) where {O} = convert(O, object)
+
+positional_feature(::Type{O}, object::O) where {O} = PositionalFeature(object, FEATURE_LOCATION_ORIGIN)
+positional_feature(::Type{O}, group::Group{O}) where {O} = PositionalFeature(group, FEATURE_LOCATION_ORIGIN)
+positional_feature(::Type{O}, feature::PositionalFeature{O}) where {O} = feature
+positional_feature(engine::LayoutEngine{O}, object) where {O} = positional_feature(O, to_object(engine, object))
+
+remove_operations!(engine::LayoutEngine) = empty!(engine.operations)
+function remove_operations!(engine::LayoutEngine{O}, object) where {O}
+  object = to_object(engine, object)
+  to_delete = Int[]
+  for (i, operation) in enumerate(engine.operations)
+    if !isnothing(operation.by) && operation.by[] == object
+      push!(to_delete, i)
+      continue
+    end
+    delete = @match operation.on begin
+      on::PositionalFeature{O} => on[] == object
+      on::Vector{PositionalFeature{O}} => any(target -> target[] == object, on)
+    end
+    delete && push!(to_delete, i)
+  end
+  isempty(to_delete) && return false
+  splice!(engine.operations, to_delete)
+  true
+end
 
 """
 Array-backed layout storage, where "objects" are indices to `Vector`s of positions and geometries.
@@ -165,48 +235,9 @@ geometry(storage::ECSLayoutStorage{<:Any,G,<:Any,G}, geometry::G) where {G} = ge
 get_geometry(storage::ECSLayoutStorage{<:Any,GC,<:Any,GC}, object::EntityID) where {GC} = storage.ecs[object, GEOMETRY_COMPONENT_ID]::GC
 set_geometry!(storage::ECSLayoutStorage{<:Any,GC}, object::EntityID, geometry::GC) where {GC} = storage.ecs[object, GEOMETRY_COMPONENT_ID] = geometry
 
-function compute_layout!(engine::LayoutEngine, constraints)
-  O = object_type(engine)
-  C = Constraint{O}
-  dg = DependencyGraph(engine, constraints)
-  for v in topological_sort(dg.graph)
-    node = dg.nodes[v]
-    @switch node begin
-      @case ::O
-      cs = dg.node_constraints[v]
-      isnothing(cs) && continue
-      # TODO: Re-enable when partial constraints are supported, otherwise the check is too restrictive.
-      # validate_constraints(engine, cs)
-      original = get_position(engine, node)
-      position = foldl(cs; init = original) do position, constraint
-        apply_constraint(engine, constraint, position)
-      end
-      position ≠ original && set_position!(engine, node, position)
-
-      @case ::C
-      @switch node.type begin
-        @case &CONSTRAINT_TYPE_ALIGN
-        alignment = compute_alignment(engine, node)
-        for feature in node.on
-          object = feature[]
-          original = get_position(engine, object)
-          position = apply_alignment(engine, node, feature, alignment)
-          position ≠ original && set_position!(engine, object, position)
-        end
-
-        @case &CONSTRAINT_TYPE_DISTRIBUTE
-        spacing = compute_spacing(engine, node)
-        length(node.on) == 1 && continue
-        reference = node.on[1]
-        for feature in @view node.on[2:end]
-          object = feature[]
-          original = get_position(engine, object)
-          position = apply_spacing(engine, node, reference, feature, spacing)
-          position ≠ original && set_position!(engine, object, position)
-          reference = feature
-        end
-      end
-    end
+function compute_layout!(engine::LayoutEngine{O}) where {O}
+  for operation in engine.operations
+    apply_operation!(engine, operation)
   end
 end
 
@@ -253,66 +284,51 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
     &FEATURE_LOCATION_ORIGIN => zero(C)
     &FEATURE_LOCATION_CENTER => centroid(get_geometry(engine, feature[]))
     &FEATURE_LOCATION_CORNER => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Corner)
-    &FEATURE_LOCATION_EDGE => begin
-        geometry = get_geometry(engine, feature[])::Box{2,T}
-        (x, y) = @match edge = feature.data::Edge begin
-          &EDGE_BOTTOM => (coordinates(geometry, CORNER_BOTTOM_LEFT), coordinates(geometry, CORNER_BOTTOM_RIGHT))
-          &EDGE_TOP => (coordinates(geometry, CORNER_TOP_LEFT), coordinates(geometry, CORNER_TOP_RIGHT))
-          &EDGE_LEFT => (coordinates(geometry, CORNER_BOTTOM_LEFT), coordinates(geometry, CORNER_TOP_LEFT))
-          &EDGE_RIGHT => (coordinates(geometry, CORNER_BOTTOM_RIGHT), coordinates(geometry, CORNER_TOP_RIGHT))
-        end
-        Segment(x, y)
-      end
+    &FEATURE_LOCATION_EDGE => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Edge)
     &FEATURE_LOCATION_CUSTOM => feature.data
   end
 end
 
 add_coordinates(x, y) = x .+ y
-add_coordinates(x::Segment, y::Segment) = Segment(x.a + y.a, x.b + y.b)
-add_coordinates(x::Segment, y) = Segment(x.a + y, x.b + y)
-add_coordinates(x, y::Segment) = add_coordinates(y, x)
-add_coordinates(x::Number, y::Segment{2,T}) where {T} = add_coordinates(y, x)
-function add_coordinates(x::Segment{2,T}, y::Number) where {T}
-  if x.a.y == x.b.y
-    # Offset the segment in the Y direction.
-    offset = Point{2,T}(zero(T), y)
-  elseif x.a.x == x.b.x
-    # Offset the segment in the X direction.
-    offset = Point{2,T}(y, zero(T))
-  else
-    error("Segment is neither horizontal nor vertical")
-  end
-  Segment(x.a + offset, x.b + offset)
-end
 
 get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = add_coordinates(get_coordinates(engine, feature.object), get_relative_coordinates(engine, feature))
 get_coordinates(engine::LayoutEngine, group::Group) = get_position(engine, group)
 
-coordinates(geometry::Box{2,T}, corner::Corner) where {T} = PointSet(geometry).points[Int64(corner)]
+coordinates(geometry::Box{2}, corner::Corner) = PointSet(geometry).points[Int64(corner)]
+function coordinates(geometry::Box{2,T}, edge::Edge) where {T}
+  (; width, height) = geometry
+  @match edge begin
+    &EDGE_LEFT => Point{2,T}(-width/2, zero(T))
+    &EDGE_RIGHT => Point{2,T}(width/2, zero(T))
+    &EDGE_BOTTOM => Point{2,T}(zero(T), -height/2)
+    &EDGE_TOP => Point{2,T}(zero(T), height/2)
+  end
+end
 
 # Closures.
-at(x::Real, y::Real) = at((x, y))
-at((x, y)::Tuple) = at(P2(x, y))
-at(p::P2) = x -> at(x, p)
-at(coord::Real) = x -> at(x, coord)
-at(location::Symbol, argument = nothing) = x -> at(x, location, argument)
-at(location::Symbol, argument::Symbol) = x -> at(x, location, argument)
+at(engine::LayoutEngine, x::Real, y::Real) = at(engine, (x, y))
+at(engine::LayoutEngine, (x, y)::Tuple) = at(engine, P2(x, y))
+at(engine::LayoutEngine, p::P2) = x -> at(engine, x, p)
+at(engine::LayoutEngine, coord::Real) = x -> at(engine, x, coord)
+at(engine::LayoutEngine, location::Symbol, argument = nothing) = x -> at(engine, x, location, argument)
+at(engine::LayoutEngine, location::Symbol, argument::Symbol) = x -> at(engine, x, location, argument)
 
-at(object) = positional_feature(object)
-at(object, position) = at(object, FEATURE_LOCATION_CUSTOM, position)
-function at(object, location::FeatureLocation, argument = nothing)
+at(engine::LayoutEngine, object) = positional_feature(engine, object)
+at(engine::LayoutEngine{O}, object, position) where {O} = at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
+at(engine::LayoutEngine{O}, object, location::FeatureLocation, argument = nothing) where {O} = at(O, to_object(engine, object), location, argument)
+function at(::Type{O}, object::Union{O, PositionalFeature{O}, Group{O}}, location::FeatureLocation, argument = nothing) where {O}
   if location in (FEATURE_LOCATION_ORIGIN, FEATURE_LOCATION_CENTER)
     isnothing(argument) || throw(ArgumentError("No argument must be provided for feature location in (`FEATURE_LOCATION_ORIGIN`, `FEATURE_LOCATION_CENTER`)"))
   elseif location == FEATURE_LOCATION_CORNER
-    isa(argument, Union{Symbol,Corner}) || throw(ArgumentError("`$location` requires a `Corner` argument"))
+    isa(argument, Union{Symbol,Corner}) || throw(ArgumentError("`$location` requires a `Corner` or symbol argument"))
   elseif location == FEATURE_LOCATION_EDGE
-    isa(argument, Union{Symbol,Edge}) || throw(ArgumentError("`$location` requires a `Edge` argument"))
+    isa(argument, Union{Symbol,Edge}) || throw(ArgumentError("`$location` requires an `Edge` or symbol argument"))
   elseif location == FEATURE_LOCATION_CUSTOM
     !isnothing(location) || throw(ArgumentError("`$location` requires an argument"))
   end
   PositionalFeature(object, location, argument)
 end
-at(object, location::Symbol, argument = nothing) = at(object, FeatureLocation(location), argument)
+at(engine::LayoutEngine{O}, object, location::Symbol, argument = nothing) where {O} = at(O, to_object(engine, object), FeatureLocation(location), argument)
 
 @enum Direction begin
   DIRECTION_HORIZONTAL = 1
@@ -378,87 +394,80 @@ Spacing(direction::Symbol, amount, mode) = Spacing(Direction(direction), amount,
 Spacing(direction, amount, mode::Symbol) = Spacing(direction, amount, SpacingMode(mode))
 Spacing(direction::Symbol, amount, mode::Symbol) = Spacing(Direction(direction), amount, SpacingMode(mode))
 
-@enum ConstraintType begin
-  CONSTRAINT_TYPE_ATTACH
-  CONSTRAINT_TYPE_ALIGN
-  CONSTRAINT_TYPE_DISTRIBUTE
-end
+# Apply operations.
 
-"Attach two features together, resulting in an identical position for both."
-CONSTRAINT_TYPE_ATTACH
-"""
-Position a set of features on a line along a [`Direction`](@ref), either along a horizontal (i.e. the vertical position is set to rest on a horizontal line) or along a vertical (the horizontal position is set to rest on a vertical line).
-"""
-CONSTRAINT_TYPE_ALIGN
-"""
-Evenly space out a set of features along a [`Direction`](@ref).
+function apply_operation!(engine::LayoutEngine{O}, operation::Operation) where {O}
+  @switch operation.type begin
+    @case &OPERATION_TYPE_PLACE
+    operand = operation.on::PositionalFeature{O}
+    old = get_position(engine, operand[])
+    new = set_coordinates(engine, old, apply_place_operation(engine, operation, coordinates(engine, old)))
+    old ≠ new && set_position!(engine, operand[], new)
 
-The notion of "space" may be defined with respect to points, or to geometries: either we talk about the distance between points, or about the distance between geometries.
+    @case &OPERATION_TYPE_ALIGN
+    alignment = compute_alignment(engine, operation)
+    for feature in operation.on
+      object = feature[]
+      old = get_position(engine, object)
+      new = apply_alignment(engine, operation, feature, alignment)
+      new ≠ old && set_position!(engine, object, new)
+    end
 
-The desired spacing may be provided as a floating point value. However, for convenience, we also allow a [`SpacingAmount`](@ref) value, which will automatically compute the required spacing depending on the desired behavior.
-
-Automatic spacing includes taking the minimum, maximum or average of the distances between the provided features. Which notion of distance is used depends on the mode (see [`SpacingMode`](@ref)).
-
-Providing any positional feature for a [`SPACING_MODE_GEOMETRY`](@ref) mode will result in considering the geometry of associated objects to be offset by the relative offset between the feature and the center of the geometry. Therefore, the spacing will not appear even if any positional features are not positioned to the center of the objects.
-"""
-CONSTRAINT_TYPE_DISTRIBUTE
-
-struct Constraint{O}
-  type::ConstraintType
-  by::Optional{PositionalFeature{O}}
-  on::Union{PositionalFeature{O}, Vector{PositionalFeature{O}}}
-  data::Any
-end
-
-function Base.getproperty(constraint::Constraint{O}, name::Symbol) where {O}
-  name === :alignment && return getfield(constraint, :data)::Alignment{O}
-  name === :spacing && return getfield(constraint, :data)::Spacing
-  getfield(constraint, name)
-end
-
-function apply_constraint(engine::LayoutEngine, constraint::Constraint, position)
-  C = coordinate_type(engine)
-  @match constraint.type begin
-    &CONSTRAINT_TYPE_ATTACH => set_coordinates(engine, position, apply_attach_constraint(engine, constraint, coordinates(engine, position)))
+    @case &OPERATION_TYPE_DISTRIBUTE
+    spacing = compute_spacing(engine, operation)
+    operands = operation.on::Vector{PositionalFeature{O}}
+    reference = operands[1]
+    for feature in @view operands[2:end]
+      object = feature[]
+      old = get_position(engine, object)
+      new = apply_spacing(engine, operation, reference, feature, spacing)
+      new ≠ old && set_position!(engine, object, new)
+      reference = feature
+    end
   end
 end
 
-function compute_alignment(engine::LayoutEngine, constraint::Constraint)
-  @assert constraint.type == CONSTRAINT_TYPE_ALIGN
-  (; direction, target) = constraint.alignment
+function apply_place_operation(engine::LayoutEngine, operation::Operation, point)
+  on = get_coordinates(engine, operation.on)
+  to = get_coordinates(engine, operation.by)
+  displacement = place_operation_displacement(on, to)
+  point .+ displacement
+end
+
+place_operation_displacement(on, to) = to .- on
+
+function compute_alignment(engine::LayoutEngine, operation::Operation)
+  @assert operation.type == OPERATION_TYPE_ALIGN
+  (; direction, target) = operation.alignment
   i = 3 - Int64(direction)
   @match target begin
-    &ALIGNMENT_TARGET_MINIMUM => minimum(get_coordinates(engine, object)[i] for object in constraint.on)
-    &ALIGNMENT_TARGET_MAXIMUM => maximum(get_coordinates(engine, object)[i] for object in constraint.on)
-    &ALIGNMENT_TARGET_AVERAGE => sum(get_coordinates(engine, object)[i] for object in constraint.on)/length(constraint.on)
+    &ALIGNMENT_TARGET_MINIMUM => minimum(get_coordinates(engine, object)[i] for object in operation.on)
+    &ALIGNMENT_TARGET_MAXIMUM => maximum(get_coordinates(engine, object)[i] for object in operation.on)
+    &ALIGNMENT_TARGET_AVERAGE => sum(get_coordinates(engine, object)[i] for object in operation.on)/length(operation.on)
     _ => alignment_target(get_coordinates(engine, target), direction)
   end
 end
 
 alignment_target(coordinates, direction::Direction) = alignment_or_distribution_target(coordinates, 3 - Int64(direction))
 alignment_or_distribution_target(p::Point, i::Integer) = p[i]
-function alignment_or_distribution_target(s::Segment, i::Integer)
-  s.a[i] ≈ s.b[i] || error("Alignment or distribution along a variable segment is not supported; you should instead provide a point location, or either a vertical segment for horizontal alignment/distribution or a horizontal segment for vertical alignment/distribution.")
-  s.a[i]
-end
 
-function apply_alignment(engine::LayoutEngine, constraint::Constraint, feature::PositionalFeature, alignment)
+function apply_alignment(engine::LayoutEngine, operation::Operation, feature::PositionalFeature, alignment)
   C = coordinate_type(engine)
   object = feature[]
   position = get_position(engine, object)
   coords = coordinates(engine, position)
-  relative = alignment_target(get_relative_coordinates(engine, feature), constraint.alignment.direction)
-  @match constraint.alignment.direction begin
+  relative = alignment_target(get_relative_coordinates(engine, feature), operation.alignment.direction)
+  @match operation.alignment.direction begin
     &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(coords[1], alignment - relative))
     &DIRECTION_VERTICAL => set_coordinates(engine, position, C(alignment - relative, coords[2]))
   end
 end
 
-"Compute the required spacing between two elements `x` and `y` according to the provided `constraint`."
-function compute_spacing(engine::LayoutEngine, constraint::Constraint)
-  @assert constraint.type == CONSTRAINT_TYPE_DISTRIBUTE
-  (; spacing) = constraint
-  objects = constraint.on
+"Compute the required spacing between two elements `x` and `y` according to the provided `operation`."
+function compute_spacing(engine::LayoutEngine, operation::Operation)
+  @assert operation.type == OPERATION_TYPE_DISTRIBUTE
+  (; spacing) = operation
+  objects = operation.on
   xs, ys = @view(objects[1:(end - 1)]), @view(objects[2:end])
   i = 3 - Int64(spacing.direction)
   edges = ((:left, :right), (:top, :bottom))[i]
@@ -477,12 +486,12 @@ function compute_spacing(engine::LayoutEngine, constraint::Constraint)
   value
 end
 
-function apply_spacing(engine::LayoutEngine, constraint::Constraint, x::PositionalFeature, y::PositionalFeature, spacing)
+function apply_spacing(engine::LayoutEngine, operation::Operation, x::PositionalFeature, y::PositionalFeature, spacing)
   C = coordinate_type(engine)
-  (; direction) = constraint.spacing
+  (; direction) = operation.spacing
   position = get_position(engine, y[])
   coords = coordinates(engine, position)
-  @when &SPACING_MODE_GEOMETRY = constraint.spacing.mode begin
+  @when &SPACING_MODE_GEOMETRY = operation.spacing.mode begin
     xb, yb = get_geometry(engine, x[]), get_geometry(engine, y[])
     sx, sy = (xb.max - xb.min) ./ 2, (yb.max - yb.min) ./ 2
     spacing -= @match direction begin
@@ -498,146 +507,40 @@ function apply_spacing(engine::LayoutEngine, constraint::Constraint, x::Position
   end
 end
 
-# XXX To avoid having to infer types in such a way, perhaps require an `engine::LayoutEngine` argument in `attach`/`align`/etc?
-function object_type(xs::AbstractVector) # of `PositionalFeature` or possibly `Any`.
-  T = eltype(xs)
-  # If concrete, we'll have a `PositionalFeature` type.
-  if isconcretetype(T)
-    @assert T <: PositionalFeature
-    return object_type(T)
-  end
-  # Try to pick off a `PositionalFeature{O}` and infer `O` from that.
-  for x in xs
-    if isa(x, PositionalFeature)
-      for y in xs
-        typeof(y) === typeof(x) || throw(ArgumentError("Multiple possible object types detected in `$xs`"))
-      end
-      return object_type(typeof(x))
-    end
-  end
-  isempty(xs) && return throw(ArgumentError("Cannot infer object type from $xs"))
-  # Fall back to the supertype of all components, assumed to be "objects".
-  Ts = unique(typeof.(xs))
-  object_type(reduce(typejoin, Ts; init = Union{}))
+# Record operations.
+
+function place!(engine::LayoutEngine{O}, object, onto) where {O}
+  operation = Operation{O}(OPERATION_TYPE_PLACE, positional_feature(engine, onto), positional_feature(engine, object), nothing)
+  push!(engine.operations, operation)
 end
 
-object_type(::Type{T}) where {O,T<:PositionalFeature{O}} = O
-object_type(::Type{T}) where {T} = T
-
-attach(object, onto) = Constraint(CONSTRAINT_TYPE_ATTACH, positional_feature(onto), positional_feature(object), nothing)
-align(object, direction, target) = align([object], direction, target)
-align(objects::AbstractVector{PositionalFeature{O}}, direction, target::O) where {O} = align(objects, direction, positional_feature(target))
-align(objects::AbstractVector{<:PositionalFeature}, direction, target) = Constraint(CONSTRAINT_TYPE_ALIGN, nothing, objects, Alignment{object_type(objects)}(direction, target))
-align(objects::AbstractVector, direction, target) = align(positional_feature.(objects), direction, target)
-distribute(objects::AbstractVector{<:PositionalFeature}, direction, spacing, mode = SPACING_MODE_POINT) = Constraint(CONSTRAINT_TYPE_DISTRIBUTE, nothing, objects, Spacing(direction, spacing, mode))
-distribute(objects::AbstractVector, direction, spacing, mode = SPACING_MODE_POINT) = distribute(positional_feature.(objects), direction, spacing, mode)
-
-function apply_attach_constraint(engine::LayoutEngine, constraint::Constraint, point)
-  on = get_coordinates(engine, constraint.on)
-  to = get_coordinates(engine, constraint.by)
-  displacement = attach_constraint_displacement(on, to)
-  point .+ displacement
+function place_after!(engine::LayoutEngine, object, after; spacing = 0.0, direction::Union{Symbol, Direction} = DIRECTION_HORIZONTAL)
+  isa(direction, Symbol) && (direction = Direction(direction))
+  offset = direction == DIRECTION_HORIZONTAL ? (spacing, 0.0) : (0.0, spacing)
+  place!(engine, at(object, :edge, :left), after |> at(:edge, :right) |> at(offset))
 end
 
-attach_constraint_displacement(on, to) = to .- on
-attach_constraint_displacement(on, to::Segment) = axis_aligned_projection(on, to) .- to
-attach_constraint_displacement(on::Segment, to) = to .- axis_aligned_projection(to, on)
-attach_constraint_displacement(on::Segment, to::Segment) = attach_constraint_displacement(on, centroid(to))
+align!(engine::LayoutEngine, object, direction, target) = align!(engine, [positional_feature(engine, object)], direction, target)
 
-function axis_aligned_projection(point::Point, segment::Segment, along_axis::Direction = perpendicular_axis(segment))
-  P = typeof(point)
-  @match along_axis begin
-    &DIRECTION_HORIZONTAL => P(segment.a[1], point[2])
-    &DIRECTION_VERTICAL => P(point[1], segment.a[2])
-  end
+function align!(engine::LayoutEngine, objects::AbstractVector, direction, target)
+  align!(engine, positional_feature.(engine, objects), direction, target)
 end
 
-aligned_axis(segment::Segment) = other_axis(perpendicular_axis(segment))
-function perpendicular_axis(segment::Segment)
-  segment.a[1] ≈ segment.b[1] && return DIRECTION_HORIZONTAL
-  segment.a[2] ≈ segment.b[2] && return DIRECTION_VERTICAL
-  throw(ArgumentError("Segment $segment is not axis-aligned!"))
+function align!(engine::LayoutEngine{O}, objects::AbstractVector{PositionalFeature{O}}, direction, target::AlignmentTarget) where {O}
+  operation = Operation{O}(OPERATION_TYPE_ALIGN, nothing, objects, Alignment{O}(direction, target))
+  push!(engine.operations, operation)
 end
 
-positional_feature(feature::PositionalFeature) = feature
-positional_feature(object) = PositionalFeature(object, FEATURE_LOCATION_ORIGIN)
-
-function validate_constraints(engine::LayoutEngine, constraints)
-  # XXX: Handle partial constraints (e.g. where one axis only is affected).
-  point = nothing
-  for constraint in constraints
-    if constraint.type == CONSTRAINT_TYPE_ATTACH
-      if isnothing(point)
-        point = apply_attach_constraint(engine, constraint)
-      else
-        other_point = apply_attach_constraint(engine, constraint)
-        point == other_point || point ≈ other_point || error("Attempting to attach the same object at two different locations")
-      end
-    end
-  end
+function align!(engine::LayoutEngine{O}, objects::AbstractVector{PositionalFeature{O}}, direction, target) where {O}
+  operation = Operation{O}(OPERATION_TYPE_ALIGN, nothing, objects, Alignment{O}(direction, positional_feature(engine, target)))
+  push!(engine.operations, operation)
 end
 
-const DependencyNode{O} = Union{O, Constraint{O}}
-
-struct DependencyGraph{O}
-  graph::SimpleDiGraph{Int64}
-  nodes::Vector{DependencyNode{O}}
-  node_constraints::Vector{Optional{Vector{Constraint{O}}}}
+function distribute!(engine::LayoutEngine, objects::AbstractVector, direction, spacing, mode = SPACING_MODE_POINT)
+  distribute!(engine, positional_feature.(engine, objects), direction, spacing, mode)
 end
 
-function DependencyGraph(engine::LayoutEngine{O}, constraints) where {O}
-  C = Constraint{O}
-  g = SimpleDiGraph{Int64}()
-  verts = Dict{DependencyNode{O}, Int64}()
-  nodes = DependencyNode{O}[]
-  node_constraints = Optional{Vector{C}}[]
-  # Constraint nodes to be considered with respect to dependency order instead of an individual object.
-  constraint_proxies = Dict{O, Union{C, Vector{C}}}()
-  function get_node!(object::O)
-    proxy = get(constraint_proxies, object, object)
-    get!(() -> add_node!(proxy), verts, object)
-  end
-  function add_node!(x::DependencyNode{O})
-    push!(nodes, x)
-    push!(node_constraints, nothing)
-    Graphs.add_vertex!(g)
-    Graphs.nv(g)
-  end
-
-  for constraint in unique(constraints)
-    @switch constraint.type begin
-      @case &CONSTRAINT_TYPE_ATTACH
-      src = constraint.by[]
-      dst = constraint.on[]
-      u = get_node!(src)
-      v = get_node!(dst)
-      isnothing(node_constraints[v]) && (node_constraints[v] = Vector{Constraint}[])
-      push!(node_constraints[v], constraint)
-      Graphs.add_edge!(g, u, v)
-
-      @case &CONSTRAINT_TYPE_ALIGN || &CONSTRAINT_TYPE_DISTRIBUTE
-      v = add_node!(constraint)
-      dependencies = @match constraint.type begin
-        &CONSTRAINT_TYPE_ALIGN => begin
-          (; target) = constraint.alignment
-          isa(target, PositionalFeature{O}) ? [constraint.on; target] : constraint.on
-        end
-        &CONSTRAINT_TYPE_DISTRIBUTE => constraint.on
-      end
-      for to in dependencies
-        src = to[]
-        u = get!(() -> add_node!(src), verts, src)
-        existing = get(constraint_proxies, src, nothing)
-        @match existing begin
-          ::Nothing => (constraint_proxies[src] = constraint)
-          ::C => (constraint_proxies[src] = [existing, constraint])
-          ::Vector{C} => push!(existing, constraint)
-        end
-        Graphs.add_edge!(g, u, v)
-      end
-    end
-  end
-
-  !is_cyclic(g) || error("Cyclic dependencies are not supported.")
-  DependencyGraph(g, nodes, node_constraints)
+function distribute!(engine::LayoutEngine{O}, objects::AbstractVector{PositionalFeature{O}}, direction, spacing, mode = SPACING_MODE_POINT) where {O}
+  operation = Operation(OPERATION_TYPE_DISTRIBUTE, nothing, objects, Spacing(direction, spacing, mode))
+  push!(engine.operations, operation)
 end
