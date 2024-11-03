@@ -122,17 +122,18 @@ end
 end
 
 Image(geometry::GeometryComponent, texture::Texture, is_opaque::Bool) = new_widget(Image, geometry, texture, is_opaque)
-Image((width, height)::Tuple, texture::Texture, is_opaque::Bool) = Image(geometry(width, height), texture, is_opaque)
+Image((width, height)::Tuple, data; is_opaque::Bool = false) = Image(geometry(width, height), data; is_opaque)
 Image(geometry, data; is_opaque::Bool = false) = Image(geometry, texture(data), is_opaque)
 
 function Image(data, scale::Real = 1; is_opaque::Bool = false)
   data = texture(data)
   width, height = dimensions(data.image) .* scale * 0.001
-  Image((width, height), data, is_opaque)
+  Image((width, height), data; is_opaque)
 end
 
 texture(data::Texture) = data
 texture(data::AbstractMatrix) = fetch(execute(load_texture, app.systems.rendering.renderer.task, data))
+texture(filename::String) = texture(read_image(filename))
 
 function Base.setproperty!(image::Image, name::Symbol, value)
   name === :texture && (value = texture(value))
