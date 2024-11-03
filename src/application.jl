@@ -19,8 +19,24 @@ function Base.show(io::IO, app::Application)
   print(io, Application, '(', isdefined(app, :task) ? app.task : "#undef", ", ", isdefined(app, :wm) ? app.wm : "#undef", ", ", isdefined(app, :ecs) ? app.ecs : "#undef", ", release: ", is_release(), ')')
 end
 
+function read_application_config()
+  config_file = nothing
+  for file in readdir(APPLICATION_DIRECTORY[]; join = false)
+    if file == "Application.toml" || file == "JuliaApplication.toml"
+      config_file = file
+      break
+    end
+  end
+  isnothing(config_file) && return Dict{String,Any}()
+  open(TOML.parse, joinpath(APPLICATION_DIRECTORY[], config_file))
+end
+
 function initialize(f::Function)
+  options = read_application_config()
   app.is_release = get(ENV, "ANVIL_RELEASE", "false") == "true"
+
+  window_options = get(Dict{String,Any}, options, "window")
+  window_decoration_options = get(Dict{String,Any}, window_options, "decorations")
 
   ecs = new_database()
   app.ecs = ecs
@@ -28,7 +44,16 @@ function initialize(f::Function)
   wm = XWindowManager()
 
   WINDOW_ENTITY_COUNTER.val = typemax(UInt32) - 100U
-  window = Window(wm, "Anvil"; width = 1920, height = 1080, map = false)
+  title = get(window_options, "title", "Anvil")
+  window = Window(
+    wm,
+    title;
+    icon_title = get(window_options, "icon_title", title),
+    width = 1920, height = 1080,
+    map = false,
+    with_decorations = get(window_decoration_options, "use_default", true),
+    border_width = get(window_decoration_options, "border_width", 1),
+  )
   window_id = new_entity(EntityID(Entities.next!(WINDOW_ENTITY_COUNTER)))
   ecs[window_id, WINDOW_COMPONENT_ID] = window
   set_location(window_id, zero(P2))

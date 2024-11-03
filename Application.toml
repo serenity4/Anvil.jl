@@ -1,0 +1,8 @@
+[window]
+title = "Anvil (test)"
+icon_title = "Anvil (test)"
+# icon = ...
+
+[window.decorations]
+use_default = true
+border_width = 1 # higher values don't do anything?

@@ -46,6 +46,7 @@ using .Meta: isexpr
 @reexport using StyledStrings
 using StyledStrings: eachregion, Face, addface!
 using InteractiveUtils: subtypes
+using TOML
 
 const Window = XCBWindow
 const WindowManager = XWindowManager
@@ -74,11 +75,13 @@ const WINDOW_ENTITY_COUNTER = Entities.Counter()
 
 @compile_traces "precompilation_traces.jl"
 
+const APPLICATION_DIRECTORY = Ref{String}()
 const ASSET_DIRECTORY = Ref{String}()
 
 function __init__()
   addface!(:application_shortcut_show => Face(underline = true))
   addface!(:application_shortcut_hide => Face(underline = false))
+  APPLICATION_DIRECTORY[] = dirname(@__DIR__)
   ASSET_DIRECTORY[] = joinpath(dirname(@__DIR__), "assets")
 end
 
@@ -86,6 +89,7 @@ end
 
 export
        app, Application,
+       APPLICATION_DIRECTORY,
        ASSET_DIRECTORY,
 
        # Components.
