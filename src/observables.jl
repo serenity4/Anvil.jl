@@ -55,12 +55,14 @@ function extract_fieldnames(fields)
 end
 
 function setproperty_observed!(x, name::Symbol, value)
-  ret = setfield!(x, name, value)
+  old = getproperty(x, name)
+  new = setfield!(x, name, value)
+  old === new && return new
   callbacks = get(x.field_callbacks, name, nothing)
-  isnothing(callbacks) && return ret
+  isnothing(callbacks) && return new
   to_delete = nothing
   for (i, callback) in enumerate(callbacks)
-    code = callback(ret)
+    code = callback(old, new)
     if code === OBSERVABLE_DELETE_CALLBACK
       to_delete = @something(to_delete, Int[])
       push!(to_delete, i)
@@ -68,7 +70,7 @@ function setproperty_observed!(x, name::Symbol, value)
   end
   !isnothing(to_delete) && splice!(callbacks, to_delete)
   isempty(callbacks) && delete!(x.field_callbacks, name)
-  ret
+  new
 end
 
 find_new_callsites(ex::Expr) = find_new_callsites!(Expr[], ex)
@@ -121,10 +123,10 @@ macro bind(ex)
   y, yprop = esc(y.args[1]), y.args[2]
   quote
     let xw = WeakRef($x)
-      observe!($y, $yprop) do value
+      observe!($y, $yprop) do _, value
         $x = xw.value
         $x === nothing && return OBSERVABLE_DELETE_CALLBACK
-        $(Expr(:., x, xprop)) = $(Expr(:., y, yprop))
+        $(Expr(:., x, xprop)) = value
       end
     end
   end

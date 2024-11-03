@@ -6,6 +6,7 @@ export
   compute_layout!,
   place!, place_after!, align!, distribute!,
   remove_operations!,
+  Group,
 
   Operation,
   OPERATION_TYPE_PLACE,
@@ -98,9 +99,19 @@ function FeatureLocation(name::Symbol)
   FeatureLocation(i)
 end
 
+struct Group{O}
+  objects::Any
+  Group{O}(objects) where {O} = new{O}(convert(Vector{GroupElement{O}}, objects))
+end
+
+function Base.getproperty(group::Group{O}, name::Symbol) where {O}
+  name === :objects && return getfield(group, name)::Vector{GroupElement{O}}
+  getfield(group, name)
+end
+
 struct PositionalFeature{O}
   "Object the feature is attached to."
-  object::Union{PositionalFeature{O},O}
+  object::Union{PositionalFeature{O},O,Group{O}}
   location::FeatureLocation
   "Position of the feature relative to the origin (position) of the object."
   data::Any
@@ -111,19 +122,13 @@ PositionalFeature(object, location::Symbol, data = nothing) = PositionalFeature(
 
 function Base.getindex(feature::PositionalFeature{O}) where {O}
   (; object) = feature
-  while !isa(object, O)
+  while isa(object, PositionalFeature{O})
     (; object) = object
   end
   object
 end
 
-struct Group{O}
-  objects::Vector{Union{O,PositionalFeature{O}}}
-end
-
-group(objects...) = Group(objects)
-Group(objects::Tuple) = Group([objects...])
-
+const GroupElement{O} = Union{O,PositionalFeature{O},Group{O}}
 
 @enum OperationType begin
   OPERATION_TYPE_PLACE
@@ -166,10 +171,9 @@ end
 
 struct LayoutEngine{O,S<:LayoutStorage{O}}
   storage::S
-  groups::Vector{Group{O}}
   operations::Vector{Operation{O}}
 end
-LayoutEngine(storage::LayoutStorage{O}) where {O} = LayoutEngine{O,typeof(storage)}(storage, Group{O}[], Operation{O}[])
+LayoutEngine(storage::LayoutStorage{O}) where {O} = LayoutEngine{O,typeof(storage)}(storage, Operation{O}[])
 
 @forward_methods LayoutEngine field = :storage object_type position_type coordinate_type geometry_type get_geometry(_, object) set_geometry!(_, object, geometry) coordinates(_, x) get_coordinates(_, object) set_coordinates(_, position, coords) get_position(_, object) set_position!(_, object, position)
 
@@ -194,15 +198,62 @@ function remove_operations!(engine::LayoutEngine{O}, object) where {O}
       push!(to_delete, i)
       continue
     end
-    delete = @match operation.on begin
-      on::PositionalFeature{O} => on[] == object
-      on::Vector{PositionalFeature{O}} => any(target -> target[] == object, on)
+    on = @match operation.on begin
+      on::PositionalFeature{O} => [on]
+      on::Vector{PositionalFeature{O}} => on
     end
-    delete && push!(to_delete, i)
+    any(x -> in_feature(object, x), on) && push!(to_delete, i)
   end
   isempty(to_delete) && return false
   splice!(engine.operations, to_delete)
   true
+end
+
+function in_feature(object::O, feature::PositionalFeature{O}) where {O}
+  @match feature[] begin
+    item::O => item == object
+    group::Group{O} => in_group(object, group)
+  end
+end
+
+function in_group(object::O, group::Group{O}) where {O}
+  for item in group.objects
+    found = @match item begin
+      ::Group{O} => in_group(object, item)
+      ::PositionalFeature{O} => in_feature(object, item)
+      ::O => item == object
+    end
+    found && return true
+  end
+  false
+end
+
+Group(engine::LayoutEngine, object, objects...) = Group(engine, to_object.(engine, ((object, objects...))))
+function Group(engine::LayoutEngine{O}, objects::Tuple) where {O}
+  length(objects) > 1 || throw(ArgumentError("More than one objects are required to form a group"))
+  Group{O}(GroupElement{O}[objects...])
+end
+
+get_coordinates(engine::LayoutEngine, group::Group) = centroid(boundingelement(engine, group))
+get_position(engine::LayoutEngine, group::Group) = get_coordinates(engine, group)
+
+function GeometryExperiments.boundingelement(engine::LayoutEngine, group::Group)
+  object, objects = Iterators.peel(group.objects)
+  geometry = get_geometry(engine, object) + get_position(engine, object)
+  foldl((x, y) -> boundingelement(x, get_geometry(engine, y) + get_position(engine, y)), objects; init = geometry)
+end
+ 
+function get_geometry(engine::LayoutEngine, group::Group)
+  geometry = boundingelement(engine, group)
+  geometry - centroid(geometry)
+end
+ 
+get_relative_coordinates(engine::LayoutEngine, group::Group) = get(engine.group_positions, group, zero(position_type(engine)))
+function set_position!(engine::LayoutEngine, group::Group, position)
+  offset = position .- get_position(engine, group)
+  for object in group.objects
+    set_position!(engine, object, get_position(engine, object) .+ offset)
+  end
 end
 
 """
@@ -292,7 +343,6 @@ end
 add_coordinates(x, y) = x .+ y
 
 get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = add_coordinates(get_coordinates(engine, feature.object), get_relative_coordinates(engine, feature))
-get_coordinates(engine::LayoutEngine, group::Group) = get_position(engine, group)
 
 coordinates(geometry::Box{2}, corner::Corner) = PointSet(geometry).points[Int64(corner)]
 function coordinates(geometry::Box{2,T}, edge::Edge) where {T}
@@ -416,6 +466,7 @@ function apply_operation!(engine::LayoutEngine{O}, operation::Operation) where {
     @case &OPERATION_TYPE_DISTRIBUTE
     spacing = compute_spacing(engine, operation)
     operands = operation.on::Vector{PositionalFeature{O}}
+    isempty(operands) && return
     reference = operands[1]
     for feature in @view operands[2:end]
       object = feature[]
@@ -474,7 +525,7 @@ function compute_spacing(engine::LayoutEngine, operation::Operation)
   if isa(spacing.amount, Float64)
     value = spacing.amount
   else
-    spacings = [get_coordinates(engine, at(y, :edge, edges[1])).a[i] - get_coordinates(engine, at(x, :edge, edges[2])).a[i] for (x, y) in zip(xs, ys)]
+    spacings = [get_coordinates(engine, at(engine, y, :edge, edges[1])).a[i] - get_coordinates(engine, at(engine, x, :edge, edges[2])).a[i] for (x, y) in zip(xs, ys)]
     value = @match spacing.amount begin
       &SPACING_TARGET_MINIMUM => minimum(spacings)
       &SPACING_TARGET_MAXIMUM => maximum(spacings)
@@ -517,7 +568,7 @@ end
 function place_after!(engine::LayoutEngine, object, after; spacing = 0.0, direction::Union{Symbol, Direction} = DIRECTION_HORIZONTAL)
   isa(direction, Symbol) && (direction = Direction(direction))
   offset = direction == DIRECTION_HORIZONTAL ? (spacing, 0.0) : (0.0, spacing)
-  place!(engine, at(object, :edge, :left), after |> at(:edge, :right) |> at(offset))
+  place!(engine, at(engine, object, :edge, :left), after |> at(engine, :edge, :right) |> at(engine, offset))
 end
 
 align!(engine::LayoutEngine, object, direction, target) = align!(engine, [positional_feature(engine, object)], direction, target)

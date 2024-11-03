@@ -111,7 +111,8 @@ export
 
        place, place_after, align, distribute, at, remove_layout_operations, put_behind, synchronize,
 
-       is_release, @set_name, EntityID, new_entity,
+       is_release, @set_name, EntityID, new_entity, @get_widget,
+       observe!, @observable, @bind,
        P2, P2f, Box
 
 end

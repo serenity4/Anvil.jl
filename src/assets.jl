@@ -19,6 +19,6 @@ read_jpeg(file) = read_transposed(file)
 function read_image(filename)
   ext = last(splitext(filename))
   ext == ".png" && return read_png(filename)
-  ext == ".jpeg" && return read_jpeg(filename)
+  (ext == ".jpeg" || ext == ".jpg") && return read_jpeg(filename)
   error("Unsupported file extension '$ext' for image $filename")
 end

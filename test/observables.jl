@@ -7,7 +7,11 @@ end
 
 @testset "Observables" begin
   x = TestObservable(1)
-  observe!(new -> (@test new == 2; OBSERVABLE_DELETE_CALLBACK), x, :x)
+  observe!(x, :x) do old, new
+    @test old == 1
+    @test new == 2
+    OBSERVABLE_DELETE_CALLBACK
+  end
   @test !isempty(x.field_callbacks)
   x.x = 2
   @test isempty(x.field_callbacks)

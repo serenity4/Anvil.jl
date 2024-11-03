@@ -46,182 +46,211 @@ reset_geometries()
 test_storage_interface!(engine.storage, objects)
 test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachindex(objects))
 
-at(args...) = Anvil.at(engine, args...)
+@testset "Layout" begin
+  at(args...) = Anvil.at(engine, args...)
 
-@testset "Features" begin
-  object = EntityID(1)
-  feature = positional_feature(engine, object)
-  @test feature == at(object)
-  @test feature == PositionalFeature(object, FEATURE_LOCATION_ORIGIN, nothing)
-  @test feature == PositionalFeature(object, :origin, nothing)
-  @test positional_feature(engine, feature) === feature
-  @test at(object, 4.0) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, 4.0)
-  @test at(object, FEATURE_LOCATION_CENTER) == PositionalFeature(object, FEATURE_LOCATION_CENTER, nothing)
-  @test at(object, :center) == PositionalFeature(object, :center, nothing)
+  @testset "Features" begin
+    object = EntityID(1)
+    feature = positional_feature(engine, object)
+    @test feature == at(object)
+    @test feature == PositionalFeature(object, FEATURE_LOCATION_ORIGIN, nothing)
+    @test feature == PositionalFeature(object, :origin, nothing)
+    @test positional_feature(engine, feature) === feature
+    @test at(object, 4.0) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, 4.0)
+    @test at(object, FEATURE_LOCATION_CENTER) == PositionalFeature(object, FEATURE_LOCATION_CENTER, nothing)
+    @test at(object, :center) == PositionalFeature(object, :center, nothing)
 
-  reset_location(1)
-  @test get_coordinates(engine, objects[1]) == locations[1]
-  @test get_coordinates(engine, at(objects[1])) == locations[1]
-  @test get_coordinates(engine, at(objects[1], P2(2, 3))) == locations[1] + P2(2, 3)
+    reset_location(1)
+    @test get_coordinates(engine, objects[1]) == locations[1]
+    @test get_coordinates(engine, at(objects[1])) == locations[1]
+    @test get_coordinates(engine, at(objects[1], P2(2, 3))) == locations[1] + P2(2, 3)
 
-  reset_geometry(1)
-  @test get_coordinates(engine, at(objects[1], :center)) == locations[1] # origin == center in this case
-  @test get_coordinates(engine, at(objects[1], :corner, :bottom_left)) == P2(9, 8)
-  @test get_coordinates(engine, at(objects[1], :corner, :bottom_right)) == P2(11, 8)
-  @test get_coordinates(engine, at(objects[1], :corner, :top_right)) == P2(11, 12)
-  @test get_coordinates(engine, at(at(objects[1], P2(0.1, 0.1)), P2(-0.1, -0.1))) == get_coordinates(engine, objects[1])
+    reset_geometry(1)
+    @test get_coordinates(engine, at(objects[1], :center)) == locations[1] # origin == center in this case
+    @test get_coordinates(engine, at(objects[1], :corner, :bottom_left)) == P2(9, 8)
+    @test get_coordinates(engine, at(objects[1], :corner, :bottom_right)) == P2(11, 8)
+    @test get_coordinates(engine, at(objects[1], :corner, :top_right)) == P2(11, 12)
+    @test get_coordinates(engine, at(at(objects[1], P2(0.1, 0.1)), P2(-0.1, -0.1))) == get_coordinates(engine, objects[1])
 
-  @test get_coordinates(engine, at(objects[1], :edge, :left)) == P2(9, 10)
-  @test get_coordinates(engine, at(objects[1], :edge, :right)) == P2(11, 10)
-  @test get_coordinates(engine, at(objects[1], :edge, :bottom)) == P2(10, 8)
-  @test get_coordinates(engine, at(objects[1], :edge, :top)) == P2(10, 12)
+    @test get_coordinates(engine, at(objects[1], :edge, :left)) == P2(9, 10)
+    @test get_coordinates(engine, at(objects[1], :edge, :right)) == P2(11, 10)
+    @test get_coordinates(engine, at(objects[1], :edge, :bottom)) == P2(10, 8)
+    @test get_coordinates(engine, at(objects[1], :edge, :top)) == P2(10, 12)
+  end
+
+  @testset "Layout computations" begin
+    @testset "Placement" begin
+      reset_location.([1, 2])
+      remove_operations!(engine)
+      place!(engine, objects[2], objects[1])
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
+
+      reset_location.([1, 2])
+      remove_operations!(engine)
+      place!(engine, objects[2], at(at(objects[1], P2(2, 3)), P2(-2, -3)))
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
+
+      reset_location.([1, 2])
+      remove_operations!(engine)
+      place!(engine, objects[2], at(objects[1], P2(2, 3)))
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
+
+      reset_location.([1, 2])
+      remove_operations!(engine)
+      place!(engine, at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
+
+      # Idempotence.
+      reset_location.([1, 2])
+      remove_operations!(engine)
+      place!(engine, at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))
+      place!(engine, at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
+
+      # Layout out 3 objects.
+      reset_location.([1, 2, 3])
+      remove_operations!(engine)
+      place!(engine, objects[2], at(objects[1], P2(2, 3)))
+      place!(engine, at(objects[3], P2(4, 9)), objects[1])
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(6, 1)
+
+      # Place an object after another.
+      reset_location.([1, 2])
+      remove_operations!(engine)
+      place_after!(engine, objects[2], objects[1])
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(10 + 1 + 30, 10)
+    end
+
+    @testset "Alignment" begin
+
+      # Align objects.
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      align!(engine, objects[1:3], :horizontal, ALIGNMENT_TARGET_MINIMUM)
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(30, 10)
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(76, 10)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      align!(engine, [objects[1], at(objects[2], P2(2, 5)), objects[3]], :horizontal, ALIGNMENT_TARGET_MINIMUM)
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(30, 5)
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(76, 10)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      align!(engine, objects[2:3], :vertical, at(objects[1], :edge, :right))
+      compute_layout!(engine)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(11, 30)
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(11, 54)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      align!(engine, at.(objects[2:3], :edge, :right), :vertical, at(objects[1], :edge, :right))
+      compute_layout!(engine)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(-19, 30)
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(-89, 54)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      align!(engine, objects[2:3], :horizontal, objects[1])
+      compute_layout!(engine)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(30, locations[1][2])
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(76, locations[1][2])
+    end
+
+    @testset "Distribution" begin
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      distribute!(engine, objects, :horizontal, 2.0, :point)
+      compute_layout!(engine)
+      xs = get_coordinates.(engine, objects)
+      @test xs[1] == locations[1]
+      @test xs[2] == P2(12, locations[2].y)
+      @test xs[3] == P2(14, locations[3].y)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      distribute!(engine, objects, :vertical, 2.0, :point)
+      compute_layout!(engine)
+      xs = get_coordinates.(engine, objects)
+      @test xs[1] == locations[1]
+      @test xs[2] == P2(locations[2].x, 8)
+      @test xs[3] == P2(locations[3].x, 6)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      distribute!(engine, objects, :horizontal, 2.0, :geometry)
+      compute_layout!(engine)
+      xs = get_coordinates.(engine, objects)
+      @test xs[1] == locations[1]
+      @test xs[2] == P2(-19, locations[2].y)
+      @test xs[3] == P2(-147, locations[3].y)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      distribute!(engine, objects, :vertical, 2.0, :geometry)
+      compute_layout!(engine)
+      xs = get_coordinates.(engine, objects)
+      @test xs[1] == locations[1]
+      @test xs[2] == P2(locations[2].x, -39)
+      @test xs[3] == P2(locations[3].x, -86.5)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      distribute!(engine, at.(objects, :edge, :right), :horizontal, 2.0, :point)
+      compute_layout!(engine)
+      xs = get_coordinates.(engine, objects)
+      @test xs[1] == locations[1]
+      @test xs[2] == P2(-17, locations[2].y)
+      @test xs[3] == P2(-85, locations[3].y)
+    end
+
+    @testset "Groups" begin
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      group = Group(engine, objects[1], objects[3])
+      @test get_coordinates(engine, group) == [76, 31.25]
+      place!(engine, group, group)
+      compute_layout!(engine)
+      @test get_coordinates(engine, group) == [76, 31.25]
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[2]
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == locations[3]
+      place!(engine, group, group |> at((10, 10)))
+      compute_layout!(engine)
+      @test get_coordinates(engine, group) == [86, 41.25]
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == 10 .+ locations[1]
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[2]
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == 10 .+ locations[3]
+    end
+  end;
 end
-
-@testset "Layout computations" begin
-  reset_location.([1, 2])
-  remove_operations!(engine)
-  place!(engine, objects[2], objects[1])
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
-
-  reset_location.([1, 2])
-  remove_operations!(engine)
-  place!(engine, objects[2], at(at(objects[1], P2(2, 3)), P2(-2, -3)))
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[1]
-
-  reset_location.([1, 2])
-  remove_operations!(engine)
-  place!(engine, objects[2], at(objects[1], P2(2, 3)))
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
-
-  reset_location.([1, 2])
-  remove_operations!(engine)
-  place!(engine, at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
-
-  # Idempotence.
-  reset_location.([1, 2])
-  remove_operations!(engine)
-  place!(engine, at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))
-  place!(engine, at(objects[2], P2(1, 5)), at(objects[1], P2(3, 8)))
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
-
-  # Layout out 3 objects.
-  reset_location.([1, 2, 3])
-  remove_operations!(engine)
-  place!(engine, objects[2], at(objects[1], P2(2, 3)))
-  place!(engine, at(objects[3], P2(4, 9)), objects[1])
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(12, 13)
-  @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(6, 1)
-
-  # Place an object after another.
-  reset_location.([1, 2])
-  remove_operations!(engine)
-  place_after!(engine, objects[2], objects[1])
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(10 + 1 + 30, 10)
-
-  # Align objects.
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  align!(engine, objects[1:3], :horizontal, ALIGNMENT_TARGET_MINIMUM)
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(30, 10)
-  @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(76, 10)
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  align!(engine, [objects[1], at(objects[2], P2(2, 5)), objects[3]], :horizontal, ALIGNMENT_TARGET_MINIMUM)
-  compute_layout!(engine)
-  @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(30, 5)
-  @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(76, 10)
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  align!(engine, objects[2:3], :vertical, at(objects[1], :edge, :right))
-  compute_layout!(engine)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(11, 30)
-  @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(11, 54)
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  align!(engine, at.(objects[2:3], :edge, :right), :vertical, at(objects[1], :edge, :right))
-  compute_layout!(engine)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(-19, 30)
-  @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(-89, 54)
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  align!(engine, objects[2:3], :horizontal, objects[1])
-  compute_layout!(engine)
-  @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(30, locations[1][2])
-  @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(76, locations[1][2])
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  distribute!(engine, objects, :horizontal, 2.0, :point)
-  compute_layout!(engine)
-  xs = get_coordinates.(engine, objects)
-  @test xs[1] == locations[1]
-  @test xs[2] == P2(12, locations[2].y)
-  @test xs[3] == P2(14, locations[3].y)
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  distribute!(engine, objects, :vertical, 2.0, :point)
-  compute_layout!(engine)
-  xs = get_coordinates.(engine, objects)
-  @test xs[1] == locations[1]
-  @test xs[2] == P2(locations[2].x, 8)
-  @test xs[3] == P2(locations[3].x, 6)
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  distribute!(engine, objects, :horizontal, 2.0, :geometry)
-  compute_layout!(engine)
-  xs = get_coordinates.(engine, objects)
-  @test xs[1] == locations[1]
-  @test xs[2] == P2(-19, locations[2].y)
-  @test xs[3] == P2(-147, locations[3].y)
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  distribute!(engine, objects, :vertical, 2.0, :geometry)
-  compute_layout!(engine)
-  xs = get_coordinates.(engine, objects)
-  @test xs[1] == locations[1]
-  @test xs[2] == P2(locations[2].x, -39)
-  @test xs[3] == P2(locations[3].x, -86.5)
-
-  reset_location.([1, 2, 3])
-  reset_geometry.([1, 2, 3])
-  remove_operations!(engine)
-  distribute!(engine, at.(objects, :edge, :right), :horizontal, 2.0, :point)
-  compute_layout!(engine)
-  xs = get_coordinates.(engine, objects)
-  @test xs[1] == locations[1]
-  @test xs[2] == P2(-17, locations[2].y)
-  @test xs[3] == P2(-85, locations[3].y)
-end;
