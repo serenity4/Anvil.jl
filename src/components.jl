@@ -13,6 +13,29 @@ const WINDOW_COMPONENT_ID = ComponentID(7) # Window
   RENDER_OBJECT_TEXT = 3
 end
 
+struct ImageParameters
+  is_opaque::Bool
+  tiled::Bool
+  scale::Float64
+end
+
+ImageParameters(; is_opaque = false, tiled = false, scale = 1.0) = ImageParameters(is_opaque, tiled, scale)
+
+struct RenderImageData
+  sprite::Sprite
+  parameters::ImageParameters
+end
+
+function RenderImageData(texture::Texture, parameters::ImageParameters)
+  (; sampling) = texture
+  if parameters.tiled
+    @reset sampling.address_modes = ntuple(_ -> Vk.SAMPLER_ADDRESS_MODE_REPEAT, 3)
+    @reset texture.sampling = sampling
+  end
+  sprite = Sprite(texture)
+  RenderImageData(sprite, parameters)
+end
+
 const LocationComponent = P2
 const GeometryComponent = Box2
 const ZCoordinateComponent = Float32
@@ -28,6 +51,8 @@ function RenderComponent(type::RenderObjectType, vertex_data, primitive_data; is
   RenderComponent(type, vertex_data, primitive_data, is_opaque)
 end
 
+RenderComponent(data::RenderImageData) = RenderComponent(RENDER_OBJECT_IMAGE, nothing, data; data.parameters.is_opaque)
+
 function add_renderables!(commands, program_cache::ProgramCache, component::RenderComponent, location, geometry, parameters::ShaderParameters)
   @switch component.type begin
     @case &RENDER_OBJECT_RECTANGLE
@@ -38,10 +63,11 @@ function add_renderables!(commands, program_cache::ProgramCache, component::Rend
     push!(commands, command)
 
     @case &RENDER_OBJECT_IMAGE
-    rect = ShaderLibrary.Rectangle(geometry, FULL_IMAGE_UV, nothing)
-    sprite = component.primitive_data::Sprite
+    render = component.primitive_data::RenderImageData
+    uvs = render.parameters.tiled ? tiled_uvs(geometry, render.parameters.scale) : FULL_IMAGE_UV
+    rect = ShaderLibrary.Rectangle(geometry, uvs, nothing)
     primitive = Primitive(rect, location)
-    command = Command(program_cache, sprite, parameters, primitive)
+    command = Command(program_cache, render.sprite, parameters, primitive)
     push!(commands, command)
 
     @case &RENDER_OBJECT_TEXT
@@ -51,6 +77,11 @@ function add_renderables!(commands, program_cache::ProgramCache, component::Rend
     origin = Point3((location[1:2] .- centroid(text_span))..., location[3])
     append!(commands, renderables(program_cache, text, parameters_ssaa, origin))
   end
+end
+
+function tiled_uvs(geometry::Box, scale::Real)
+  (; width, height) = geometry
+  generate_quad_uvs((0, width * scale), (0, height * scale))
 end
 
 Base.show(io::IO, render::RenderComponent) = print(io, RenderComponent, "(", render.type, ", ", typeof(render.vertex_data), ", ", typeof(render.primitive_data))

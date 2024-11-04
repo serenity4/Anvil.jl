@@ -118,17 +118,17 @@ end
 @widget struct Image
   geometry::GeometryComponent
   texture::Texture
-  is_opaque::Bool
+  parameters::ImageParameters
 end
 
-Image(geometry::GeometryComponent, texture::Texture, is_opaque::Bool) = new_widget(Image, geometry, texture, is_opaque)
-Image((width, height)::Tuple, data; is_opaque::Bool = false) = Image(geometry(width, height), data; is_opaque)
-Image(geometry, data; is_opaque::Bool = false) = Image(geometry, texture(data), is_opaque)
+Image(geometry::GeometryComponent, texture::Texture, parameters::ImageParameters = ImageParameters()) = new_widget(Image, geometry, texture, parameters)
+Image((width, height)::Tuple, data; parameters::ImageParameters = ImageParameters()) = Image(geometry(width, height), data; parameters)
+Image(geometry, data; parameters::ImageParameters = ImageParameters()) = Image(geometry, texture(data), parameters)
 
-function Image(data, scale::Real = 1; is_opaque::Bool = false)
+function Image(data, scale::Real = 1; parameters::ImageParameters = ImageParameters())
   data = texture(data)
   width, height = dimensions(data.image) .* scale * 0.001
-  Image((width, height), data; is_opaque)
+  Image((width, height), data; parameters)
 end
 
 texture(data::Texture) = data
@@ -142,7 +142,8 @@ end
 
 function synchronize(image::Image)
   set_geometry(image, image.geometry)
-  set_render(image, RenderComponent(RENDER_OBJECT_IMAGE, nothing, Sprite(image.texture); image.is_opaque))
+  data = RenderImageData(image.texture, image.parameters)
+  set_render(image, RenderComponent(data))
 end
 
 @widget struct Text

@@ -35,7 +35,7 @@ using Reexport
 @reexport using ColorTypes
 @reexport using CooperativeTasks: CooperativeTasks, nthreads, execute, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, reset_mpi_state, monitor_children, shutdown_scheduled, schedule_shutdown, shutdown_children, task_owner
 @reexport using OpenType: Tag4, @tag_str, @tag4_str
-@reexport using Accessors: @set, setproperties
+@reexport using Accessors: @set, setproperties, @reset
 using XCB
 @reexport using AbstractGUI
 @reexport using AbstractGUI: Input, consume!, propagate!
@@ -97,6 +97,7 @@ export
        ENTITY_COMPONENT_ID, RENDER_COMPONENT_ID, INPUT_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID, WIDGET_COMPONENT_ID, WINDOW_COMPONENT_ID,
 
        RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT,
+       ImageParameters,
 
        # Widgets.
        Rectangle, Image, Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
