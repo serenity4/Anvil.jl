@@ -101,49 +101,39 @@ end
 constituents(widget::Widget) = Widget[]
 
 @widget struct Rectangle
-  geometry::Box2
-  color::RGB{Float32}
-end
-
-Rectangle((width, height)::Tuple, color) = Rectangle(geometry(width, height), color)
-Rectangle(geometry::Box, color) = new_widget(Rectangle, geometry, color)
-
-function synchronize(rect::Rectangle)
-  (; r, g, b) = rect.color
-  vertex_data = [Vec3(r, g, b) for _ in 1:4]
-  set_geometry(rect, rect.geometry)
-  set_render(rect, RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_data, Gradient(); is_opaque = true))
-end
-
-@widget struct Image
   geometry::GeometryComponent
-  texture::Texture
-  parameters::ImageParameters
+  visual::Union{ImageVisual, RectangleVisual}
 end
 
-Image(geometry::GeometryComponent, texture::Texture, parameters::ImageParameters = ImageParameters()) = new_widget(Image, geometry, texture, parameters)
-Image((width, height)::Tuple, data; parameters::ImageParameters = ImageParameters()) = Image(geometry(width, height), data; parameters)
-Image(geometry, data; parameters::ImageParameters = ImageParameters()) = Image(geometry, texture(data), parameters)
+Rectangle(geometry::GeometryComponent, visual::Union{ImageVisual, RectangleVisual}) = new_widget(Rectangle, geometry, visual)
+Rectangle((width, height)::Tuple, args...) = Rectangle(geometry(width, height), args...)
 
-function Image(data, scale::Real = 1; parameters::ImageParameters = ImageParameters())
-  data = texture(data)
-  width, height = dimensions(data.image) .* scale * 0.001
-  Image((width, height), data; parameters)
+Rectangle(geometry::GeometryComponent, color::RGB) = Rectangle(geometry, RectangleVisual(color))
+Rectangle(geometry::GeometryComponent, image::Texture, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, ImageVisual(image, parameters))
+Rectangle(geometry::GeometryComponent, data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, texture(data), parameters)
+Rectangle(data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(texture(data), parameters)
+function Rectangle(image::Texture, parameters::ImageParameters = ImageParameters())
+  width, height = dimensions(image) .* parameters.scale .* 0.001
+  Rectangle((width, height), image, parameters)
 end
 
 texture(data::Texture) = data
 texture(data::AbstractMatrix) = fetch(execute(load_texture, app.systems.rendering.renderer.task, data))
-texture(filename::String) = texture(read_image(filename))
+texture(filename::String) = get_texture(filename)
 
-function Base.setproperty!(image::Image, name::Symbol, value)
-  name === :texture && (value = texture(value))
-  @invoke setproperty!(image::Widget, name::Symbol, value)
+function Base.setproperty!(rect::Rectangle, name::Symbol, value)
+  if name === :texture
+    visual = rect.visual::ImageVisual
+    return rect.visual = ImageVisual(texture(value), visual.parameters)
+  elseif name === :color
+    return rect.visual = RectangleVisual(value)
+  end
+  @invoke setproperty!(rect::Widget, name::Symbol, value)
 end
 
-function synchronize(image::Image)
-  set_geometry(image, image.geometry)
-  data = RenderImageData(image.texture, image.parameters)
-  set_render(image, RenderComponent(data))
+function synchronize(rect::Rectangle)
+  set_geometry(rect, rect.geometry)
+  set_render(rect, RenderComponent(rect.visual))
 end
 
 @widget struct Text
@@ -291,7 +281,7 @@ function synchronize(checkbox::Checkbox)
   checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
 end
 
-@widget mutable struct MenuItem
+@widget struct MenuItem
   const on_selected::Function
   const background::Rectangle
   const text::Text

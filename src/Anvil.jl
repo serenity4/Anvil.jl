@@ -100,7 +100,7 @@ export
        ImageParameters,
 
        # Widgets.
-       Rectangle, Image, Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
+       Rectangle, Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
        line_center,
 
        # Application state.

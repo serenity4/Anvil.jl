@@ -175,7 +175,19 @@ struct LayoutEngine{O,S<:LayoutStorage{O}}
 end
 LayoutEngine(storage::LayoutStorage{O}) where {O} = LayoutEngine{O,typeof(storage)}(storage, Operation{O}[])
 
-@forward_methods LayoutEngine field = :storage object_type position_type coordinate_type geometry_type get_geometry(_, object) set_geometry!(_, object, geometry) coordinates(_, x) get_coordinates(_, object) set_coordinates(_, position, coords) get_position(_, object) set_position!(_, object, position)
+@forward_methods LayoutEngine field = :storage begin
+  object_type
+  position_type
+  coordinate_type
+  geometry_type
+  get_geometry(_, object)
+  set_geometry!(_, object, geometry)
+  coordinates(_, x)
+  get_coordinates(_, object)
+  set_coordinates(_, position, coords)
+  get_position(_, object)
+  set_position!(_, object, position)
+end
 
 Base.broadcastable(engine::LayoutEngine) = Ref(engine)
 

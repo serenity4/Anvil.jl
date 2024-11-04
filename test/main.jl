@@ -21,7 +21,7 @@ random_image() = RGBA.(rand(AGray{Float32}, 512, 512))
 end
 
 function generate_user_interface(state::ApplicationState = ApplicationState())
-  @set_name image = Image((10, 10), state.image)
+  @set_name image = Rectangle((10, 10), state.image)
   @bind image.texture => state.image
   set_location(image, P2(-5, 0))
 

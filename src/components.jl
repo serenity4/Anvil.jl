@@ -13,6 +13,16 @@ const WINDOW_COMPONENT_ID = ComponentID(7) # Window
   RENDER_OBJECT_TEXT = 3
 end
 
+struct RectangleVisual
+  color::RGB{Float32}
+  # TODO: add borders, corner roundness, etc.
+end
+
+function vertex_colors(visual::RectangleVisual)
+  (; r, g, b) = visual.color
+  [Vec3(r, g, b) for _ in 1:4]
+end
+
 struct ImageParameters
   is_opaque::Bool
   tiled::Bool
@@ -21,19 +31,19 @@ end
 
 ImageParameters(; is_opaque = false, tiled = false, scale = 1.0) = ImageParameters(is_opaque, tiled, scale)
 
-struct RenderImageData
+struct ImageVisual
   sprite::Sprite
   parameters::ImageParameters
 end
 
-function RenderImageData(texture::Texture, parameters::ImageParameters)
+function ImageVisual(texture::Texture, parameters::ImageParameters)
   (; sampling) = texture
   if parameters.tiled
     @reset sampling.address_modes = ntuple(_ -> Vk.SAMPLER_ADDRESS_MODE_REPEAT, 3)
     @reset texture.sampling = sampling
   end
   sprite = Sprite(texture)
-  RenderImageData(sprite, parameters)
+  ImageVisual(sprite, parameters)
 end
 
 const LocationComponent = P2
@@ -51,7 +61,8 @@ function RenderComponent(type::RenderObjectType, vertex_data, primitive_data; is
   RenderComponent(type, vertex_data, primitive_data, is_opaque)
 end
 
-RenderComponent(data::RenderImageData) = RenderComponent(RENDER_OBJECT_IMAGE, nothing, data; data.parameters.is_opaque)
+RenderComponent(visual::RectangleVisual) = RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_colors(visual), Gradient(); is_opaque = true)
+RenderComponent(visual::ImageVisual) = RenderComponent(RENDER_OBJECT_IMAGE, nothing, visual; visual.parameters.is_opaque)
 
 function add_renderables!(commands, program_cache::ProgramCache, component::RenderComponent, location, geometry, parameters::ShaderParameters)
   @switch component.type begin
@@ -63,7 +74,7 @@ function add_renderables!(commands, program_cache::ProgramCache, component::Rend
     push!(commands, command)
 
     @case &RENDER_OBJECT_IMAGE
-    render = component.primitive_data::RenderImageData
+    render = component.primitive_data::ImageVisual
     uvs = render.parameters.tiled ? tiled_uvs(geometry, render.parameters.scale) : FULL_IMAGE_UV
     rect = ShaderLibrary.Rectangle(geometry, uvs, nothing)
     primitive = Primitive(rect, location)
