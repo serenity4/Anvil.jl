@@ -38,7 +38,6 @@ include("virtual_inputs.jl")
   end
 
   @testset "Interactions" begin
-    GC.gc()
     CURSOR[] = (0.5, 0.5)
     main(async = true)
     synchronize()
@@ -157,13 +156,13 @@ include("virtual_inputs.jl")
     image = get_entity(:image)
     from = get_location(image)
     move_cursor(image)
-    drag(from .+ 0.5)
+    drag(from .+ 5)
     @test BUTTON_STATE[] == BUTTON_LEFT
     drop()
     @test BUTTON_STATE[] == BUTTON_NONE
     synchronize()
     to = get_location(image)
-    @test to - from ≈ [0.5, 0.5] atol=0.04
+    @test to - from ≈ [5, 5] rtol=0.02
 
     # Shortcut display.
 

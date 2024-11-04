@@ -12,9 +12,7 @@ ENV["JULIA_DEBUG"] = "Anvil"
 # ENV["ANVIL_LOG_KEY_PRESS"] = true
 # ENV["ANVIL_RELEASE"] = true # may circumvent issues with validation layers
 
-#= Known issues:
-- `at(model_text, :center)` seems broken, as the dropdown background is not positioned correctly.
-=# main()
+main()
 
 @testset "Anvil.jl" begin
   include("layout.jl")

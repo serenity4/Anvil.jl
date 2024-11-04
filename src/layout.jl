@@ -128,7 +128,7 @@ function Base.getindex(feature::PositionalFeature{O}) where {O}
   object
 end
 
-const GroupElement{O} = Union{O,PositionalFeature{O},Group{O}}
+const GroupElement{O} = Union{O,Group{O}}
 
 @enum OperationType begin
   OPERATION_TYPE_PLACE
@@ -220,7 +220,6 @@ function in_group(object::O, group::Group{O}) where {O}
   for item in group.objects
     found = @match item begin
       ::Group{O} => in_group(object, item)
-      ::PositionalFeature{O} => in_feature(object, item)
       ::O => item == object
     end
     found && return true
@@ -228,7 +227,10 @@ function in_group(object::O, group::Group{O}) where {O}
   false
 end
 
-Group(engine::LayoutEngine, object, objects...) = Group(engine, to_object.(engine, ((object, objects...))))
+to_group_element(engine, x) = to_object(engine, x)
+to_group_element(engine, feature::PositionalFeature) = throw(ArgumentError("Positional features are not supported within groups. A group accepts objects or other groups."))
+
+Group(engine::LayoutEngine, object, objects...) = Group(engine, to_group_element.(engine, ((object, objects...))))
 function Group(engine::LayoutEngine{O}, objects::Tuple) where {O}
   length(objects) > 1 || throw(ArgumentError("More than one objects are required to form a group"))
   Group{O}(GroupElement{O}[objects...])
