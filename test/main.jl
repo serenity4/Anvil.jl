@@ -86,16 +86,9 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
   @set_name node_color_value = Rectangle((1.0, 0.4), RGB(0.3, 0.2, 0.9))
   @set_name node_hide_text = Text("Hide")
   @set_name node_hide_value = Checkbox(_ -> nothing)
-  left_column = EntityID[
-    node_name_text,
-    node_color_text,
-    node_hide_text,
-  ]
-  right_column = EntityID[
-    node_name_value,
-    node_color_value,
-    node_hide_value,
-  ]
+  left_column = [node_name_text, node_color_text, node_hide_text]
+  right_column = [node_name_value, node_color_value, node_hide_value]
+
   align(left_column .|> at(:right), :vertical, vline_left)
   align(right_column .|> at(:left), :vertical, vline_right)
 
