@@ -118,7 +118,6 @@ struct PositionalFeature{O}
 end
 
 PositionalFeature(object, location::FeatureLocation) = PositionalFeature(object, location, nothing)
-PositionalFeature(object, location::Symbol, data = nothing) = PositionalFeature(object, FeatureLocation(location), data)
 
 function Base.getindex(feature::PositionalFeature{O}) where {O}
   (; object) = feature
@@ -315,10 +314,11 @@ end
   EDGE_TOP = 4
 end
 
+const EDGE_NAMES = (:left, :right, :bottom, :top)
+
 function Edge(name::Symbol)
-  names = (:left, :right, :bottom, :top)
-  i = findfirst(==(name), names)
-  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  i = findfirst(==(name), EDGE_NAMES)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $EDGE_NAMES"))
   Edge(i)
 end
 
@@ -329,10 +329,11 @@ end
   CORNER_TOP_RIGHT = 4
 end
 
+const CORNER_NAMES = (:bottom_left, :bottom_right, :top_left, :top_right)
+
 function Corner(name::Symbol)
-  names = (:bottom_left, :bottom_right, :top_left, :top_right)
-  i = findfirst(==(name), names)
-  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  i = findfirst(==(name), CORNER_NAMES)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $CORNER_NAMES"))
   Corner(i)
 end
 
@@ -342,12 +343,12 @@ FeatureLocation(::Corner) = FEATURE_LOCATION_CORNER
 PositionalFeature(object, edge::Edge) = PositionalFeature(object, FeatureLocation(edge), edge)
 PositionalFeature(object, corner::Corner) = PositionalFeature(object, FeatureLocation(corner), corner)
 
-function PositionalFeature(object, location::FeatureLocation, name::Symbol)
-  @match location begin
-    &FEATURE_LOCATION_CORNER => PositionalFeature(object, location, Corner(name))
-    &FEATURE_LOCATION_EDGE => PositionalFeature(object, location, Edge(name))
-    _ => throw(ArgumentError("Symbol data `$name` is not allowed for $location"))
-  end
+function PositionalFeature(object, name::Symbol)
+  name === :origin && return PositionalFeature(object, FEATURE_LOCATION_ORIGIN)
+  name === :center && return PositionalFeature(object, FEATURE_LOCATION_CENTER)
+  in(name, EDGE_NAMES) && return PositionalFeature(object, Edge(name))
+  in(name, CORNER_NAMES) && return PositionalFeature(object, Corner(name))
+  throw(ArgumentError("Unrecognized positional feature $(repr(name)); available features are $(join(repr.((:origin, :center, EDGE_NAMES..., CORNER_NAMES...)), ", "))"))
 end
 
 function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeature)
@@ -388,8 +389,8 @@ at(engine::LayoutEngine, x::Real, y::Real) = at(engine, (x, y))
 at(engine::LayoutEngine, (x, y)::Tuple) = at(engine, P2(x, y))
 at(engine::LayoutEngine, p::P2) = x -> at(engine, x, p)
 at(engine::LayoutEngine, coord::Real) = x -> at(engine, x, coord)
-at(engine::LayoutEngine, location::Symbol, argument = nothing) = x -> at(engine, x, location, argument)
-at(engine::LayoutEngine, location::Symbol, argument::Symbol) = x -> at(engine, x, location, argument)
+at(engine::LayoutEngine, location::Symbol) = x -> at(engine, x, location)
+at(engine::LayoutEngine, location::Symbol, argument) = x -> at(engine, x, location, argument)
 
 at(engine::LayoutEngine, object) = positional_feature(engine, object)
 at(engine::LayoutEngine{O}, object, position) where {O} = at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
@@ -398,15 +399,15 @@ function at(::Type{O}, object::Union{O, PositionalFeature{O}, Group{O}}, locatio
   if location in (FEATURE_LOCATION_ORIGIN, FEATURE_LOCATION_CENTER)
     isnothing(argument) || throw(ArgumentError("No argument must be provided for feature location in (`FEATURE_LOCATION_ORIGIN`, `FEATURE_LOCATION_CENTER`)"))
   elseif location == FEATURE_LOCATION_CORNER
-    isa(argument, Union{Symbol,Corner}) || throw(ArgumentError("`$location` requires a `Corner` or symbol argument"))
+    isa(argument, Corner) || throw(ArgumentError("`$location` requires a `Corner` argument"))
   elseif location == FEATURE_LOCATION_EDGE
-    isa(argument, Union{Symbol,Edge}) || throw(ArgumentError("`$location` requires an `Edge` or symbol argument"))
+    isa(argument, Edge) || throw(ArgumentError("`$location` requires an `Edge` argument"))
   elseif location == FEATURE_LOCATION_CUSTOM
     !isnothing(location) || throw(ArgumentError("`$location` requires an argument"))
   end
   PositionalFeature(object, location, argument)
 end
-at(engine::LayoutEngine{O}, object, location::Symbol, argument = nothing) where {O} = at(O, to_object(engine, object), FeatureLocation(location), argument)
+at(engine::LayoutEngine{O}, object, location::Symbol) where {O} = PositionalFeature(to_object(engine, object), location)
 
 @enum Direction begin
   DIRECTION_HORIZONTAL = 1
@@ -642,7 +643,7 @@ end
 function place_after!(engine::LayoutEngine, object, after; spacing = 0.0, direction::Union{Symbol, Direction} = DIRECTION_HORIZONTAL)
   isa(direction, Symbol) && (direction = Direction(direction))
   offset = direction == DIRECTION_HORIZONTAL ? (spacing, 0.0) : (0.0, spacing)
-  place!(engine, at(engine, object, :edge, :left), after |> at(engine, :edge, :right) |> at(engine, offset))
+  place!(engine, at(engine, object, :left), after |> at(engine, :right) |> at(engine, offset))
 end
 
 align!(engine::LayoutEngine, object, direction, target) = align!(engine, [positional_feature(engine, object)], direction, target)

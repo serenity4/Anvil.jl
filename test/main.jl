@@ -64,7 +64,7 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
   end
   file_menu_item_3 = MenuItem(exit, Text("Exit"), (3, 1), 'x')
   @set_name file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2, file_menu_item_3], 'F')
-  place(file_menu |> at(:corner, :top_left), app.windows[app.window] |> at(:corner, :top_left))
+  place(file_menu |> at(:top_left), app.windows[app.window] |> at(:top_left))
 
   # Edit menu.
   edit_menu_head = Button(() -> collapse!(edit_menu), (3, 1); text = Text("Edit"))
@@ -72,13 +72,13 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
     regenerate_image(state)
   end
   @set_name edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
-  place(edit_menu |> at(:corner, :top_left), file_menu |> at(:corner, :top_right))
+  place(edit_menu |> at(:top_left), file_menu |> at(:top_right))
 
-  vline_left = side_panel |> at(:edge, :left) |> at(3.0)
+  vline_left = side_panel |> at(:left) |> at(3.0)
   vline_right = vline_left |> at(1.5)
   vspacing = 1.0
 
-  place(side_panel |> at(:edge, :left), image |> at(:edge, :right))
+  place(side_panel |> at(:left), image |> at(:right))
 
   @set_name node_name_text = Text("Name")
   @set_name node_name_value = Rectangle((1.0, 0.4), RGB(0.2, 0.2, 0.2))
@@ -96,12 +96,12 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
     node_color_value,
     node_hide_value,
   ]
-  align(left_column .|> at(:edge, :right), :vertical, vline_left)
-  align(right_column .|> at(:edge, :left), :vertical, vline_right)
+  align(left_column .|> at(:right), :vertical, vline_left)
+  align(right_column .|> at(:left), :vertical, vline_right)
 
   distribute(left_column, :vertical, vspacing, :point)
   for (left, right) in zip(left_column, right_column)
-    align(right |> at(:edge, :bottom), :horizontal, left |> at(:edge, :bottom))
+    align(right |> at(:bottom), :horizontal, left |> at(:bottom))
   end
 
   place(save_button, left_column[end] |> at(3.0, -2.0))

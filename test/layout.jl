@@ -54,11 +54,11 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
     feature = positional_feature(engine, object)
     @test feature == at(object)
     @test feature == PositionalFeature(object, FEATURE_LOCATION_ORIGIN, nothing)
-    @test feature == PositionalFeature(object, :origin, nothing)
+    @test feature == PositionalFeature(object, :origin)
     @test positional_feature(engine, feature) === feature
     @test at(object, 4.0) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, 4.0)
     @test at(object, FEATURE_LOCATION_CENTER) == PositionalFeature(object, FEATURE_LOCATION_CENTER, nothing)
-    @test at(object, :center) == PositionalFeature(object, :center, nothing)
+    @test at(object, :center) == PositionalFeature(object, :center)
 
     reset_location(1)
     @test get_coordinates(engine, objects[1]) == locations[1]
@@ -67,15 +67,15 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
 
     reset_geometry(1)
     @test get_coordinates(engine, at(objects[1], :center)) == locations[1] # origin == center in this case
-    @test get_coordinates(engine, at(objects[1], :corner, :bottom_left)) == P2(9, 8)
-    @test get_coordinates(engine, at(objects[1], :corner, :bottom_right)) == P2(11, 8)
-    @test get_coordinates(engine, at(objects[1], :corner, :top_right)) == P2(11, 12)
+    @test get_coordinates(engine, at(objects[1], :bottom_left)) == P2(9, 8)
+    @test get_coordinates(engine, at(objects[1], :bottom_right)) == P2(11, 8)
+    @test get_coordinates(engine, at(objects[1], :top_right)) == P2(11, 12)
     @test get_coordinates(engine, at(at(objects[1], P2(0.1, 0.1)), P2(-0.1, -0.1))) == get_coordinates(engine, objects[1])
 
-    @test get_coordinates(engine, at(objects[1], :edge, :left)) == P2(9, 10)
-    @test get_coordinates(engine, at(objects[1], :edge, :right)) == P2(11, 10)
-    @test get_coordinates(engine, at(objects[1], :edge, :bottom)) == P2(10, 8)
-    @test get_coordinates(engine, at(objects[1], :edge, :top)) == P2(10, 12)
+    @test get_coordinates(engine, at(objects[1], :left)) == P2(9, 10)
+    @test get_coordinates(engine, at(objects[1], :right)) == P2(11, 10)
+    @test get_coordinates(engine, at(objects[1], :bottom)) == P2(10, 8)
+    @test get_coordinates(engine, at(objects[1], :top)) == P2(10, 12)
   end
 
   @testset "Layout computations" begin
@@ -160,14 +160,14 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])
       remove_operations!(engine)
-      align!(engine, objects[2:3], :vertical, at(objects[1], :edge, :right))
+      align!(engine, objects[2:3], :vertical, at(objects[1], :right))
       compute_layout!(engine)
       @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(11, 30)
       @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(11, 54)
 
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])
-      align!(engine, at.(objects[2:3], :edge, :right), :vertical, at(objects[1], :edge, :right))
+      align!(engine, at.(objects[2:3], :right), :vertical, at(objects[1], :right))
       compute_layout!(engine)
       @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(-19, 30)
       @test ecs[objects[3], LOCATION_COMPONENT_ID] == P2(-89, 54)
@@ -225,7 +225,7 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])
       remove_operations!(engine)
-      distribute!(engine, at.(objects, :edge, :right), :horizontal, 2.0, :point)
+      distribute!(engine, at.(objects, :right), :horizontal, 2.0, :point)
       compute_layout!(engine)
       xs = get_coordinates.(engine, objects)
       @test xs[1] == locations[1]
@@ -238,7 +238,7 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])
       remove_operations!(engine)
-      pin!(engine, objects[1], :right, objects[2] |> at(:edge, :right))
+      pin!(engine, objects[1], :right, objects[2] |> at(:right))
       compute_layout!(engine)
       @test get_coordinates.(engine, objects) == locations
       gs = get_geometry.(engine, objects)
@@ -249,7 +249,7 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])
       remove_operations!(engine)
-      pin!(engine, objects[1], :left, objects[2] |> at(:edge, :left))
+      pin!(engine, objects[1], :left, objects[2] |> at(:left))
       compute_layout!(engine)
       @test get_coordinates.(engine, objects) == locations
       gs = get_geometry.(engine, objects)
@@ -262,7 +262,7 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])
       remove_operations!(engine)
-      pin!(engine, objects[1], :bottom_right, objects[2] |> at(:corner, :bottom_right))
+      pin!(engine, objects[1], :bottom_right, objects[2] |> at(:bottom_right))
       compute_layout!(engine)
       @test get_coordinates.(engine, objects) == locations
       gs = get_geometry.(engine, objects)

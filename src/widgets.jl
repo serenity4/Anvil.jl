@@ -468,7 +468,7 @@ function place_items(menu::Menu)
   place(menu.head, menu)
   prev_item = menu.head
   for item in menu.items
-    place(item |> at(:corner, :top_left), prev_item |> at(:corner, :bottom_left))
+    place(item |> at(:top_left), prev_item |> at(:bottom_left))
     prev_item = item
   end
 
@@ -477,9 +477,6 @@ function place_items(menu::Menu)
   end
 end
 
-attach(object::Widget, onto::Widget) = attach(object.id, onto.id)
-attach(object, onto::Widget) = attach(object, onto.id)
-attach(object::Widget, onto) = attach(object.id, onto)
 at(arg, args...) = at(app.systems.layout.engine, arg, args...)
 
 const WidgetComponent = Union{subtypes(Widget)...}
