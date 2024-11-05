@@ -233,6 +233,43 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       @test xs[3] == P2(-85, locations[3].y)
     end
 
+    @testset "Pinning" begin
+      # Edge pinning.
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      pin!(engine, objects[1], :right, objects[2] |> at(:edge, :right))
+      compute_layout!(engine)
+      @test get_coordinates.(engine, objects) == locations
+      gs = get_geometry.(engine, objects)
+      @test gs[1].top_right[1] == 30 + 30 - 10
+      @test gs[1].bottom_left == geometries[1].bottom_left
+      @test gs[2:3] == geometries[2:3]
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      pin!(engine, objects[1], :left, objects[2] |> at(:edge, :left))
+      compute_layout!(engine)
+      @test get_coordinates.(engine, objects) == locations
+      gs = get_geometry.(engine, objects)
+      @test gs[1].bottom_left[1] == 0 - 10
+      @test gs[1].top_right == geometries[1].top_right
+      compute_layout!(engine)
+      @test gs == get_geometry.(engine, objects)
+
+      # Corner pinning.
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      pin!(engine, objects[1], :bottom_right, objects[2] |> at(:corner, :bottom_right))
+      compute_layout!(engine)
+      @test get_coordinates.(engine, objects) == locations
+      gs = get_geometry.(engine, objects)
+      @test gs[1] ≠ geometries[1]
+      @test gs[2:3] == geometries[2:3]
+    end
+
     @testset "Groups" begin
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])
@@ -252,5 +289,5 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[2]
       @test ecs[objects[3], LOCATION_COMPONENT_ID] == 10 .+ locations[3]
     end
-  end;
-end
+  end
+end;

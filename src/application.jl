@@ -189,6 +189,7 @@ place(object, onto) = place!(app.systems.layout.engine, object, onto)
 place_after(object, onto; kwargs...) = place_after!(app.systems.layout.engine, object, onto; kwargs...)
 align(objects, direction, target) = align!(app.systems.layout.engine, objects, direction, target)
 distribute(objects, direction, spacing, mode = SPACING_MODE_POINT) = distribute!(app.systems.layout.engine, objects, direction, spacing, mode)
+pin(object, part, to; offset = 0.0) = pin!(app.systems.layout.engine, object, part, to; offset)
 remove_layout_operations(entity) = remove_operations!(app.systems.layout.engine, entity)
 
 "Run systems that are common to and essential for both rendering and event handling."

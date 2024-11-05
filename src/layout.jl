@@ -4,7 +4,7 @@ export
   LayoutEngine,
   LayoutStorage, ECSLayoutStorage, ArrayLayoutStorage,
   compute_layout!,
-  place!, place_after!, align!, distribute!,
+  place!, place_after!, align!, distribute!, pin!,
   remove_operations!,
   Group,
 
@@ -134,6 +134,7 @@ const GroupElement{O} = Union{O,Group{O}}
   OPERATION_TYPE_PLACE
   OPERATION_TYPE_ALIGN
   OPERATION_TYPE_DISTRIBUTE
+  OPERATION_TYPE_PIN
 end
 
 # TODO: Update docstrings.
@@ -166,6 +167,7 @@ end
 function Base.getproperty(operation::Operation{O}, name::Symbol) where {O}
   name === :alignment && return getfield(operation, :data)::Alignment{O}
   name === :spacing && return getfield(operation, :data)::Spacing
+  name === :pinning && return getfield(operation, :data)::PinningParameters
   getfield(operation, name)
 end
 
@@ -334,6 +336,12 @@ function Corner(name::Symbol)
   Corner(i)
 end
 
+FeatureLocation(::Edge) = FEATURE_LOCATION_EDGE
+FeatureLocation(::Corner) = FEATURE_LOCATION_CORNER
+
+PositionalFeature(object, edge::Edge) = PositionalFeature(object, FeatureLocation(edge), edge)
+PositionalFeature(object, corner::Corner) = PositionalFeature(object, FeatureLocation(corner), corner)
+
 function PositionalFeature(object, location::FeatureLocation, name::Symbol)
   @match location begin
     &FEATURE_LOCATION_CORNER => PositionalFeature(object, location, Corner(name))
@@ -358,14 +366,20 @@ add_coordinates(x, y) = x .+ y
 
 get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = add_coordinates(get_coordinates(engine, feature.object), get_relative_coordinates(engine, feature))
 
-coordinates(geometry::Box{2}, corner::Corner) = PointSet(geometry).points[Int64(corner)]
+function coordinates(geometry::Box{2}, corner::Corner)
+  @match corner begin
+    &CORNER_BOTTOM_LEFT => geometry.bottom_left
+    &CORNER_BOTTOM_RIGHT => geometry.bottom_right
+    &CORNER_TOP_LEFT => geometry.top_left
+    &CORNER_TOP_RIGHT => geometry.top_right
+  end
+end
 function coordinates(geometry::Box{2,T}, edge::Edge) where {T}
-  (; width, height) = geometry
   @match edge begin
-    &EDGE_LEFT => Point{2,T}(-width/2, zero(T))
-    &EDGE_RIGHT => Point{2,T}(width/2, zero(T))
-    &EDGE_BOTTOM => Point{2,T}(zero(T), -height/2)
-    &EDGE_TOP => Point{2,T}(zero(T), height/2)
+    &EDGE_LEFT => 0.5 .* (geometry.bottom_left .+ geometry.top_left)
+    &EDGE_RIGHT => 0.5 .* (geometry.bottom_right .+ geometry.top_right)
+    &EDGE_BOTTOM => 0.5 .* (geometry.bottom_left .+ geometry.bottom_right)
+    &EDGE_TOP => 0.5 .* (geometry.top_left .+ geometry.top_right)
   end
 end
 
@@ -458,6 +472,22 @@ Spacing(direction::Symbol, amount, mode) = Spacing(Direction(direction), amount,
 Spacing(direction, amount, mode::Symbol) = Spacing(direction, amount, SpacingMode(mode))
 Spacing(direction::Symbol, amount, mode::Symbol) = Spacing(Direction(direction), amount, SpacingMode(mode))
 
+function pinned_part(part::Symbol)
+  in(part, (:left, :right, :bottom, :top)) && return Edge(part)
+  in(part, (:bottom_left, :bottom_right, :top_left, :top_right)) && return Corner(part)
+  throw(ArgumentError("Expected part to designate an edge or corner, got $part"))
+end
+
+struct PinningParameters
+  part::Union{Edge, Corner}
+  offset::Float64
+end
+
+function PinningParameters(part::Symbol, offset)
+  part = pinned_part(part)
+  PinningParameters(part, offset)
+end
+
 # Apply operations.
 
 function apply_operation!(engine::LayoutEngine{O}, operation::Operation) where {O}
@@ -489,6 +519,14 @@ function apply_operation!(engine::LayoutEngine{O}, operation::Operation) where {
       new ≠ old && set_position!(engine, object, new)
       reference = feature
     end
+
+    @case &OPERATION_TYPE_PIN
+    operand = operation.on::PositionalFeature{O}
+    operand.location === FEATURE_LOCATION_ORIGIN || throw(ArgumentError("Operand to pinning operation should represent an object or group with no positional features"))
+    object = operand.object::Union{O, Group{O}}
+    old = get_geometry(engine, object)
+    new = apply_pinning_operation(engine, operation, object, old)
+    old ≠ new && set_geometry!(engine, object, new)
   end
 end
 
@@ -572,6 +610,28 @@ function apply_spacing(engine::LayoutEngine, operation::Operation, x::Positional
   end
 end
 
+function apply_pinning_operation(engine::LayoutEngine{O}, operation::Operation, object::Union{O, Group{O}}, geometry) where {O}
+  target = get_coordinates(engine, operation.by)
+  parameters = operation.pinning
+  location = get_coordinates(engine, PositionalFeature(object, parameters.part))
+  displacement = (target .+ parameters.offset) .- location
+  distort_geometry(geometry, displacement, parameters)
+end
+
+function distort_geometry(geometry::Box{2}, displacement, parameters::PinningParameters)
+  dx, dy = displacement
+  @match (parameters.part) begin
+    &CORNER_BOTTOM_LEFT => Box(geometry.min .+ displacement, geometry.max)
+    &CORNER_BOTTOM_RIGHT => Box(geometry.min .+ (zero(dy), dy), geometry.max .+ (dx, zero(dx)))
+    &CORNER_TOP_LEFT => Box(geometry.min .+ (dx, zero(dx)), geometry.max .+ (zero(dy), dy))
+    &CORNER_TOP_RIGHT => Box(geometry.min, geometry.max .+ displacement)
+    &EDGE_LEFT => Box(geometry.min .+ (dx, zero(dx)), geometry.max)
+    &EDGE_RIGHT => Box(geometry.min, geometry.max .+ (dx, zero(dx)))
+    &EDGE_BOTTOM => Box(geometry.min .+ (zero(dy), dy), geometry.max)
+    &EDGE_TOP => Box(geometry.min, geometry.max .+ (zero(dy), dy))
+  end
+end
+
 # Record operations.
 
 function place!(engine::LayoutEngine{O}, object, onto) where {O}
@@ -607,5 +667,18 @@ end
 
 function distribute!(engine::LayoutEngine{O}, objects::AbstractVector{PositionalFeature{O}}, direction, spacing, mode = SPACING_MODE_POINT) where {O}
   operation = Operation(OPERATION_TYPE_DISTRIBUTE, nothing, objects, Spacing(direction, spacing, mode))
+  push!(engine.operations, operation)
+end
+
+function pin!(engine::LayoutEngine{O}, object, part, to; offset = 0.0) where {O}
+  object = to_object(engine, object)
+  parameters = PinningParameters(part, offset)
+  to = positional_feature(engine, to)
+  pin!(engine, object, to, parameters)
+end
+
+function pin!(engine::LayoutEngine{O}, object::Union{O, Group{O}}, to::PositionalFeature{O}, parameters::PinningParameters) where {O}
+  object = positional_feature(engine, object)
+  operation = Operation(OPERATION_TYPE_PIN, to, object, parameters)
   push!(engine.operations, operation)
 end
