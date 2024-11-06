@@ -226,7 +226,7 @@ function update_overlays!(system::EventSystem, ecs::ECSDatabase)
     area = get(system.ui.areas, entity, nothing)
     contains = x -> in(x .- location, geometry)
     if isnothing(area)
-      area = InputArea(input.on_input, geometry, zindex, contains, input.events, input.actions)
+      area = InputArea(input.callbacks, geometry, zindex, contains)
       insert!(system.ui, entity, area)
       push!(updated, area)
     else

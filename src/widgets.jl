@@ -233,7 +233,7 @@ function Button(on_click, background::Rectangle; text = nothing)
 end
 
 function synchronize(button::Button)
-  set_input_handler(button, InputComponent(input -> is_left_click(input) && button.on_input(input), BUTTON_PRESSED, NO_ACTION))
+  intercept_inputs(input -> is_left_click(input) && button.on_input(input), button, BUTTON_PRESSED)
   isnothing(button.text) && return
   put_behind(button.background, button.text)
   set_geometry(button, get_geometry(button.background))
@@ -277,7 +277,7 @@ end
 function synchronize(checkbox::Checkbox)
   set_geometry(checkbox, get_geometry(checkbox.background))
   place(checkbox.background, checkbox)
-  set_input_handler(checkbox, InputComponent(input -> is_left_click(input) && checkbox.on_toggle(input), BUTTON_PRESSED, NO_ACTION))
+  intercept_inputs(input -> is_left_click(input) && checkbox.on_toggle(input), checkbox, BUTTON_PRESSED)
   checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
 end
 
@@ -322,7 +322,7 @@ end
   items::Vector{MenuItem}
   direction::Direction
   expanded::Bool
-  overlay::EntityID # entity that overlays the whole window on menu expand
+  overlay::EntityID # entity that overlays the whole window on menu expand to allow scrolling outside the menu area
   shortcuts::Union{Nothing, KeyBindingsToken}
   shortcut::Char
 end
@@ -359,7 +359,9 @@ function Menu(head, items::Vector{MenuItem}, shortcut::Char, direction::Directio
     subareas = InputArea[]
     push!(subareas, app.systems.event.ui.areas[menu.head])
     append!(subareas, app.systems.event.ui.areas[item.id] for item in menu.items)
-    propagate!(input, subareas) && is_left_click(input) && collapse!(menu)
+    propagate!(input, subareas) do propagated
+      propagated && is_left_click(input) && collapse!(menu)
+    end
   end
   menu
 end
@@ -431,29 +433,31 @@ function synchronize(menu::Menu)
   if menu.expanded
     for item in menu.items
       enable!(item)
-      set_input_handler(item, InputComponent(BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED, NO_ACTION) do input::Input
+      intercept_inputs(item, BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED) do input::Input
         is_left_click(input) && item.on_selected()
         input.type === POINTER_ENTERED && set_active(menu, item)
         input.type === POINTER_EXITED && set_inactive(item)
-      end)
+      end
     end
     window = app.windows[app.window]
     set_location(menu.overlay, get_location(window))
     set_geometry(menu.overlay, get_geometry(window))
     set_z(menu.overlay, 100)
-    set_input_handler(menu.overlay, InputComponent(BUTTON_PRESSED, NO_ACTION) do input::Input
-      propagate!(input, app.systems.event.ui.areas[menu.id]) && return
-      click = input.event.mouse_event.button
-      !in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN)) && return collapse!(menu)
-      navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
-    end)
+    intercept_inputs(menu.overlay, BUTTON_PRESSED) do input::Input
+      propagate!(input, app.systems.event.ui.areas[menu.id]) do propagated
+        propagated && return
+        click = input.event.mouse_event.button
+        !in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN)) && return collapse!(menu)
+        navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
+      end
+    end
   else
     foreach(disable!, menu.items)
     unset_input_handler(menu.overlay)
   end
   set_geometry(menu, menu_geometry(menu))
   place_items(menu)
-  set_input_handler(menu, InputComponent(menu.on_input, BUTTON_PRESSED, NO_ACTION))
+  intercept_inputs(menu.on_input, menu, BUTTON_PRESSED)
 end
 
 function menu_geometry(menu::Menu)

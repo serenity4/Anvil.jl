@@ -98,12 +98,10 @@ end
 Base.show(io::IO, render::RenderComponent) = print(io, RenderComponent, "(", render.type, ", ", typeof(render.vertex_data), ", ", typeof(render.primitive_data))
 
 struct InputComponent
-  on_input::Function
-  events::EventType
-  actions::ActionType
+  callbacks::Vector{InputCallback}
 end
 
-Base.show(io::IO, input::InputComponent) = print(io, InputComponent, "(", input.events, ", ", input.actions, ')')
+Base.show(io::IO, input::InputComponent) = print(io, InputComponent, "(", events(input.callbacks), ", ", actions(input.callbacks), ')')
 
 function new_database()
   ecs = ECSDatabase(component_names = Dict(), entity_names = Dict())

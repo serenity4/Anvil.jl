@@ -52,7 +52,7 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
       end
     end
   end
-  set_input_handler(image, InputComponent(on_input, BUTTON_PRESSED, DRAG))
+  intercept_inputs(on_input, image, BUTTON_PRESSED, DRAG)
 
   # File menu.
   file_menu_head = Button(() -> collapse!(file_menu), (3, 1); text = Text("File"))

@@ -168,6 +168,7 @@ set_render(entity, render::RenderComponent) = app.ecs[entity, RENDER_COMPONENT_I
 has_render(entity) = haskey(app.ecs, entity, RENDER_COMPONENT_ID)
 unset_render(entity) = unset!(app.ecs, entity, RENDER_COMPONENT_ID)
 get_input_handler(entity) = app.ecs[entity, INPUT_COMPONENT_ID]::InputComponent
+has_input_handler(entity) = haskey(app.ecs, entity, INPUT_COMPONENT_ID)
 set_input_handler(entity, input::InputComponent) = app.ecs[entity, INPUT_COMPONENT_ID] = input
 unset_input_handler(entity) = unset!(app.ecs, entity, INPUT_COMPONENT_ID)
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID]::WidgetComponent
@@ -175,6 +176,18 @@ get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
 set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID] = widget
 get_window(entity) = app.ecs[entity, WINDOW_COMPONENT_ID]::Window
 set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID] = window
+
+function intercept_inputs(f, entity, args...)
+  callback = InputCallback(f, args...)
+  if has_input_handler(entity)
+    handler = get_input_handler(entity)
+    any(x -> x === callback, handler.callbacks) && return
+    push!(handler.callbacks, callback)
+  else
+    handler = InputComponent([callback])
+    set_input_handler(entity, handler)
+  end
+end
 
 bind(f::Callable, key::KeyCombination) = bind(key => f)
 bind(f::Callable, bindings::Pair...) = bind!(f, app.systems.event.ui.bindings, bindings...)
