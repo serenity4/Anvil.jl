@@ -100,4 +100,4 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
   place(save_button, left_column[end] |> at(3.0, -2.0))
 end
 
-main(; async = false) = Anvil.main(generate_user_interface; async)
+main(; async = false, record_events = false) = Anvil.main(generate_user_interface; async, record_events)

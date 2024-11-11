@@ -31,7 +31,7 @@ function read_application_config()
   open(TOML.parse, joinpath(APPLICATION_DIRECTORY[], config_file))
 end
 
-function initialize(f::Function)
+function initialize(f::Function; record_events::Bool = false)
   options = read_application_config()
   app.is_release = get(ENV, "ANVIL_RELEASE", "false") == "true"
 
@@ -63,7 +63,7 @@ function initialize(f::Function)
     LayoutSystem(ecs),
     DrawingOrderSystem(),
     RenderingSystem(Renderer(window)),
-    EventSystem(EventQueue(wm), UserInterface(window)),
+    EventSystem(EventQueue(wm; record_history = record_events), UserInterface(window)),
   )
   app.wm = wm
   app.entity_pool = EntityPool(; limit = WINDOW_ENTITY_COUNTER[] - 1)
@@ -250,12 +250,12 @@ function (app::Application)()
   app.systems.event(app.ecs)
 end
 
-function main(f; async = false)
+function main(f; async = false, record_events = false)
   nthreads() ≥ 3 || error("Three threads or more are required to execute the application.")
   GC.gc(true)
   reset_mpi_state()
   app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
-    initialize(f)
+    initialize(f; record_events)
     LoopExecution(0.001; shutdown = false)(app)()
   end
   async && return false
@@ -263,3 +263,6 @@ function main(f; async = false)
 end
 
 synchronize() = fetch(execute(() -> (app(); true), app.task))
+
+save_events() = save_history(app.systems.event.queue.wm, app.systems.event.queue)
+replay_events(events; time_factor = 1.0) = replay_history(app.systems.event.queue.wm, events; time_factor)

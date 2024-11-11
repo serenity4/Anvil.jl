@@ -39,7 +39,7 @@ include("virtual_inputs.jl")
 
   @testset "Interactions" begin
     CURSOR[] = (0.5, 0.5)
-    main(async = true)
+    main(async = true, record_events = true)
     synchronize()
     sleep(0.1)
     synchronize()
@@ -194,5 +194,12 @@ include("virtual_inputs.jl")
     press_key(:AB02) # 'x' to exit
     wait(app)
     @test istaskdone(app.task)
+
+    @testset "Replaying events" begin
+      events = save_events()
+      main(; async = true)
+      synchronize()
+      replay_events(events; time_factor = 0.1)
+    end
   end
 end;

@@ -91,6 +91,7 @@ export
        app, Application,
        APPLICATION_DIRECTORY,
        ASSET_DIRECTORY,
+       save_events, replay_events,
 
        # Components.
        RenderComponent, InputComponent, LocationComponent, GeometryComponent, ZCoordinateComponent,
