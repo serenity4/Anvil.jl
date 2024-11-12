@@ -90,8 +90,11 @@ function (rendering::RenderingSystem)(ecs::ECSDatabase, target::Resource)
   color_clear = [ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1f0))]
   camera = camera_metric_to_viewport(target, rendering.renderer.frame_cycle.swapchain.surface.target)
   parameters = ShaderParameters(target; depth, color_clear, camera)
-  render_opaque_objects!(nodes, rendering, ecs, @set parameters.depth_clear = ClearValue(1f0))
-  render_transparent_objects!(nodes, rendering, ecs, @set parameters.color_clear[1] = nothing)
+  @reset parameters.depth_clear = ClearValue(1f0)
+  render_opaque_objects!(nodes, rendering, ecs, parameters)
+  @reset parameters.color_clear[1] = nothing
+  @reset parameters.render_state.enable_depth_write = false
+  render_transparent_objects!(nodes, rendering, ecs, parameters)
   nodes
 end
 
@@ -118,19 +121,20 @@ function render_opaque_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDa
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
     object.is_opaque || continue
     location = Point3f(location..., -1/z)
-    add_renderables!(commands, renderer.program_cache, object, location, geometry, parameters)
+    add_commands!(commands, renderer.program_cache, object, location, geometry, parameters)
   end
   !isempty(commands) && push!(nodes, RenderNode(commands))
 end
 
 function render_transparent_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
-  commands = Command[]
+  pass = TransparencyPass()
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
     object.is_opaque && continue
     location = Point3f(location..., -1/z)
-    add_renderables!(commands, renderer.program_cache, object, location, geometry, parameters)
+    add_commands!(pass, renderer.program_cache, object, location, geometry, parameters)
   end
-  !isempty(commands) && push!(nodes, RenderNode(commands))
+  !isempty(pass.pass_1) && push!(nodes, RenderNode(pass.pass_1))
+  !isempty(pass.pass_2) && push!(nodes, RenderNode(pass.pass_2))
 end
 
 function generate_quad_uvs((umin, umax), (vmin, vmax))

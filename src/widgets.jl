@@ -137,11 +137,20 @@ function synchronize(rect::Rectangle)
 end
 
 @widget struct Text
-  text::Base.AnnotatedString{String}
+  value::Base.AnnotatedString{String}
+  lines::Vector{OpenType.Line}
   size::Float64
   font::String
   script::Tag4
   language::Tag4
+  editable::Bool
+  edit::Any # ::TextEditState
+end
+
+function Text(value::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ", editable = false, on_edit = nothing)
+  text = new_widget(Text, value, OpenType.Line[], size, font, script, language, editable, nothing)
+  editable && (text.edit = TextEditState(on_edit, text))
+  text
 end
 
 function line_center(text::Text)
@@ -152,20 +161,26 @@ function line_center(text::Text)
 end
 
 function synchronize(text::Text)
-  font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
   options = TextOptions()
-  shader = ShaderLibrary.Text(OpenType.Text(text.text, options), get_font(text.font), font_options)
-  text_span = boundingelement(shader)
-  geometry = text_span - centroid(text_span)
-  set_geometry(text, geometry)
-  set_render(text, RenderComponent(RENDER_OBJECT_TEXT, nothing, shader))
+  font = get_font(text.font)
+  font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
+  string = text.editable && isa(text.edit, TextEditState) ? something(text.edit.buffer, text.value) : text.value
+  if !isempty(string)
+    lines = OpenType.lines(OpenType.Text(string, options), [font => font_options])
+    setfield!(text, :lines, lines)
+    shader = ShaderLibrary.Text(lines)
+    text_span = boundingelement(shader)
+    geometry = text_span - centroid(text_span)
+    set_geometry(text, geometry)
+    set_render(text, RenderComponent(RENDER_OBJECT_TEXT, nothing, shader))
+  else
+    set_geometry(text, @__MODULE__().geometry(0, 0))
+    unset_render(text)
+  end
 end
 
-function Text(text::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ")
-  new_widget(Text, text, size, font, script, language)
-end
-
-function unset_shortcut((; text)::Text, shortcut::Char)
+function unset_shortcut(text::Text, shortcut::Char)
+  text = text.value
   for i in eachindex(text)
     char = text[i]
     if lowercase(char) == shortcut
@@ -193,7 +208,8 @@ function unset_shortcut((; text)::Text, shortcut::Char)
   end
 end
 
-function set_shortcut((; text)::Text, shortcut::Char)
+function set_shortcut(text::Text, shortcut::Char)
+  text = text.value
   for i in eachindex(text)
     char = text[i]
     if lowercase(char) == shortcut
@@ -208,6 +224,300 @@ function set_shortcut((; text)::Text, shortcut::Char)
     end
   end
   false
+end
+
+mutable struct TextEditState
+  text::Text
+  on_edit::Any # user-provided
+
+  # Interaction state.
+  pending::Bool
+  buffer::Optional{Base.AnnotatedString{String}}
+  selection::UnitRange{Int64}
+  cursor::Rectangle
+  cursor_index::Int64
+
+  # Interaction functionality.
+  edit_on_select::InputCallback
+  select_cursor::InputCallback
+  character_input::InputCallback
+  shortcuts::Optional{KeyBindingsToken}
+  function TextEditState(on_edit, text::Text)
+    cursor = Rectangle(Box2(zero(P2), zero(P2)), RGB(0.2, 0.2, 0.9))
+    unset_render(cursor)
+
+    edit = new()
+    edit.text = text
+    edit.on_edit = on_edit
+    edit.pending = false
+    edit.buffer = nothing
+    edit.selection = 1:0
+    edit.cursor = cursor
+    edit.cursor_index = 0
+    edit.shortcuts = nothing
+
+    edit.edit_on_select = intercept_inputs(edit.text, BUTTON_PRESSED) do input
+      start_editing!(edit)
+      select_text!(edit, 1:length(edit.buffer))
+    end
+  
+    edit.select_cursor = InputCallback(BUTTON_PRESSED) do input
+      location = get_location(edit.text)
+      geometry = get_geometry(edit.text)
+      origin = geometry.bottom_left .+ location
+      i = cursor_index(edit.buffer, edit.text.lines, input.event.location .- origin)
+      clear_selection!(edit)
+      set_cursor!(edit, i)
+    end
+  
+    edit.character_input = InputCallback(KEY_PRESSED) do input
+      (; event) = input
+      char = event.key_event.input
+      isprint(char) || return
+      isempty(edit.selection) ? insert_after!(edit, char) : edit_selection!(edit, char)
+    end
+
+    edit
+  end
+end
+
+function start_editing!(edit::TextEditState)
+  edit.buffer = deepcopy(edit.text.value)
+  register_shortcuts!(edit)
+  remove_callback(edit.text, edit.edit_on_select)
+  add_callback(edit.text, edit.select_cursor)
+  set_cursor!(edit, length(edit.buffer))
+  edit.pending = true
+end
+
+function stop_editing!(edit::TextEditState)
+  unregister_shortcuts!(edit)
+  unset_cursor!(edit)
+  remove_callback(edit.text, edit.select_cursor)
+  edit.buffer = nothing
+  edit.pending = false
+end
+
+is_cursor_active(edit::TextEditState) = edit.cursor_index ≥ 0
+
+function add_selection_background!(edit::TextEditState)
+  isempty(edit.selection) && return
+  remove_selection_background!(edit)
+  Base.annotate!(edit.buffer, edit.selection, :background => RGBA(0.3, 0.1, 0.1, 1))
+end
+
+function remove_selection_background!(edit::TextEditState)
+  for (range, (label, _)) in Base.annotations(edit.buffer)
+    label == :background && Base.annotate!(edit.buffer, range, :background => nothing)
+  end
+end
+
+function register_shortcuts!(edit::TextEditState)
+  edit.shortcuts === nothing || unbind(edit.shortcuts)
+  bindings = Pair{KeyCombination, Callable}[]
+  push!(bindings, key"left" => () -> navigate_previous!(edit))
+  push!(bindings, key"right" => () -> navigate_next!(edit))
+  # push!(bindings, key"ctrl+left" => () -> #= TODO =#)
+  # push!(bindings, key"ctrl+right" => () -> #= TODO =#)
+  push!(bindings, key"shift+left" => () -> select_previous!(edit))
+  push!(bindings, key"shift+right" => () -> select_next!(edit))
+  push!(bindings, key"ctrl+a" => () -> select_text!(edit, 1:length(edit.buffer)))
+  push!(bindings, key"backspace" => () -> begin
+    isempty(edit.selection) ? delete_previous!(edit) : delete_selection!(edit)
+  end)
+  push!(bindings, key"delete" => () -> begin
+    isempty(edit.selection) ? delete_next!(edit) : delete_selection!(edit)
+  end)
+  push!(bindings, key"enter" => () -> commit_modifications!(edit))
+  push!(bindings, key"escape" => () -> clear_modifications!(edit))
+  edit.shortcuts = bind(bindings)
+end
+
+function unregister_shortcuts!(edit::TextEditState)
+  edit.shortcuts === nothing && return
+  unbind(edit.shortcuts)
+  edit.shortcuts = nothing
+end
+
+function clear_modifications!(edit::TextEditState)
+  clear_selection!(edit)
+  stop_editing!(edit)
+end
+
+function clear_selection!(edit::TextEditState)
+  edit.selection = 1:0
+  remove_selection_background!(edit)
+  synchronize!(edit.text)
+end
+
+function set_cursor!(edit::TextEditState, i)
+  edit.cursor_index = clamp(i, 0, length(edit.buffer))
+  add_callback(edit.text, edit.character_input)
+  display_cursor!(edit)
+end
+
+function unset_cursor!(edit::TextEditState)
+  edit.cursor_index = -1
+  remove_callback(edit.text, edit.character_input)
+  unset_render(edit.cursor)
+end
+
+function display_cursor!(edit::TextEditState)
+  # TODO: Implement a substitution-aware mapping.
+  glyph_index = edit.cursor_index
+  location = get_location(edit.text)
+  geometry = get_geometry(edit.text)
+  origin = geometry.bottom_left .+ location
+  # XXX: Remove this visual hack and actually address the vertical position issue.
+  origin = origin .+ P2(0, 0.15)
+  set_location(edit.cursor, origin .+ cursor_location(edit.text.lines, glyph_index))
+  edit.cursor.geometry = cursor_geometry(edit.text.lines, glyph_index)
+end
+
+function cursor_index(text::AbstractString, lines::Vector{OpenType.Line}, (x, y))
+  # TODO: Support glyph substitutions and BiDi.
+  length(lines) == 1 || error("Multi-line text is not supported yet")
+  line = lines[1]
+  offset = P2(0, 0)
+  for (i, advance) in enumerate(line.advances)
+    midpoint = offset .+ 0.5 .* advance
+    midpoint[1] > x && return i - 1
+    offset = offset .+ line.advances[i]
+  end
+  length(text)
+end
+
+function cursor_location(lines::Vector{OpenType.Line}, glyph_index)
+  line = only(lines)
+  sum(@view line.advances[1:glyph_index])
+end
+
+function cursor_geometry(lines::Vector{OpenType.Line}, glyph_index)
+  line = only(lines)
+  if glyph_index == 0
+    segment = line.segments[1]
+  else
+    i = findfirst(x -> in(glyph_index, x.indices), line.segments)
+    isnothing(i) && return Box2(zero(P2), zero(P2))
+    segment = line.segments[i]
+  end
+  width = 0.1
+  height = 1.2segment_height(segment)
+  geometry(width, height)
+end
+
+function commit_modifications!(edit::TextEditState)
+  edit.text.value = edit.buffer
+  clear_modifications!(edit)
+  edit.on_edit === nothing && return
+  edit.on_edit(text.value)
+end
+
+function insert_after!(edit::TextEditState, value)
+  edit_buffer!(edit, (edit.cursor_index + 1, edit.cursor_index), value)
+  set_cursor!(edit, edit.cursor_index + 1)
+end
+
+function delete_previous!(edit::TextEditState)
+  edit.cursor_index == 0 && return
+  edit_buffer!(edit, (edit.cursor_index, edit.cursor_index), "")
+  set_cursor!(edit, edit.cursor_index - 1)
+end
+
+function delete_next!(edit::TextEditState)
+  edit.cursor_index == length(edit.buffer) && return
+  edit_buffer!(edit, (edit.cursor_index + 1, edit.cursor_index), "")
+end
+
+function delete_selection!(edit::TextEditState)
+  @assert !isempty(edit.selection)
+  edit_buffer!(edit, edit.selection, "")
+  set_cursor!(edit, edit.cursor_index - length(edit.selection))
+  clear_selection!(edit)
+end
+
+function edit_selection!(edit::TextEditState, replacement)
+  @assert !isempty(edit.selection)
+  edit_buffer!(edit, edit.selection, replacement)
+end
+
+edit_buffer!(edit::TextEditState, range::UnitRange, replacement) = edit_buffer!(edit, (first(range), last(range)), replacement)
+function edit_buffer!(edit::TextEditState, (start, stop), replacement)
+  i = string_index(edit.buffer, start - 1)
+  j = string_index(edit.buffer, stop + 1)
+  new = @view(edit.buffer[1:i]) * replacement * @view(edit.buffer[j:end])
+  edit.buffer = new
+  synchronize!(edit.text)
+end
+
+function navigate_previous!(edit::TextEditState)
+  isempty(edit.selection) && return set_cursor!(edit, edit.cursor_index - 1)
+  set_cursor!(edit, first(edit.selection) - 1)
+  clear_selection!(edit)
+end
+
+function navigate_next!(edit::TextEditState)
+  isempty(edit.selection) && return set_cursor!(edit, edit.cursor_index + 1)
+  set_cursor!(edit, last(edit.selection))
+  clear_selection!(edit)
+end
+
+function select_previous!(edit::TextEditState)
+  if isempty(edit.selection)
+    start = stop = edit.cursor_index
+  elseif first(edit.selection) == edit.cursor_index + 1
+    start = first(edit.selection) - 1
+    stop = last(edit.selection)
+  elseif last(edit.selection) == edit.cursor_index
+    start = first(edit.selection)
+    stop = last(edit.selection) - 1
+  end
+  set_cursor!(edit, edit.cursor_index - 1)
+  select_text!(edit, start:stop; set_cursor = false)
+end
+
+function select_next!(edit::TextEditState)
+  if isempty(edit.selection)
+    start = stop = edit.cursor_index + 1
+  elseif first(edit.selection) == edit.cursor_index + 1
+    start = first(edit.selection) + 1
+    stop = last(edit.selection)
+  elseif last(edit.selection) == edit.cursor_index
+    start = first(edit.selection)
+    stop = last(edit.selection) + 1
+  end
+  set_cursor!(edit, edit.cursor_index + 1)
+  select_text!(edit, start:stop; set_cursor = false)
+end
+
+"Return the index of the codeunit that points to the `i`th character in `str`."
+function string_index(str::AbstractString, i)
+  i < 0 && throw(ArgumentError("Expected positive index, got $i"))
+  i == 0 && return 0
+  i == 1 && return 1
+  n = length(str)
+  next = 1
+  for j in 1:n
+    i == j && return next
+    _, next = iterate(str, next)
+  end
+  next - 1 + (i - n)
+end
+
+function select_text!(edit::TextEditState, range::UnitRange{Int64}; set_cursor = true)
+  last(range) > first(range) && (range = first(range):last(range))
+  start = max(1, first(range))
+  stop = min(length(edit.buffer), last(range))
+  set_cursor && set_cursor!(edit, stop)
+  isempty(range) && return clear_selection!(edit)
+  edit.selection = start:stop
+  add_selection_background!(edit)
+  synchronize!(edit.text)
+end
+
+function segment_height(segment::OpenType.LineSegment)
+  (; ascender, descender) = segment.font.hhea
+  (ascender - descender) * segment.style.size
 end
 
 @widget struct Button
@@ -301,7 +611,7 @@ set_active(item::MenuItem) = (item.active = true)
 set_inactive(item::MenuItem) = (item.active = false)
 isactive(item::MenuItem) = item.active
 
-function MenuItem(on_selected, text, geometry, shortcut = lowercase(first(text.text)))
+function MenuItem(on_selected, text, geometry, shortcut = lowercase(first(text.value)))
   background = Rectangle(geometry, MENU_ITEM_COLOR)
   new_widget(MenuItem, on_selected, background, text, false, shortcut)
 end

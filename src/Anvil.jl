@@ -33,7 +33,7 @@ using FileIO
 
 using Reexport
 @reexport using ColorTypes
-@reexport using CooperativeTasks: CooperativeTasks, nthreads, execute, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, reset_mpi_state, monitor_children, shutdown_scheduled, schedule_shutdown, shutdown_children, task_owner
+@reexport using CooperativeTasks: CooperativeTasks, nthreads, execute, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, monitor_owned_tasks, shutdown_owned_tasks, schedule_shutdown, shutdown_scheduled, task_owner
 @reexport using OpenType: Tag4, @tag_str, @tag4_str
 @reexport using Accessors: @set, setproperties, @reset
 using XCB

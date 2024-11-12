@@ -64,14 +64,32 @@ end
 RenderComponent(visual::RectangleVisual) = RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_colors(visual), Gradient(); is_opaque = true)
 RenderComponent(visual::ImageVisual) = RenderComponent(RENDER_OBJECT_IMAGE, nothing, visual; visual.parameters.is_opaque)
 
-function add_renderables!(commands, program_cache::ProgramCache, component::RenderComponent, location, geometry, parameters::ShaderParameters)
+add_command!(pass::Vector{Command}, command::Command) = push!(pass, command)
+
+struct TransparencyPass
+  pass_1::Vector{Command}
+  pass_2::Vector{Command}
+end
+TransparencyPass() = TransparencyPass(Command[], Command[])
+
+add_command!(pass::TransparencyPass, command::Command) = push!(pass.pass_1, command)
+
+add_commands!(pass::TransparencyPass, commands::Vector{Command}) = append!(pass.pass_1, commands)
+
+function add_commands!(pass::TransparencyPass, commands::Vector{Vector{Command}})
+  length(commands) == 2 || error("Expected two sets of commands, got $(length(commands)) sets")
+  append!(pass.pass_1, commands[1])
+  append!(pass.pass_2, commands[2])
+end
+
+function add_commands!(pass, program_cache::ProgramCache, component::RenderComponent, location, geometry, parameters::ShaderParameters)
   @switch component.type begin
     @case &RENDER_OBJECT_RECTANGLE
     rect = ShaderLibrary.Rectangle(geometry, component.vertex_data, nothing)
     gradient = component.primitive_data::Gradient
     primitive = Primitive(rect, location)
     command = Command(program_cache, gradient, parameters, primitive)
-    push!(commands, command)
+    add_command!(pass, command)
 
     @case &RENDER_OBJECT_IMAGE
     render = component.primitive_data::ImageVisual
@@ -79,14 +97,14 @@ function add_renderables!(commands, program_cache::ProgramCache, component::Rend
     rect = ShaderLibrary.Rectangle(geometry, uvs, nothing)
     primitive = Primitive(rect, location)
     command = Command(program_cache, render.sprite, parameters, primitive)
-    push!(commands, command)
+    add_command!(pass, command)
 
     @case &RENDER_OBJECT_TEXT
     text = component.primitive_data::ShaderLibrary.Text
     parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
     text_span = boundingelement(text)
     origin = Point3((location[1:2] .- centroid(text_span))..., location[3])
-    append!(commands, renderables(program_cache, text, parameters_ssaa, origin))
+    add_commands!(pass, renderables(program_cache, text, parameters_ssaa, origin))
   end
 end
 

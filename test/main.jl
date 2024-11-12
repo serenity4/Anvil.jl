@@ -81,7 +81,7 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
   place(side_panel |> at(:left), image |> at(:right))
 
   @set_name node_name_text = Text("Name")
-  @set_name node_name_value = Rectangle((1.0, 0.4), RGB(0.2, 0.2, 0.2))
+  @set_name node_name_value = Text("Value"; editable = true)
   @set_name node_color_text = Text("Color")
   @set_name node_color_value = Rectangle((1.0, 0.4), RGB(0.3, 0.2, 0.9))
   @set_name node_hide_text = Text("Hide")

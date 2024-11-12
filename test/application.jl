@@ -166,7 +166,7 @@ include("virtual_inputs.jl")
 
     # Shortcut display.
 
-    (; text) = item_1.text
+    text = item_1.text.value
     @test annotations(text, 1) == []
     move_cursor(menu)
     left_click()

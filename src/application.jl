@@ -151,7 +151,11 @@ function Base.show(io::IO, entity::EntityID)
   print(io, ')')
 end
 
-unset!(collection, indices...) = haskey(collection, indices...) ? delete!(collection, indices...) : nothing
+function unset!(collection, indices...)
+  haskey(collection, indices...) || return false
+  delete!(collection, indices...)
+  true
+end
 
 geometry(width, height) = Box(P2(width/2, height/2))
 
@@ -170,23 +174,40 @@ unset_render(entity) = unset!(app.ecs, entity, RENDER_COMPONENT_ID)
 get_input_handler(entity) = app.ecs[entity, INPUT_COMPONENT_ID]::InputComponent
 has_input_handler(entity) = haskey(app.ecs, entity, INPUT_COMPONENT_ID)
 set_input_handler(entity, input::InputComponent) = app.ecs[entity, INPUT_COMPONENT_ID] = input
-unset_input_handler(entity) = unset!(app.ecs, entity, INPUT_COMPONENT_ID)
+function unset_input_handler(entity)
+  unset!(app.ecs, entity, INPUT_COMPONENT_ID)
+  unset!(app.systems.event.ui.areas, entity)
+end
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID]::WidgetComponent
 get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
 set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID] = widget
 get_window(entity) = app.ecs[entity, WINDOW_COMPONENT_ID]::Window
 set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID] = window
 
-function intercept_inputs(f, entity, args...)
-  callback = InputCallback(f, args...)
+intercept_inputs(f, entity, args...) = add_callback(entity, InputCallback(f, args...))
+
+function add_callback(entity, callback::InputCallback)
   if has_input_handler(entity)
     handler = get_input_handler(entity)
-    any(x -> x === callback, handler.callbacks) && return
+    any(x -> x === callback, handler.callbacks) && return callback
     push!(handler.callbacks, callback)
   else
     handler = InputComponent([callback])
     set_input_handler(entity, handler)
   end
+  callback
+end
+
+function remove_callback(entity, callback::InputCallback)
+  has_input_handler(entity) || return false
+  handler = get_input_handler(entity)
+  for (i, existing) in enumerate(handler.callbacks)
+    if existing === callback
+      deleteat!(handler.callbacks, i)
+      return true
+    end
+  end
+  false
 end
 
 bind(f::Callable, key::KeyCombination) = bind(key => f)
@@ -219,10 +240,12 @@ end
 
 function shutdown(app::Application)
   shutdown(app.systems)
-  wait(shutdown_children())
+  close(app.wm, app.window)
+  wait(shutdown_owned_tasks())
+  schedule_shutdown()
 end
 
-Base.wait(app::Application) = monitor_children()
+Base.wait(app::Application) = monitor_owned_tasks()
 
 function exit(code::Int = 0)
   if current_task() === app.task
@@ -235,10 +258,8 @@ function exit(code::Int = 0)
 end
 
 function _exit(code::Int)
-  shutdown(app)
-  close(app.wm, app.window)
   @debug "Exiting application" * (!iszero(code) ? " (exit code: $(code))" : "")
-  schedule_shutdown()
+  shutdown(app)
   code
 end
 
@@ -253,8 +274,8 @@ end
 function main(f; async = false, record_events = false)
   nthreads() ≥ 3 || error("Three threads or more are required to execute the application.")
   GC.gc(true)
-  reset_mpi_state()
-  app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, allow_task_migration = false)) do
+  CooperativeTasks.reset()
+  app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, disallow_task_migration = true)) do
     initialize(f; record_events)
     LoopExecution(0.001; shutdown = false)(app)()
   end

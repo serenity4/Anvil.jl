@@ -97,11 +97,11 @@ function set_contextual_shortcuts_visibility(visible::Bool)
   old_annotation = ifelse(visible, :application_shortcut_hide, :application_shortcut_show)
   for widget in components(app.ecs, WIDGET_COMPONENT_ID, WidgetComponent)
     isa(widget, Text) || continue
-    (; text) = widget
+    text = widget.value
     for (i, (region, (label, annotation))) in enumerate(Base.annotations(text))
       label == :face || continue
       annotation == old_annotation || continue
-      widget.text.annotations[i] = (region, label => new_annotation)
+      text.annotations[i] = (region, label => new_annotation)
       # Changes made to mutable fields are not tracked by the Widget `setproperty!`
       # and must be synchronized manually.
       !widget.disabled && synchronize(widget)
