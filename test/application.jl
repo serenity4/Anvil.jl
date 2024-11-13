@@ -1,5 +1,5 @@
 using Anvil
-using Anvil: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_metric_coordinate_system, to_window_coordinate_system, exit
+using Anvil: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_metric_coordinate_system, to_window_coordinate_system, exit, has_render
 using CooperativeTasks: execute
 using LinearAlgebra: norm
 using XCB
@@ -188,6 +188,252 @@ include("virtual_inputs.jl")
     left_click() # close menu
     synchronize()
     @test annotations(text, 1) == []
+
+    # Text editing.
+
+    @testset "Text editing" begin
+      text = get_widget(:node_name_value)
+      @test text.value == "Value"
+      move_cursor(text)
+
+      @testset "Selection/deselection" begin
+        left_click()
+        synchronize()
+        @test String(text.edit.buffer) == "Value"
+        @test text.edit.cursor_index == length(text.value)
+        @test text.edit.selection == 1:length(text.value)
+        @test length(Base.annotations(text.edit.buffer)) == 1
+        (region, (label, _)) = Base.annotations(text.edit.buffer)[1]
+        @test region == 1:5 && label == :background
+        @test has_render(text.edit.cursor)
+
+        press_key(:ESC)
+        synchronize()
+        @test text.edit.buffer === nothing
+        @test text.value == "Value"
+        @test !has_render(text.edit.cursor)
+      end
+
+      @testset "Cursor selection" begin
+        left_click()
+        left_click()
+        synchronize()
+        @test isempty(text.edit.selection)
+        @test isempty(Base.annotations(text.edit.buffer))
+        @test text.edit.cursor_index == 2
+        press_key(:ESC)
+      end
+
+      @testset "Typing & cancelling" begin
+        left_click()
+        left_click()
+        press_key(:AC02)
+        synchronize()
+        @test text.edit.buffer == "Vaslue"
+        synchronize()
+        @test isempty(text.edit.selection)
+        @test isempty(Base.annotations(text.edit.buffer))
+        @test text.edit.cursor_index == 3
+        press_key(:ESC)
+        synchronize()
+        @test text.edit.buffer === nothing
+        @test text.value == "Value"
+      end
+
+      @testset "Keyboard navigation" begin
+        left_click()
+        left_click()
+        synchronize()
+        @test text.edit.cursor_index == 2
+        press_key(:LEFT)
+        synchronize()
+        @test text.edit.cursor_index == 1
+        press_key(:LEFT)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        press_key(:LEFT)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        press_key(:RGHT)
+        synchronize()
+        @test text.edit.cursor_index == 1
+        press_key(:LEFT)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        press_key(:RGHT)
+        synchronize()
+        @test text.edit.cursor_index == 1
+        press_key(:RGHT)
+        press_key(:RGHT)
+        press_key(:RGHT)
+        press_key(:RGHT)
+        synchronize()
+        @test text.edit.cursor_index == 5
+        press_key(:RGHT)
+        synchronize()
+        @test text.edit.cursor_index == 5
+        press_key(:ESC)
+      end
+
+      @testset "Keyboard selection" begin
+        left_click()
+        left_click()
+        synchronize()
+        @test text.edit.cursor_index == 2
+        @test isempty(text.edit.selection)
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 1
+        @test text.edit.selection == 2:2
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        @test text.edit.selection == 1:2
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        @test text.edit.selection == 1:2
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 1
+        @test text.edit.selection == 2:2
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 2
+        @test isempty(text.edit.selection)
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 3
+        @test text.edit.selection == 3:3
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 2
+        @test isempty(text.edit.selection)
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 5
+        @test text.edit.selection == 3:5
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 5
+        @test text.edit.selection == 3:5
+        press_key(:LEFT)
+        synchronize()
+        @test text.edit.cursor_index == 2
+        @test isempty(text.edit.selection)
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        @test text.edit.selection == 1:2
+        press_key(:LEFT)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        @test isempty(text.edit.selection)
+        press_key(:RGHT)
+        press_key(:RGHT)
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        @test text.edit.selection == 1:2
+        press_key(:RGHT)
+        synchronize()
+        @test text.edit.cursor_index == 2
+        @test isempty(text.edit.selection)
+        press_key(:ESC)
+      end
+
+      @testset "Editing" begin
+        left_click()
+        left_click()
+        synchronize()
+        @test text.edit.cursor_index == 2
+        press_key(:AC01)
+        press_key(:AC02)
+        synchronize()
+        @test text.edit.buffer == "Vaqslue"
+        @test text.edit.cursor_index == 4
+        press_key(:BKSP)
+        synchronize()
+        @test text.edit.buffer == "Vaqlue"
+        press_key(:DELE)
+        synchronize()
+        @test text.edit.buffer == "Vaque"
+        @test text.edit.cursor_index == 3
+        press_key(:RTRN)
+        synchronize()
+        @test text.edit.buffer === nothing
+        @test text.value == "Vaque"
+        left_click()
+        press_key(:BKSP)
+        synchronize()
+        @test text.edit.buffer == ""
+        press_key(:AD09)
+        press_key(:AD05)
+        press_key(:AC06)
+        press_key(:AD03)
+        press_key(:AD04)
+        synchronize()
+        @test text.edit.buffer == "other"
+        press_key(:RTRN)
+        synchronize()
+        @test text.edit.buffer === nothing
+        @test text.value == "other"
+        left_click()
+        press_key(:DELE)
+        synchronize()
+        @test text.edit.buffer == ""
+        press_key(:ESC)
+        @test text.edit.buffer === nothing
+        @test text.value == "other"
+        left_click()
+        press_key(:LEFT)
+        press_key(:RGHT)
+        press_key(:RGHT)
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        press_key(:RGHT; modifiers = SHIFT_MODIFIER)
+        press_key(:AD07)
+        synchronize()
+        @test text.edit.buffer == "otur"
+        @test isempty(text.edit.selection)
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        press_key(:LEFT; modifiers = SHIFT_MODIFIER)
+        press_key(:BKSP)
+        synchronize()
+        @test text.edit.buffer == "or"
+        press_key(:AD09)
+
+        press_key(:AD01; modifiers = CTRL_MODIFIER)
+        press_key(:DELE)
+        press_key(:AC02)
+        press_key(:AD07)
+        press_key(:AB03)
+        press_key(:AB03)
+        press_key(:AD03)
+        press_key(:AC02)
+        press_key(:AC02)
+        press_key(:RTRN)
+        synchronize()
+        @test text.value == "success"
+      end
+
+      @testset "Mouse selection" begin
+        left_click()
+        left_click()
+        synchronize()
+        @test text.edit.cursor_index == 2
+        move_cursor(get_location(text) .+ (0.2, 0))
+        left_click()
+        synchronize()
+        @test text.edit.cursor_index == 4
+        press_key(:ESC)
+      end
+    end
+
+    # Exit.
 
     move_cursor(menu)
     left_click()

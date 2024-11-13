@@ -25,7 +25,12 @@ end
 
 function press_key(key; modifiers = NO_MODIFIERS, release = true)
   send(KEY_PRESSED, KeyEvent(app.wm.keymap, PhysicalKey(app.wm.keymap, key), modifiers))
-  release && send(KEY_RELEASED, KeyEvent(app.wm.keymap, PhysicalKey(app.wm.keymap, key), modifiers))
+  release && release_key(key; modifiers)
+  nothing
+end
+
+function release_key(key; modifiers = NO_MODIFIERS)
+  send(KEY_RELEASED, KeyEvent(app.wm.keymap, PhysicalKey(app.wm.keymap, key), modifiers))
   nothing
 end
 

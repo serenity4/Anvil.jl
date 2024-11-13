@@ -111,6 +111,7 @@ function physical_size(window::Window)
   screen_size = (screen.width_in_millimeters, screen.height_in_millimeters)
   screen_dimensions = (screen.width_in_pixels, screen.height_in_pixels)
   window_dimensions = extent(window)
+  all(iszero, window_dimensions) && return (0.0, 0.0)
   physical_scale = screen_size ./ screen_dimensions
   physical_scale = physical_scale ./ 10 # mm to cm
   window_dimensions .* physical_scale

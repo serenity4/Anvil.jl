@@ -301,10 +301,12 @@ function stop_editing!(edit::TextEditState)
   unset_location(edit.typing_overlay)
   unset_geometry(edit.typing_overlay)
   unset_z(edit.typing_overlay)
+  add_callback(edit.text, edit.edit_on_select)
   remove_callback(edit.text, edit.select_cursor)
   unset_cursor!(edit)
   edit.buffer = nothing
   edit.pending = false
+  synchronize!(edit.text)
 end
 
 is_cursor_active(edit::TextEditState) = edit.cursor_index ≥ 0
@@ -381,6 +383,7 @@ function display_cursor!(edit::TextEditState)
   origin = origin .+ P2(0, 0.15)
   set_location(edit.cursor, origin .+ cursor_location(edit.text.lines, glyph_index))
   edit.cursor.geometry = cursor_geometry(edit.text.lines, glyph_index)
+  synchronize!(edit.cursor)
 end
 
 function cursor_index(text::AbstractString, lines::Vector{OpenType.Line}, (x, y))
@@ -435,7 +438,7 @@ end
 
 function delete_next!(edit::TextEditState)
   edit.cursor_index == length(edit.buffer) && return
-  edit_buffer!(edit, (edit.cursor_index + 1, edit.cursor_index), "")
+  edit_buffer!(edit, (edit.cursor_index + 1, edit.cursor_index + 1), "")
 end
 
 function delete_selection!(edit::TextEditState)
