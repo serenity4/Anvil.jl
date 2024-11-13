@@ -262,7 +262,7 @@ mutable struct TextEditState
     end
 
     edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK) do input
-      input.type === DOUBLE_CLICK && return select_text!(edit)
+      input.type === DOUBLE_CLICK && return select_word!(edit)
       location = get_location(edit.text)
       geometry = get_geometry(edit.text)
       origin = geometry.bottom_left .+ location
@@ -528,6 +528,15 @@ function select_text!(edit::TextEditState, range::UnitRange{Int64} = 1:length(ed
   edit.selection = start:stop
   add_selection_background!(edit)
   synchronize!(edit.text)
+end
+
+function select_word!(edit::TextEditState; set_cursor = true)
+  for (; offset, match) in eachmatch(r"\w+|[^\w\s]+|\s+", edit.buffer)
+    start = match.offset
+    stop = start + length(match)
+    start - 1 ≤ edit.cursor_index ≤ stop || continue
+    return select_text!(edit, start:stop; set_cursor)
+  end
 end
 
 function segment_height(segment::OpenType.LineSegment)
