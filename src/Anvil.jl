@@ -107,7 +107,7 @@ export
        # Application state.
        get_entity, get_location, get_geometry, get_z, get_render, get_input_handler, get_widget, get_window,
        set_location, set_geometry, set_z, has_z, set_render, has_render, has_input_handler, unset_render, set_input_handler, unset_input_handler, set_widget, set_window,
-       intercept_inputs,
+       add_callback,
 
        bind, unbind,
 

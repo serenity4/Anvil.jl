@@ -242,6 +242,7 @@ mutable struct TextEditState
   select_cursor::InputCallback
   character_input::InputCallback
   shortcuts::Optional{KeyBindingsToken}
+  typing_overlay::EntityID # overlay that allows typing from anywhere on the screen
   function TextEditState(on_edit, text::Text)
     cursor = Rectangle(Box2(zero(P2), zero(P2)), RGB(0.2, 0.2, 0.9))
     unset_render(cursor)
@@ -254,9 +255,8 @@ mutable struct TextEditState
     edit.selection = 1:0
     edit.cursor = cursor
     edit.cursor_index = 0
-    edit.shortcuts = nothing
 
-    edit.edit_on_select = intercept_inputs(edit.text, BUTTON_PRESSED) do input
+    edit.edit_on_select = add_callback(edit.text, BUTTON_PRESSED) do input
       start_editing!(edit)
       select_text!(edit, 1:length(edit.buffer))
     end
@@ -273,9 +273,12 @@ mutable struct TextEditState
     edit.character_input = InputCallback(KEY_PRESSED) do input
       (; event) = input
       char = event.key_event.input
-      isprint(char) || return
+      isprint(char) || return propagate!(input)
       isempty(edit.selection) ? insert_after!(edit, char) : edit_selection!(edit, char)
     end
+
+    edit.shortcuts = nothing
+    edit.typing_overlay = new_entity()
 
     edit
   end
@@ -284,6 +287,9 @@ end
 function start_editing!(edit::TextEditState)
   edit.buffer = deepcopy(edit.text.value)
   register_shortcuts!(edit)
+  set_location(edit.typing_overlay, (0, 0))
+  set_geometry(edit.typing_overlay, (Inf, Inf))
+  set_z(edit.typing_overlay, Inf)
   remove_callback(edit.text, edit.edit_on_select)
   add_callback(edit.text, edit.select_cursor)
   set_cursor!(edit, length(edit.buffer))
@@ -292,8 +298,11 @@ end
 
 function stop_editing!(edit::TextEditState)
   unregister_shortcuts!(edit)
-  unset_cursor!(edit)
+  unset_location(edit.typing_overlay)
+  unset_geometry(edit.typing_overlay)
+  unset_z(edit.typing_overlay)
   remove_callback(edit.text, edit.select_cursor)
+  unset_cursor!(edit)
   edit.buffer = nothing
   edit.pending = false
 end
@@ -352,13 +361,13 @@ end
 
 function set_cursor!(edit::TextEditState, i)
   edit.cursor_index = clamp(i, 0, length(edit.buffer))
-  add_callback(edit.text, edit.character_input)
+  add_callback(edit.typing_overlay, edit.character_input)
   display_cursor!(edit)
 end
 
 function unset_cursor!(edit::TextEditState)
   edit.cursor_index = -1
-  remove_callback(edit.text, edit.character_input)
+  remove_callback(edit.typing_overlay, edit.character_input)
   unset_render(edit.cursor)
 end
 
@@ -439,6 +448,8 @@ end
 function edit_selection!(edit::TextEditState, replacement)
   @assert !isempty(edit.selection)
   edit_buffer!(edit, edit.selection, replacement)
+  set_cursor!(edit, edit.cursor_index + length(replacement) - length(edit.selection))
+  clear_selection!(edit)
 end
 
 edit_buffer!(edit::TextEditState, range::UnitRange, replacement) = edit_buffer!(edit, (first(range), last(range)), replacement)
@@ -543,7 +554,7 @@ function Button(on_click, background::Rectangle; text = nothing)
 end
 
 function synchronize(button::Button)
-  intercept_inputs(input -> is_left_click(input) && button.on_input(input), button, BUTTON_PRESSED)
+  add_callback(input -> is_left_click(input) && button.on_input(input), button, BUTTON_PRESSED)
   isnothing(button.text) && return
   put_behind(button.background, button.text)
   set_geometry(button, get_geometry(button.background))
@@ -587,7 +598,7 @@ end
 function synchronize(checkbox::Checkbox)
   set_geometry(checkbox, get_geometry(checkbox.background))
   place(checkbox.background, checkbox)
-  intercept_inputs(input -> is_left_click(input) && checkbox.on_toggle(input), checkbox, BUTTON_PRESSED)
+  add_callback(input -> is_left_click(input) && checkbox.on_toggle(input), checkbox, BUTTON_PRESSED)
   checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
 end
 
@@ -743,7 +754,7 @@ function synchronize(menu::Menu)
   if menu.expanded
     for item in menu.items
       enable!(item)
-      intercept_inputs(item, BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED) do input::Input
+      add_callback(item, BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED) do input::Input
         is_left_click(input) && item.on_selected()
         input.type === POINTER_ENTERED && set_active(menu, item)
         input.type === POINTER_EXITED && set_inactive(item)
@@ -753,7 +764,7 @@ function synchronize(menu::Menu)
     set_location(menu.overlay, get_location(window))
     set_geometry(menu.overlay, get_geometry(window))
     set_z(menu.overlay, 100)
-    intercept_inputs(menu.overlay, BUTTON_PRESSED) do input::Input
+    add_callback(menu.overlay, BUTTON_PRESSED) do input::Input
       propagate!(input, app.systems.event.ui.areas[menu.id]) do propagated
         propagated && return
         click = input.event.mouse_event.button
@@ -767,7 +778,7 @@ function synchronize(menu::Menu)
   end
   set_geometry(menu, menu_geometry(menu))
   place_items(menu)
-  intercept_inputs(menu.on_input, menu, BUTTON_PRESSED)
+  add_callback(menu.on_input, menu, BUTTON_PRESSED)
 end
 
 function menu_geometry(menu::Menu)

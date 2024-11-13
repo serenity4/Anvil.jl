@@ -26,11 +26,11 @@ function execute_binding(kb::KeyBindings, event::KeyEvent)
   end
   # Ignore consumed modifiers, as well as MOD2 (NumLock) in the case it was not consumed during the keysym translation.
   key = KeyCombination(event.key, (event.modifiers & ~(event.consumed_modifiers | MOD2_MODIFIER)))
-  matches(key, event) || return
+  matches(key, event) || return false
   callable = get(kb.active, key, nothing)
-  isnothing(callable) && return
+  isnothing(callable) && return false
   hasmethod(callable, Tuple{}) ? callable() : callable(key)
-  nothing
+  true
 end
 
 function bind!(f::Callable, kb::KeyBindings, bindings::Pair...)

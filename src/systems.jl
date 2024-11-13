@@ -149,8 +149,18 @@ struct UserInterface
   areas::Dict{EntityID, InputArea}
   window::Window
   bindings::KeyBindings
+  bindings_area::InputArea
 end
-UserInterface(window::Window) = UserInterface(UIOverlay{Window}(), Dict(), Dict(), window, KeyBindings())
+
+function UserInterface(window::Window)
+  bindings = KeyBindings()
+  bindings_area = InputArea(Box2(Point2(-Inf, -Inf), Point2(Inf, Inf)), 1000, _ -> true)
+  intercept!(bindings_area, KEY_PRESSED) do input
+    bound = execute_binding(bindings, input.event.key_event)
+    !bound && propagate!(input)
+  end
+  UserInterface(UIOverlay{Window}(), Dict(), Dict(), window, bindings, bindings_area)
+end
 
 function Base.insert!(ui::UserInterface, entity::EntityID, area::InputArea)
   ui.entities[area] = entity
@@ -216,7 +226,6 @@ end
 pixel_to_metric(box::Box{2}) = Box(pixel_to_metric(box.min), pixel_to_metric(box.max))
 
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
-  event.type == KEY_PRESSED && execute_binding(system.ui.bindings, event.key_event)
   event.type == WINDOW_RESIZED && (set_geometry(app.windows[event.win], window_geometry(event.win)))
   event.type == WINDOW_CLOSED && return exit()
   update_overlays!(system, ecs)
@@ -225,6 +234,7 @@ end
 
 function update_overlays!(system::EventSystem, ecs::ECSDatabase)
   updated = Set{InputArea}()
+  push!(updated, system.ui.bindings_area)
   for (entity, location, geometry, input, z) in components(ecs, (ENTITY_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, INPUT_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{EntityID, P2, GeometryComponent, InputComponent, ZCoordinateComponent})
     zindex = Float64(z)
     area = get(system.ui.areas, entity, nothing)
