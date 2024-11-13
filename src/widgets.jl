@@ -258,10 +258,11 @@ mutable struct TextEditState
 
     edit.edit_on_select = add_callback(edit.text, BUTTON_PRESSED) do input
       start_editing!(edit)
-      select_text!(edit, 1:length(edit.buffer))
+      select_text!(edit)
     end
-  
-    edit.select_cursor = InputCallback(BUTTON_PRESSED) do input
+
+    edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK) do input
+      input.type === DOUBLE_CLICK && return select_text!(edit)
       location = get_location(edit.text)
       geometry = get_geometry(edit.text)
       origin = geometry.bottom_left .+ location
@@ -269,7 +270,7 @@ mutable struct TextEditState
       clear_selection!(edit)
       set_cursor!(edit, i)
     end
-  
+
     edit.character_input = InputCallback(KEY_PRESSED) do input
       (; event) = input
       char = event.key_event.input
@@ -332,7 +333,7 @@ function register_shortcuts!(edit::TextEditState)
   # push!(bindings, key"ctrl+right" => () -> #= TODO =#)
   push!(bindings, key"shift+left" => () -> select_previous!(edit))
   push!(bindings, key"shift+right" => () -> select_next!(edit))
-  push!(bindings, key"ctrl+a" => () -> select_text!(edit, 1:length(edit.buffer)))
+  push!(bindings, key"ctrl+a" => () -> select_text!(edit))
   push!(bindings, key"backspace" => () -> begin
     isempty(edit.selection) ? delete_previous!(edit) : delete_selection!(edit)
   end)
@@ -518,7 +519,7 @@ function string_index(str::AbstractString, i)
   next - 1 + (i - n)
 end
 
-function select_text!(edit::TextEditState, range::UnitRange{Int64}; set_cursor = true)
+function select_text!(edit::TextEditState, range::UnitRange{Int64} = 1:length(edit.buffer); set_cursor = true)
   last(range) > first(range) && (range = first(range):last(range))
   start = max(1, first(range))
   stop = min(length(edit.buffer), last(range))
