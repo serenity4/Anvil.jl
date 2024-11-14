@@ -102,9 +102,7 @@ function add_commands!(pass, program_cache::ProgramCache, component::RenderCompo
     @case &RENDER_OBJECT_TEXT
     text = component.primitive_data::ShaderLibrary.Text
     parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
-    text_span = boundingelement(text)
-    origin = Point3((location[1:2] .- centroid(text_span))..., location[3])
-    add_commands!(pass, renderables(program_cache, text, parameters_ssaa, origin))
+    add_commands!(pass, renderables(program_cache, text, parameters_ssaa, location))
   end
 end
 

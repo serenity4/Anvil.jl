@@ -166,15 +166,14 @@ function synchronize(text::Text)
   font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
   string = text.editable && isa(text.edit, TextEditState) ? something(text.edit.buffer, text.value) : text.value
   if !isempty(string)
-    lines = OpenType.lines(OpenType.Text(string, options), [font => font_options])
+    text_ot = OpenType.Text(string, options)
+    lines = OpenType.lines(text_ot, [font => font_options])
     setfield!(text, :lines, lines)
     shader = ShaderLibrary.Text(lines)
-    text_span = boundingelement(shader)
-    geometry = text_span - centroid(text_span)
-    set_geometry(text, geometry)
+    set_geometry(text, text_geometry(text_ot, lines))
     set_render(text, RenderComponent(RENDER_OBJECT_TEXT, nothing, shader))
   else
-    set_geometry(text, @__MODULE__().geometry(0, 0))
+    set_geometry(text, geometry(0, 0))
     unset_render(text)
   end
 end
@@ -539,11 +538,6 @@ function select_word!(edit::TextEditState; set_cursor = true)
   end
 end
 
-function segment_height(segment::OpenType.LineSegment)
-  (; ascender, descender) = segment.font.hhea
-  (ascender - descender) * segment.style.size
-end
-
 @widget struct Button
   on_input::Function
   background::Rectangle
@@ -572,7 +566,7 @@ function synchronize(button::Button)
   put_behind(button.background, button.text)
   set_geometry(button, get_geometry(button.background))
   place(button.background, button)
-  place(button.text, button)
+  place(button.text |> at(:center) |> at(0.0, -0.08), button)
 end
 
 function put_behind(button::Button, of)
