@@ -75,7 +75,6 @@ function initialize(f::Function; record_events::Bool = false)
   app.show_shortcuts = false
 
   bind(exit, key"ctrl+q")
-  bind(exit, key"ctrl+Q")
   bind(key"alt_left") do
     app.show_shortcuts = !app.show_shortcuts
     set_contextual_shortcuts_visibility(app.show_shortcuts)

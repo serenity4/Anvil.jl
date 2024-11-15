@@ -24,13 +24,39 @@ function execute_binding(kb::KeyBindings, event::KeyEvent)
     print_key_info(stdout, app.wm.keymap, event)
     println()
   end
-  # Ignore consumed modifiers, as well as MOD2 (NumLock) in the case it was not consumed during the keysym translation.
-  key = KeyCombination(event.key, (event.modifiers & ~(event.consumed_modifiers | MOD2_MODIFIER)))
+  # Ignore NumLock and CapsLock in the case they were not consumed during the keysym translation.
+  ignored_modifiers = MOD2_MODIFIER | LOCK_MODIFIER
+  modifiers = event.modifiers & ~(ignored_modifiers | event.consumed_modifiers)
+  key = KeyCombination(event.key, modifiers)
   matches(key, event) || return false
-  callable = get(kb.active, key, nothing)
+  callable = get_callable(kb, key, event)
   isnothing(callable) && return false
-  hasmethod(callable, Tuple{}) ? callable() : callable(key)
+  applicable(callable, key) ? invokelatest(callable, key) : invokelatest(callable)
   true
+end
+
+function get_callable(kb::KeyBindings, key::KeyCombination, event::KeyEvent)
+  callable = get(kb.active, key, nothing)
+  !isnothing(callable) && return callable
+  name = String(key.key.name)
+
+  callable = @something callable begin
+    # Perform a case-insensitive lookup for letters.
+    if length(name) == 1 && isletter(name[1])
+      char = name[1]
+      isuppercase(char) && @reset key.key.name = Symbol(lowercase(name))
+      islowercase(char) && @reset key.key.name = Symbol(uppercase(name))
+      get(kb.active, key, nothing)
+    end
+  end begin
+    # If Shift was active and was consumed, look for an entry that requires it still.
+    # This allows shortcuts such as `shift+)` to be triggered even for keyboard layouts
+    # that require shift to be pressed to produce `)`, as is the case for QWERTY layouts.
+    if in(SHIFT_MODIFIER, event.consumed_modifiers) && in(SHIFT_MODIFIER, event.modifiers)
+      @reset key.exact_modifiers |= SHIFT_MODIFIER
+      get(kb.active, key, nothing)
+    end
+  end Some(nothing)
 end
 
 function bind!(f::Callable, kb::KeyBindings, bindings::Pair...)

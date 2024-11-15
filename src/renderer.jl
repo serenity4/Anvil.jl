@@ -15,7 +15,7 @@ function next!(fd::FrameDiagnostics)
   fd
 end
 
-print_framecount(fd::FrameDiagnostics) = print("Frame: ", rpad(fd.count, 5), " (", rpad(fd.elapsed_ms, 4), " ms)            \r")
+print_framecount(fd::FrameDiagnostics) = print(string("Frame: ", rpad(fd.count, 5), " (", rpad(fd.elapsed_ms, 4), " ms)            \r"))
 
 mutable struct Renderer
   instance::Lava.Instance

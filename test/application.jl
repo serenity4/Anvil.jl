@@ -12,7 +12,7 @@ using StyledStrings: annotations, getface
 Logging.disable_logging(Logging.Info)
 ENV["ANVIL_LOG_FRAMECOUNT"] = false
 
-include("virtual_inputs.jl")
+!@isdefined(CURSOR) && includet("virtual_inputs.jl")
 
 # While executing this testset, do not provide any input of any sort to the windows that pop up.
 # Otherwise, tests will fail due to unexpected interactions.
@@ -194,7 +194,7 @@ include("virtual_inputs.jl")
     @testset "Text editing" begin
       text = get_widget(:node_name_value)
       @test text.value == "Value"
-      move_cursor(text)
+      move_cursor(get_location(text) .+ centroid(get_geometry(text)))
 
       @testset "Selection/deselection" begin
         left_click()
@@ -425,7 +425,7 @@ include("virtual_inputs.jl")
         left_click()
         synchronize()
         @test text.edit.cursor_index == 2
-        move_cursor(get_location(text) .+ (0.2, 0))
+        move_cursor(get_location(text) .+ centroid(get_geometry(text)) .+ (0.2, 0))
         left_click()
         synchronize()
         @test text.edit.cursor_index == 4

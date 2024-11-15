@@ -260,8 +260,10 @@ mutable struct TextEditState
       select_text!(edit)
     end
 
-    edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK) do input
-      input.type === DOUBLE_CLICK && return select_word!(edit)
+    # TODO: Re-enable double click when selection + first click does not trigger it.
+    # edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK) do input
+    #   input.type === DOUBLE_CLICK && return select_word!(edit, input.event.location)
+    edit.select_cursor = InputCallback(BUTTON_PRESSED) do input
       location = get_location(edit.text)
       geometry = get_geometry(edit.text)
       origin = geometry.bottom_left .+ location
@@ -328,10 +330,16 @@ function register_shortcuts!(edit::TextEditState)
   bindings = Pair{KeyCombination, Callable}[]
   push!(bindings, key"left" => () -> navigate_previous!(edit))
   push!(bindings, key"right" => () -> navigate_next!(edit))
-  # push!(bindings, key"ctrl+left" => () -> #= TODO =#)
-  # push!(bindings, key"ctrl+right" => () -> #= TODO =#)
+  push!(bindings, key"ctrl+left" => () -> navigate_previous_word!(edit))
+  push!(bindings, key"ctrl+right" => () -> navigate_next_word!(edit))
   push!(bindings, key"shift+left" => () -> select_previous!(edit))
   push!(bindings, key"shift+right" => () -> select_next!(edit))
+  push!(bindings, key"ctrl+shift+left" => () -> select_previous_word!(edit))
+  push!(bindings, key"ctrl+shift+right" => () -> select_next_word!(edit))
+  append!(bindings, (key"home", key"kp_home") .=> () -> navigate_start!(edit))
+  append!(bindings, (key"end", key"kp_end") .=> () -> navigate_end!(edit))
+  append!(bindings, (key"shift+home", key"shift+kp_home") .=> () -> select_start!(edit))
+  append!(bindings, (key"shift+end", key"shift+kp_end") .=> () -> select_end!(edit))
   push!(bindings, key"ctrl+a" => () -> select_text!(edit))
   push!(bindings, key"backspace" => () -> begin
     isempty(edit.selection) ? delete_previous!(edit) : delete_selection!(edit)
@@ -457,8 +465,8 @@ end
 
 edit_buffer!(edit::TextEditState, range::UnitRange, replacement) = edit_buffer!(edit, (first(range), last(range)), replacement)
 function edit_buffer!(edit::TextEditState, (start, stop), replacement)
-  i = string_index(edit.buffer, start - 1)
-  j = string_index(edit.buffer, stop + 1)
+  i = byte_index(edit.buffer, start - 1)
+  j = byte_index(edit.buffer, stop + 1)
   new = @view(edit.buffer[1:i]) * replacement * @view(edit.buffer[j:end])
   edit.buffer = new
   synchronize!(edit.text)
@@ -476,36 +484,119 @@ function navigate_next!(edit::TextEditState)
   clear_selection!(edit)
 end
 
+function navigate_previous_word!(edit::TextEditState)
+  j = edit.cursor_index
+  buffer = reverse(edit.buffer[begin:byte_index(edit.buffer, j)])
+  m = match(r"(?<=\S)[\b\s+][^$]", buffer)
+  index = !isnothing(m) ? length(buffer) - (character_index(buffer, m.offset) - 1) : 0
+  set_cursor!(edit, index)
+  clear_selection!(edit)
+end
+
+function navigate_next_word!(edit::TextEditState)
+  i = edit.cursor_index + 1
+  buffer = String(edit.buffer[byte_index(edit.buffer, i):end])
+  m = match(r"(?<=\S)[\b\s+]", buffer)
+  index = !isnothing(m) ? i - 1 + character_index(buffer, m.offset) - 1 : length(edit.buffer)
+  set_cursor!(edit, index)
+  clear_selection!(edit)
+end
+
 function select_previous!(edit::TextEditState)
-  if isempty(edit.selection)
-    start = stop = edit.cursor_index
-  elseif first(edit.selection) == edit.cursor_index + 1
-    start = first(edit.selection) - 1
-    stop = last(edit.selection)
-  elseif last(edit.selection) == edit.cursor_index
-    start = first(edit.selection)
-    stop = last(edit.selection) - 1
+  (; selection, cursor_index) = edit
+  if isempty(selection)
+    start = stop = cursor_index
+  elseif first(selection) == cursor_index + 1
+    start = first(selection) - 1
+    stop = last(selection)
+  elseif last(selection) == cursor_index
+    start = first(selection)
+    stop = last(selection) - 1
   end
-  set_cursor!(edit, edit.cursor_index - 1)
+  set_cursor!(edit, cursor_index - 1)
   select_text!(edit, start:stop; set_cursor = false)
 end
 
 function select_next!(edit::TextEditState)
-  if isempty(edit.selection)
-    start = stop = edit.cursor_index + 1
-  elseif first(edit.selection) == edit.cursor_index + 1
-    start = first(edit.selection) + 1
-    stop = last(edit.selection)
-  elseif last(edit.selection) == edit.cursor_index
-    start = first(edit.selection)
-    stop = last(edit.selection) + 1
+  (; selection, cursor_index) = edit
+  if isempty(selection)
+    start = stop = cursor_index + 1
+  elseif first(selection) == cursor_index + 1
+    start = first(selection) + 1
+    stop = last(selection)
+  elseif last(selection) == cursor_index
+    start = first(selection)
+    stop = last(selection) + 1
   end
-  set_cursor!(edit, edit.cursor_index + 1)
+  set_cursor!(edit, cursor_index + 1)
   select_text!(edit, start:stop; set_cursor = false)
 end
 
-"Return the index of the codeunit that points to the `i`th character in `str`."
-function string_index(str::AbstractString, i)
+select_previous_word!(edit::TextEditState) = navigate_and_select_previous!(navigate_previous_word!, edit)
+
+function navigate_and_select_previous!(navigate!, edit::TextEditState)
+  previous_selection = edit.selection
+  previous_cursor_index = edit.cursor_index
+  (; selection, cursor_index) = edit
+  navigate!(edit)
+  if isempty(previous_selection)
+    start = edit.cursor_index + 1
+    stop = previous_cursor_index
+  elseif first(previous_selection) == previous_cursor_index + 1
+    # Expand selection toward the left.
+    start = edit.cursor_index + 1
+    stop = last(previous_selection)
+  elseif last(previous_selection) == previous_cursor_index
+    # Select toward the left (shrinking or starting a new selection).
+    start = first(previous_selection)
+    stop = edit.cursor_index
+    start > stop && ((start, stop) = (stop + 1, start - 1))
+  end
+  select_text!(edit, start:stop; set_cursor = false)
+end
+
+select_next_word!(edit::TextEditState) = navigate_and_select_next!(navigate_next_word!, edit)
+
+function navigate_and_select_next!(navigate!, edit::TextEditState)
+  previous_selection = edit.selection
+  previous_cursor_index = edit.cursor_index
+  (; selection, cursor_index) = edit
+  navigate!(edit)
+  if isempty(previous_selection)
+    start = previous_cursor_index + 1
+    stop = edit.cursor_index
+  elseif first(previous_selection) == previous_cursor_index + 1
+    # Select toward the right (shrinking or starting a new selection).
+    start = edit.cursor_index + 1
+    stop = last(previous_selection)
+    start > stop && ((start, stop) = (stop + 1, start - 1))
+  elseif last(previous_selection) == previous_cursor_index
+    # Expand selection toward the right.
+    start = first(previous_selection)
+    stop = edit.cursor_index
+  end
+  select_text!(edit, start:stop; set_cursor = false)
+end
+
+function navigate_start!(edit::TextEditState)
+  set_cursor!(edit, 0)
+  clear_selection!(edit)
+end
+
+function navigate_end!(edit::TextEditState)
+  set_cursor!(edit, length(edit.buffer))
+  clear_selection!(edit)
+end
+
+select_start!(edit::TextEditState) = navigate_and_select_previous!(navigate_start!, edit)
+select_end!(edit::TextEditState) = navigate_and_select_next!(navigate_end!, edit)
+
+"""
+Return the index of the byte that points to the `i`th character in `str`.
+
+Performs the inverse operation of `character_index`.
+"""
+function byte_index(str::AbstractString, i)
   i < 0 && throw(ArgumentError("Expected positive index, got $i"))
   i == 0 && return 0
   i == 1 && return 1
@@ -518,8 +609,17 @@ function string_index(str::AbstractString, i)
   next - 1 + (i - n)
 end
 
+"""
+Return the index of the character that uses the `i`th byte in `str`.
+
+Performs the inverse operation of `byte_index`.
+
+!!! warning
+    This function scales as O(length(str)).
+"""
+character_index(str::AbstractString, byte_index) = findlast(≤(byte_index), collect(keys(str)))
+
 function select_text!(edit::TextEditState, range::UnitRange{Int64} = 1:length(edit.buffer); set_cursor = true)
-  last(range) > first(range) && (range = first(range):last(range))
   start = max(1, first(range))
   stop = min(length(edit.buffer), last(range))
   set_cursor && set_cursor!(edit, stop)
@@ -529,11 +629,13 @@ function select_text!(edit::TextEditState, range::UnitRange{Int64} = 1:length(ed
   synchronize!(edit.text)
 end
 
-function select_word!(edit::TextEditState; set_cursor = true)
-  for (; offset, match) in eachmatch(r"\w+|[^\w\s]+|\s+", edit.buffer)
-    start = match.offset
-    stop = start + length(match)
-    start - 1 ≤ edit.cursor_index ≤ stop || continue
+function select_word!(edit::TextEditState, (x, _); set_cursor = true)
+  cx, _ = get_location(edit.cursor)
+  click = edit.cursor_index + (x > cx)
+  for (; match, offset) in eachmatch(r"\w+|[^\w\s]+|\s+", edit.buffer)
+    start = character_index(edit.buffer, offset)
+    stop = start + length(match) - 1
+    start - 1 ≤ click ≤ stop || continue
     return select_text!(edit, start:stop; set_cursor)
   end
 end
