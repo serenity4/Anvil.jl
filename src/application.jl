@@ -178,7 +178,6 @@ has_input_handler(entity) = haskey(app.ecs, entity, INPUT_COMPONENT_ID)
 set_input_handler(entity, input::InputComponent) = app.ecs[entity, INPUT_COMPONENT_ID] = input
 function unset_input_handler(entity)
   unset!(app.ecs, entity, INPUT_COMPONENT_ID)
-  unset!(app.systems.event.ui.areas, entity)
 end
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID]::WidgetComponent
 get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
@@ -188,29 +187,16 @@ set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID] = wind
 
 add_callback(f, entity, args...) = add_callback(entity, InputCallback(f, args...))
 
+overlay(args...; kwargs...) = overlay!(app.systems.event.ui, args...; kwargs...)
+unoverlay(args...; kwargs...) = unoverlay!(app.systems.event.ui, args...; kwargs...)
+
 function add_callback(entity, callback::InputCallback)
-  if has_input_handler(entity)
-    handler = get_input_handler(entity)
-    any(x -> x === callback, handler.callbacks) && return callback
-    push!(handler.callbacks, callback)
-  else
-    handler = InputComponent([callback])
-    set_input_handler(entity, handler)
-  end
+  !has_input_handler(entity) && set_input_handler(entity, InputComponent([]))
+  overlay(entity, callback)
   callback
 end
 
-function remove_callback(entity, callback::InputCallback)
-  has_input_handler(entity) || return false
-  handler = get_input_handler(entity)
-  for (i, existing) in enumerate(handler.callbacks)
-    if existing === callback
-      deleteat!(handler.callbacks, i)
-      return true
-    end
-  end
-  false
-end
+remove_callback(entity, callback::InputCallback) = unoverlay(entity, callback)
 
 bind(f::Callable, key::KeyCombination) = bind(key => f)
 bind(f::Callable, bindings::Pair...) = bind!(f, app.systems.event.ui.bindings, bindings...)

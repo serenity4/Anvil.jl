@@ -38,7 +38,8 @@ using Reexport
 @reexport using Accessors: @set, setproperties, @reset
 using XCB
 @reexport using AbstractGUI
-@reexport using AbstractGUI: consume!, events, actions
+using AbstractGUI: events, actions
+import AbstractGUI: overlay!, unoverlay!
 @reexport using StaticArrays: @SVector, SVector
 
 using Base: Callable, annotate!, annotations
@@ -107,7 +108,8 @@ export
        # Application state.
        get_entity, get_location, get_geometry, get_z, get_render, get_input_handler, get_widget, get_window,
        set_location, set_geometry, set_z, has_z, set_render, has_render, has_input_handler, unset_render, set_input_handler, unset_input_handler, set_widget, set_window,
-       add_callback,
+       overlay, unoverlay,
+       add_callback, remove_callback,
 
        bind, unbind,
 

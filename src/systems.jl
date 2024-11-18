@@ -146,21 +146,54 @@ const FULL_IMAGE_UV = generate_quad_uvs((0, 1), (0, 1))
 
 struct UserInterface
   overlay::UIOverlay
-  entities::Dict{InputArea, EntityID}
-  areas::Dict{EntityID, InputArea}
+  entities::Dictionary{InputArea, EntityID}
+  areas::Dictionary{EntityID, InputArea}
   window::Window
   bindings::KeyBindings
-  bindings_area::InputArea
 end
 
 function UserInterface(window::Window)
+  overlay = UIOverlay{Window}()
   bindings = KeyBindings()
   bindings_area = InputArea(Box2(Point2(-Inf, -Inf), Point2(Inf, Inf)), 1000, _ -> true)
-  intercept!(bindings_area, KEY_PRESSED) do input
+  overlay!(overlay, window, bindings_area, KEY_PRESSED) do input
     bound = execute_binding(bindings, input.event.key_event)
     !bound && propagate!(input)
   end
-  UserInterface(UIOverlay{Window}(), Dict(), Dict(), window, bindings, bindings_area)
+  UserInterface(overlay, Dictionary(), Dictionary(), window, bindings)
+end
+
+retrieve_input_area!(ui::UserInterface, entity) = retrieve_input_area!(ui, convert(EntityID, entity))
+
+function retrieve_input_area!(ui::UserInterface, entity::EntityID)
+  get!(ui.areas, entity) do
+    InputArea(geometry(0, 0), 0, () -> false)
+  end
+end
+
+function overlay(f, ui::UserInterface, entity, args...; options = OverlayOptions())
+  entity = convert(EntityID, entity)
+  overlay(ui, entity, InputCallback(f, args...; options))
+end
+
+function overlay!(ui::UserInterface, entity, callback::InputCallback; options = OverlayOptions())
+  entity = convert(EntityID, entity)
+  area = retrieve_input_area!(ui, entity)
+  overlay!(ui.overlay, ui.window, area, callback; options)
+end
+
+function unoverlay!(ui::UserInterface, entity)
+  entity = convert(EntityID, entity)
+  area = get(ui.areas, entity, nothing)
+  isnothing(area) && return false
+  unoverlay!(ui.overlay, ui.window, area)
+end
+
+function unoverlay!(ui::UserInterface, entity, callback::InputCallback)
+  entity = convert(EntityID, entity)
+  area = get(ui.areas, entity, nothing)
+  isnothing(area) && return false
+  unoverlay!(ui.overlay, ui.window, area, callback)
 end
 
 function Base.insert!(ui::UserInterface, entity::EntityID, area::InputArea)
@@ -234,24 +267,13 @@ function (system::EventSystem)(ecs::ECSDatabase, event::Event)
 end
 
 function update_overlays!(system::EventSystem, ecs::ECSDatabase)
-  updated = Set{InputArea}()
-  push!(updated, system.ui.bindings_area)
   for (entity, location, geometry, input, z) in components(ecs, (ENTITY_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, INPUT_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{EntityID, P2, GeometryComponent, InputComponent, ZCoordinateComponent})
     zindex = Float64(z)
-    area = get(system.ui.areas, entity, nothing)
-    contains = x -> in(x .- location, geometry)
-    if isnothing(area)
-      area = InputArea(input.callbacks, geometry, zindex, contains)
-      insert!(system.ui, entity, area)
-      push!(updated, area)
-    else
-      area.aabb = geometry
-      area.z = zindex
-      area.contains = contains
-      push!(updated, area)
-    end
+    area = system.ui.areas[entity]
+    area.aabb = geometry
+    area.z = zindex
+    area.contains = x -> in(x .- location, geometry)
   end
-  set!(system.ui.overlay.areas, system.ui.window, updated)
 end
 
 struct Systems

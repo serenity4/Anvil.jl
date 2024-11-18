@@ -14,6 +14,7 @@ end
 synchronize(::Widget) = nothing
 
 Base.convert(::Type{WidgetID}, widget::Widget) = widget.id
+Base.:(==)(widget::Widget, id::WidgetID) = widget.id == id
 
 function Base.setproperty!(widget::Widget, name::Symbol, value)
   (name === :modified || name === :id || name === :disabled) && return setfield!(widget, name, value)
@@ -28,6 +29,8 @@ end
 function new_widget(::Type{T}, args...) where {T<:Widget}
   entity = new_entity()
   set_location(entity, zero(LocationComponent))
+  set_geometry(entity, Box2(zero(P2)))
+  set_z(entity, 0)
   widget = T(entity, args...)
   set_widget(entity, widget)
   synchronize!(widget)
@@ -41,6 +44,7 @@ function disable!(widget::Widget)
   end
   unset_render(widget)
   unset_input_handler(widget)
+  unoverlay(widget)
   remove_layout_operations(widget)
   widget.disabled = true
   widget
@@ -260,10 +264,8 @@ mutable struct TextEditState
       select_text!(edit)
     end
 
-    # TODO: Re-enable double click when selection + first click does not trigger it.
-    # edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK) do input
-    #   input.type === DOUBLE_CLICK && return select_word!(edit, input.event.location)
-    edit.select_cursor = InputCallback(BUTTON_PRESSED) do input
+    edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK) do input
+      input.type === DOUBLE_CLICK && return select_word!(edit, input.event.location)
       location = get_location(edit.text)
       geometry = get_geometry(edit.text)
       origin = geometry.bottom_left .+ location
@@ -872,7 +874,7 @@ function synchronize(menu::Menu)
     window = app.windows[app.window]
     set_location(menu.overlay, get_location(window))
     set_geometry(menu.overlay, get_geometry(window))
-    set_z(menu.overlay, 100)
+    set_z(menu.overlay, Inf)
     add_callback(menu.overlay, BUTTON_PRESSED) do input::Input
       propagate!(input, app.systems.event.ui.areas[menu.id]) do propagated
         propagated && return
@@ -883,6 +885,7 @@ function synchronize(menu::Menu)
     end
   else
     foreach(disable!, menu.items)
+    unoverlay(menu.overlay)
     unset_input_handler(menu.overlay)
   end
   set_geometry(menu, menu_geometry(menu))

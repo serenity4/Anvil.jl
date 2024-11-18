@@ -426,6 +426,8 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         synchronize()
         @test text.edit.cursor_index == 2
         move_cursor(get_location(text) .+ centroid(get_geometry(text)) .+ (0.2, 0))
+        # XXX: Dynamically set a shorter double-click period to avoid having to wait here.
+        sleep(0.5)
         left_click()
         synchronize()
         @test text.edit.cursor_index == 4
