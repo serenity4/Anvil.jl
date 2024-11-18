@@ -95,8 +95,8 @@ export
        save_events, replay_events,
 
        # Components.
-       RenderComponent, InputComponent, LocationComponent, GeometryComponent, ZCoordinateComponent,
-       ENTITY_COMPONENT_ID, RENDER_COMPONENT_ID, INPUT_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID, WIDGET_COMPONENT_ID, WINDOW_COMPONENT_ID,
+       RenderComponent, LocationComponent, GeometryComponent, ZCoordinateComponent,
+       ENTITY_COMPONENT_ID, RENDER_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID, WIDGET_COMPONENT_ID, WINDOW_COMPONENT_ID,
 
        RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT,
        ImageParameters,
@@ -106,8 +106,8 @@ export
        line_center,
 
        # Application state.
-       get_entity, get_location, get_geometry, get_z, get_render, get_input_handler, get_widget, get_window,
-       set_location, set_geometry, set_z, has_z, set_render, has_render, has_input_handler, unset_render, set_input_handler, unset_input_handler, set_widget, set_window,
+       get_entity, get_location, get_geometry, get_z, get_render, get_widget, get_window,
+       set_location, set_geometry, set_z, has_z, set_render, has_render, unset_render, set_widget, set_window,
        overlay, unoverlay,
        add_callback, remove_callback,
 

@@ -23,9 +23,8 @@ end;
 
 using DataFrames
 df = DataFrame(Anvil.app.ecs)
-select(df, :Name, :Render, :Input)
+select(df, :Name, :Render)
 select(df, :Name, :Z)
 select(df, :Name, :Location)
-df.Name .=> df.Input
 
 GC.gc()

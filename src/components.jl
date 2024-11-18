@@ -1,6 +1,5 @@
 const ENTITY_COMPONENT_ID = ComponentID(0) # EntityID
 const RENDER_COMPONENT_ID = ComponentID(1) # RenderComponent
-const INPUT_COMPONENT_ID = ComponentID(2) # InputComponent
 const LOCATION_COMPONENT_ID = ComponentID(3) # LocationComponent
 const GEOMETRY_COMPONENT_ID = ComponentID(4) # GeometryComponent
 const ZCOORDINATE_COMPONENT_ID = ComponentID(5) # ZCoordinateComponent
@@ -113,17 +112,10 @@ end
 
 Base.show(io::IO, render::RenderComponent) = print(io, RenderComponent, "(", render.type, ", ", typeof(render.vertex_data), ", ", typeof(render.primitive_data))
 
-struct InputComponent
-  callbacks::Vector{InputCallback}
-end
-
-Base.show(io::IO, input::InputComponent) = print(io, InputComponent, "(", events(input.callbacks), ", ", actions(input.callbacks), ')')
-
 function new_database()
   ecs = ECSDatabase(component_names = Dict(), entity_names = Dict())
   ecs.components[ENTITY_COMPONENT_ID] = ComponentStorage{EntityID}()
   ecs.components[RENDER_COMPONENT_ID] = ComponentStorage{RenderComponent}()
-  ecs.components[INPUT_COMPONENT_ID] = ComponentStorage{InputComponent}()
   ecs.components[LOCATION_COMPONENT_ID] = ComponentStorage{LocationComponent}()
   ecs.components[GEOMETRY_COMPONENT_ID] = ComponentStorage{GeometryComponent}()
   ecs.components[ZCOORDINATE_COMPONENT_ID] = ComponentStorage{ZCoordinateComponent}()
@@ -132,7 +124,6 @@ function new_database()
 
   ecs.component_names[ENTITY_COMPONENT_ID] = :Entity
   ecs.component_names[RENDER_COMPONENT_ID] = :Render
-  ecs.component_names[INPUT_COMPONENT_ID] = :Input
   ecs.component_names[LOCATION_COMPONENT_ID] = :Location
   ecs.component_names[GEOMETRY_COMPONENT_ID] = :Geometry
   ecs.component_names[ZCOORDINATE_COMPONENT_ID] = :Z

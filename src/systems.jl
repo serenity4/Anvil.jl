@@ -187,13 +187,16 @@ function unoverlay!(ui::UserInterface, entity)
   area = get(ui.areas, entity, nothing)
   isnothing(area) && return false
   unoverlay!(ui.overlay, ui.window, area)
+  delete!(ui.areas, entity)
 end
 
 function unoverlay!(ui::UserInterface, entity, callback::InputCallback)
   entity = convert(EntityID, entity)
   area = get(ui.areas, entity, nothing)
   isnothing(area) && return false
-  unoverlay!(ui.overlay, ui.window, area, callback)
+  remaining = unoverlay!(ui.overlay, ui.window, area, callback)
+  !is_area_active(ui.overlay, ui.window, area) || return
+  delete!(ui.areas, entity)
 end
 
 function Base.insert!(ui::UserInterface, entity::EntityID, area::InputArea)
@@ -267,11 +270,12 @@ function (system::EventSystem)(ecs::ECSDatabase, event::Event)
 end
 
 function update_overlays!(system::EventSystem, ecs::ECSDatabase)
-  for (entity, location, geometry, input, z) in components(ecs, (ENTITY_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, INPUT_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{EntityID, P2, GeometryComponent, InputComponent, ZCoordinateComponent})
-    zindex = Float64(z)
-    area = system.ui.areas[entity]
+  for (entity, area) in pairs(system.ui.areas)
+    location = get_location(entity)
+    geometry = get_geometry(entity)
+    z = get_z(entity)
     area.aabb = geometry
-    area.z = zindex
+    area.z = z
     area.contains = x -> in(x .- location, geometry)
   end
 end

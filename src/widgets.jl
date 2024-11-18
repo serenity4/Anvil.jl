@@ -43,7 +43,6 @@ function disable!(widget::Widget)
     disable!(part)
   end
   unset_render(widget)
-  unset_input_handler(widget)
   unoverlay(widget)
   remove_layout_operations(widget)
   widget.disabled = true
@@ -886,7 +885,6 @@ function synchronize(menu::Menu)
   else
     foreach(disable!, menu.items)
     unoverlay(menu.overlay)
-    unset_input_handler(menu.overlay)
   end
   set_geometry(menu, menu_geometry(menu))
   place_items(menu)

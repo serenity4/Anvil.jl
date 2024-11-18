@@ -173,12 +173,6 @@ get_render(entity) = app.ecs[entity, RENDER_COMPONENT_ID]::RenderComponent
 set_render(entity, render::RenderComponent) = app.ecs[entity, RENDER_COMPONENT_ID] = render
 has_render(entity) = haskey(app.ecs, entity, RENDER_COMPONENT_ID)
 unset_render(entity) = unset!(app.ecs, entity, RENDER_COMPONENT_ID)
-get_input_handler(entity) = app.ecs[entity, INPUT_COMPONENT_ID]::InputComponent
-has_input_handler(entity) = haskey(app.ecs, entity, INPUT_COMPONENT_ID)
-set_input_handler(entity, input::InputComponent) = app.ecs[entity, INPUT_COMPONENT_ID] = input
-function unset_input_handler(entity)
-  unset!(app.ecs, entity, INPUT_COMPONENT_ID)
-end
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID]::WidgetComponent
 get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
 set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID] = widget
@@ -190,12 +184,7 @@ add_callback(f, entity, args...) = add_callback(entity, InputCallback(f, args...
 overlay(args...; kwargs...) = overlay!(app.systems.event.ui, args...; kwargs...)
 unoverlay(args...; kwargs...) = unoverlay!(app.systems.event.ui, args...; kwargs...)
 
-function add_callback(entity, callback::InputCallback)
-  !has_input_handler(entity) && set_input_handler(entity, InputComponent([]))
-  overlay(entity, callback)
-  callback
-end
-
+add_callback(entity, callback::InputCallback) = overlay(entity, callback)
 remove_callback(entity, callback::InputCallback) = unoverlay(entity, callback)
 
 bind(f::Callable, key::KeyCombination) = bind(key => f)
