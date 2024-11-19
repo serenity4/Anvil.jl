@@ -230,7 +230,7 @@ function (system::EventSystem)(ecs::ECSDatabase)
 end
 
 function to_metric_coordinate_system(event::Event)
-  @set event.location = to_metric_coordinate_system(event.location, event.win)
+  @set event.location = to_metric_coordinate_system(event.location, event.window)
 end
 
 function to_metric_coordinate_system((x, y), window::Window)
@@ -263,7 +263,7 @@ end
 pixel_to_metric(box::Box{2}) = Box(pixel_to_metric(box.min), pixel_to_metric(box.max))
 
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
-  event.type == WINDOW_RESIZED && (set_geometry(app.windows[event.win], window_geometry(event.win)))
+  event.type == WINDOW_RESIZED && (set_geometry(app.windows[event.window], window_geometry(event.window)))
   event.type == WINDOW_CLOSED && return exit()
   update_overlays!(system, ecs)
   consume!(system.ui.overlay, event)
