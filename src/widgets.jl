@@ -263,8 +263,9 @@ mutable struct TextEditState
       select_text!(edit)
     end
 
-    edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK | DRAG) do input
+    edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK | TRIPLE_CLICK | DRAG) do input
       input.type === DOUBLE_CLICK && return select_word!(edit, input.event.location)
+      input.type === TRIPLE_CLICK && return select_text!(edit)
       input.type === DRAG && return select_at_selection!(edit, input)
       select_at_cursor!(edit, input)
     end

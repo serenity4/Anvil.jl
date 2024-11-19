@@ -420,7 +420,7 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         @test text.value == "success"
       end
 
-      @testset "Mouse selection" begin
+      @testset "Text selection" begin
         press_key(:ESC)
         move_cursor(get_location(text) .+ (0.7, 0.1))
         left_click()
@@ -446,6 +446,22 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         synchronize()
         @test text.edit.cursor_index == 2
         @test text.edit.selection == 3:4
+
+        press_key(:ESC)
+        text.value = "Some text with words"
+        move_cursor(get_location(text) .+ (3.5, 0.1))
+        left_click()
+        left_click()
+        synchronize()
+        @test text.edit.cursor_index == 12
+        left_click()
+        synchronize()
+        @test text.edit.cursor_index == 14
+        @test text.edit.selection == 11:14
+        left_click()
+        synchronize()
+        @test text.edit.cursor_index == 20
+        @test text.edit.selection == 1:20
         press_key(:ESC)
       end
     end
