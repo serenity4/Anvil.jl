@@ -21,7 +21,7 @@ function Base.setproperty!(widget::Widget, name::Symbol, value)
   prev = getproperty(widget, name)
   prev === value && return value
   widget.modified = true
-  setfield!(widget, name, value)
+  setfield!(widget, name, convert(fieldtype(typeof(widget), name), value))
   synchronize(widget)
   value
 end
@@ -263,14 +263,10 @@ mutable struct TextEditState
       select_text!(edit)
     end
 
-    edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK) do input
+    edit.select_cursor = InputCallback(BUTTON_PRESSED, DOUBLE_CLICK | DRAG) do input
       input.type === DOUBLE_CLICK && return select_word!(edit, input.event.location)
-      location = get_location(edit.text)
-      geometry = get_geometry(edit.text)
-      origin = geometry.bottom_left .+ location
-      i = cursor_index(edit.buffer, edit.text.lines, input.event.location .- origin)
-      clear_selection!(edit)
-      set_cursor!(edit, i)
+      input.type === DRAG && return select_at_selection!(edit, input)
+      select_at_cursor!(edit, input)
     end
 
     edit.character_input = InputCallback(KEY_PRESSED) do input
@@ -294,7 +290,7 @@ function start_editing!(edit::TextEditState)
   set_geometry(edit.typing_overlay, (Inf, Inf))
   set_z(edit.typing_overlay, Inf)
   remove_callback(edit.text, edit.edit_on_select)
-  add_callback(edit.text, edit.select_cursor)
+  add_callback(edit.text, edit.select_cursor; drag_threshold = 0.1)
   set_cursor!(edit, length(edit.buffer))
   edit.pending = true
 end
@@ -310,6 +306,30 @@ function stop_editing!(edit::TextEditState)
   edit.buffer = nothing
   edit.pending = false
   synchronize!(edit.text)
+end
+
+function select_at_cursor!(edit::TextEditState, input::Input)
+  location = get_location(edit.text)
+  geometry = get_geometry(edit.text)
+  origin = geometry.bottom_left .+ location
+  i = cursor_index(edit.buffer, edit.text.lines, input.event.location .- origin)
+  clear_selection!(edit)
+  set_cursor!(edit, i)
+end
+
+function select_at_selection!(edit::TextEditState, input::Input)
+  location = get_location(edit.text)
+  geometry = get_geometry(edit.text)
+  origin = geometry.bottom_left .+ location
+  area, event = input.drag
+  i = cursor_index(edit.buffer, edit.text.lines, input.source.event.location .- origin)
+  j = cursor_index(edit.buffer, edit.text.lines, event.location .- origin)
+  j == edit.cursor_index && return
+  if j > edit.cursor_index
+    navigate_and_select_next!(edit -> set_cursor!(edit, j), edit)
+  else
+    navigate_and_select_previous!(edit -> set_cursor!(edit, j), edit)
+  end
 end
 
 is_cursor_active(edit::TextEditState) = edit.cursor_index ≥ 0
@@ -515,7 +535,7 @@ function select_previous!(edit::TextEditState)
     stop = last(selection) - 1
   end
   set_cursor!(edit, cursor_index - 1)
-  select_text!(edit, start:stop; set_cursor = false)
+  select_text!(edit, (start, stop); set_cursor = false)
 end
 
 function select_next!(edit::TextEditState)
@@ -530,7 +550,7 @@ function select_next!(edit::TextEditState)
     stop = last(selection) + 1
   end
   set_cursor!(edit, cursor_index + 1)
-  select_text!(edit, start:stop; set_cursor = false)
+  select_text!(edit, (start, stop); set_cursor = false)
 end
 
 select_previous_word!(edit::TextEditState) = navigate_and_select_previous!(navigate_previous_word!, edit)
@@ -553,7 +573,7 @@ function navigate_and_select_previous!(navigate!, edit::TextEditState)
     stop = edit.cursor_index
     start > stop && ((start, stop) = (stop + 1, start - 1))
   end
-  select_text!(edit, start:stop; set_cursor = false)
+  select_text!(edit, (start, stop); set_cursor = false)
 end
 
 select_next_word!(edit::TextEditState) = navigate_and_select_next!(navigate_next_word!, edit)
@@ -576,7 +596,7 @@ function navigate_and_select_next!(navigate!, edit::TextEditState)
     start = first(previous_selection)
     stop = edit.cursor_index
   end
-  select_text!(edit, start:stop; set_cursor = false)
+  select_text!(edit, (start, stop); set_cursor = false)
 end
 
 function navigate_start!(edit::TextEditState)
@@ -620,12 +640,13 @@ Performs the inverse operation of `byte_index`.
 """
 character_index(str::AbstractString, byte_index) = findlast(≤(byte_index), collect(keys(str)))
 
-function select_text!(edit::TextEditState, range::UnitRange{Int64} = 1:length(edit.buffer); set_cursor = true)
-  start = max(1, first(range))
-  stop = min(length(edit.buffer), last(range))
+function select_text!(edit::TextEditState, (start, stop) = (1, length(edit.buffer)); set_cursor = true)
+  start = max(1, start)
+  stop = min(length(edit.buffer), stop)
   set_cursor && set_cursor!(edit, stop)
+  range = start:stop
   isempty(range) && return clear_selection!(edit)
-  edit.selection = start:stop
+  edit.selection = range
   add_selection_background!(edit)
   synchronize!(edit.text)
 end
@@ -637,7 +658,7 @@ function select_word!(edit::TextEditState, (x, _); set_cursor = true)
     start = character_index(edit.buffer, offset)
     stop = start + length(match) - 1
     start - 1 ≤ click ≤ stop || continue
-    return select_text!(edit, start:stop; set_cursor)
+    return select_text!(edit, (start, stop); set_cursor)
   end
 end
 

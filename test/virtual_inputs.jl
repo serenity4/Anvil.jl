@@ -34,7 +34,7 @@ function release_key(key; modifiers = NO_MODIFIERS)
   nothing
 end
 
-left_click() = press_button(BUTTON_LEFT)
+left_click(; release = true) = press_button(BUTTON_LEFT; release)
 scroll_up(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_UP), 1:n)
 scroll_down(n = 1) = foreach(_ -> press_button(BUTTON_SCROLL_DOWN), 1:n)
 

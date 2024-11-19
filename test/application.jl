@@ -7,6 +7,7 @@ using Test
 using Logging: Logging
 using MLStyle: @match
 using StyledStrings: annotations, getface
+using GeometryExperiments: centroid
 
 Logging.disable_logging(Logging.Info)
 ENV["ANVIL_LOG_FRAMECOUNT"] = false
@@ -420,16 +421,31 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
       end
 
       @testset "Mouse selection" begin
+        press_key(:ESC)
+        move_cursor(get_location(text) .+ (0.7, 0.1))
         left_click()
         left_click()
         synchronize()
         @test text.edit.cursor_index == 2
-        move_cursor(get_location(text) .+ centroid(get_geometry(text)) .+ (0.2, 0))
+        move_cursor(get_location(text) .+ (1.4, 0.1))
         # XXX: Dynamically set a shorter double-click period to avoid having to wait here.
         sleep(0.5)
-        left_click()
+        left_click(release = false)
         synchronize()
         @test text.edit.cursor_index == 4
+        move_cursor(get_location(text) .+ (0.7, 0.1))
+        move_cursor(get_location(text) .+ (2.0, 0.1))
+        synchronize()
+        @test text.edit.cursor_index == 6
+        @test text.edit.selection == 5:6
+        move_cursor(get_location(text) .+ (4.0, 7.0))
+        synchronize()
+        @test text.edit.cursor_index == 7
+        @test text.edit.selection == 5:7
+        move_cursor(get_location(text) .+ (0.7, 0.1))
+        synchronize()
+        @test text.edit.cursor_index == 2
+        @test text.edit.selection == 3:4
         press_key(:ESC)
       end
     end

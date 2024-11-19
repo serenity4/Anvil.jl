@@ -184,7 +184,7 @@ add_callback(f, entity, args...) = add_callback(entity, InputCallback(f, args...
 overlay(args...; kwargs...) = overlay!(app.systems.event.ui, args...; kwargs...)
 unoverlay(args...; kwargs...) = unoverlay!(app.systems.event.ui, args...; kwargs...)
 
-add_callback(entity, callback::InputCallback) = overlay(entity, callback)
+add_callback(entity, callback::InputCallback; kwargs...) = overlay(entity, callback; options = OverlayOptions(; kwargs...))
 remove_callback(entity, callback::InputCallback) = unoverlay(entity, callback)
 
 bind(f::Callable, key::KeyCombination) = bind(key => f)
