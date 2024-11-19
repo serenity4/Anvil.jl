@@ -25,7 +25,6 @@ ShaderLibrary = "bd6f7047-4356-4127-96e0-7c076db9f2eb"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 StyledStrings = "f489334b-da3d-4c2e-b8f0-e476e12c162b"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
-WindowAbstractions = "e18202ca-4a7d-4de8-b056-fa6bbd7de157"
 XCB = "16167f82-ea26-5cba-b1de-ed6fd5e30a10"
 
 [compat]

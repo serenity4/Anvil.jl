@@ -1,6 +1,6 @@
 using Anvil: bind!, unbind!, KeyBindings, KeyBindingsToken, Callable, execute_binding
-using WindowAbstractions: @key_str, KeyEvent, KeyCombination
-using XCB: Keymap, Connection, PhysicalKey
+using XCB
+using XCB: Connection
 using Test
 
 km = Keymap(Connection())

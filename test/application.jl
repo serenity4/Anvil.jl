@@ -3,7 +3,6 @@ using Anvil: EntityID, get_widget, get_entity, get_location, synchronize, Widget
 using CooperativeTasks: execute
 using LinearAlgebra: norm
 using XCB
-using WindowAbstractions
 using Test
 using Logging: Logging
 using MLStyle: @match
