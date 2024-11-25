@@ -101,8 +101,11 @@ export
        RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT,
        ImageParameters,
 
+       window_geometry,
+
        # Widgets.
-       Rectangle, Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
+       Rectangle, ImageVisual, RectangleVisual,
+       Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
        line_center,
 
        # Application state.

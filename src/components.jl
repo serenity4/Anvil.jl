@@ -13,13 +13,15 @@ const WINDOW_COMPONENT_ID = ComponentID(7) # Window
 end
 
 struct RectangleVisual
-  color::RGB{Float32}
+  color::RGBA{Float32}
   # TODO: add borders, corner roundness, etc.
 end
 
+RectangleVisual(color::RGB) = RectangleVisual(RGBA(color.r, color.g, color.b, 1f0))
+
 function vertex_colors(visual::RectangleVisual)
-  (; r, g, b) = visual.color
-  [Vec3(r, g, b) for _ in 1:4]
+  (; r, g, b, alpha) = visual.color
+  [Vec4(r, g, b, alpha) for _ in 1:4]
 end
 
 struct ImageParameters
@@ -55,12 +57,13 @@ struct RenderComponent
   primitive_data::Any
   is_opaque::Bool
 end
+
 function RenderComponent(type::RenderObjectType, vertex_data, primitive_data; is_opaque::Optional{Bool} = nothing)
   is_opaque = @something is_opaque type ≠ RENDER_OBJECT_TEXT
   RenderComponent(type, vertex_data, primitive_data, is_opaque)
 end
 
-RenderComponent(visual::RectangleVisual) = RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_colors(visual), Gradient(); is_opaque = true)
+RenderComponent(visual::RectangleVisual) = RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_colors(visual), Gradient{Vec4}(); is_opaque = isone(visual.color.alpha))
 RenderComponent(visual::ImageVisual) = RenderComponent(RENDER_OBJECT_IMAGE, nothing, visual; visual.parameters.is_opaque)
 
 add_command!(pass::Vector{Command}, command::Command) = push!(pass, command)

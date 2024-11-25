@@ -111,7 +111,7 @@ end
 Rectangle(geometry::GeometryComponent, visual::Union{ImageVisual, RectangleVisual}) = new_widget(Rectangle, geometry, visual)
 Rectangle((width, height)::Tuple, args...) = Rectangle(geometry(width, height), args...)
 
-Rectangle(geometry::GeometryComponent, color::RGB) = Rectangle(geometry, RectangleVisual(color))
+Rectangle(geometry::GeometryComponent, color::Colorant) = Rectangle(geometry, RectangleVisual(color))
 Rectangle(geometry::GeometryComponent, image::Texture, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, ImageVisual(image, parameters))
 Rectangle(geometry::GeometryComponent, data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, texture(data), parameters)
 Rectangle(data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(texture(data), parameters)
@@ -129,7 +129,9 @@ function Base.setproperty!(rect::Rectangle, name::Symbol, value)
     visual = rect.visual::ImageVisual
     return rect.visual = ImageVisual(texture(value), visual.parameters)
   elseif name === :color
-    return rect.visual = RectangleVisual(value)
+    visual = RectangleVisual(value)
+    isa(value, AbstractRGB) && @reset visual.color.alpha = rect.visual.color.alpha
+    return rect.visual = visual
   end
   @invoke setproperty!(rect::Widget, name::Symbol, value)
 end
