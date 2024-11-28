@@ -69,7 +69,7 @@ function bind!(f::Callable, kb::KeyBindings, bindings::Pair...)
   nothing
 end
 bind!(kb::KeyBindings, bindings::Pair...) = bind!(kb, aggregate_bindings(bindings))
-function bind!(kb::KeyBindings, bindings::Vector{Pair{KeyCombination, Callable}})
+function bind!(kb::KeyBindings, bindings::Vector{<:Pair{KeyCombination, <:Callable}})
   token = next!(kb.counter)
   insert!(kb.bindings, token, bindings)
   for (key, callable) in bindings

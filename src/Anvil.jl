@@ -119,7 +119,7 @@ export
        overlay, unoverlay,
        add_callback, remove_callback,
 
-       bind, unbind,
+       bind, unbind, KeyBindingsToken,
 
        font_file, get_font,
        texture_file, get_texture,
