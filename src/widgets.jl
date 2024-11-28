@@ -37,6 +37,9 @@ function new_widget(::Type{T}, args...) where {T<:Widget}
   widget
 end
 
+# XXX: Use `EntityID` or `Widget` iterators to recursively get widget constituents,
+# instead of performing the recursion manually.
+
 disable!(widget::WidgetID) = disable!(get_widget(widget))
 function disable!(widget::Widget)
   for part in constituents(widget)
@@ -57,6 +60,12 @@ function enable!(widget::Widget)
   synchronize(widget)
   widget.disabled = false
   widget
+end
+
+function unset_widget(widget::Widget)
+  for part in constituents(widget)
+    unset_widget(part)
+  end
 end
 
 function set_name(widget::Widget, name::Symbol)

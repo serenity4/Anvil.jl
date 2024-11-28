@@ -108,12 +108,13 @@ export
        window_geometry,
 
        # Widgets.
+       Widget, disable!, enable!,
        Rectangle, ImageVisual, RectangleVisual,
        Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
        line_center,
 
        # Application state.
-       get_entity, get_location, get_geometry, get_z, get_render, get_widget, get_window,
+       get_entity, get_location, get_geometry, get_z, get_render, get_widget, set_widget, unset_widget, get_window,
        set_location, set_geometry, set_z, has_z, set_render, has_render, unset_render, set_widget, set_window,
        overlay, unoverlay,
        add_callback, remove_callback,

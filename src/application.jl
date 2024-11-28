@@ -10,6 +10,7 @@ mutable struct Application
   textures::Dict{String, Texture}
   is_release::Bool
   show_shortcuts::Bool
+  state::Any # user state
   Application() = new()
 end
 
@@ -188,6 +189,7 @@ unset_render(entity) = unset!(app.ecs, entity, RENDER_COMPONENT_ID)
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID]::WidgetComponent
 get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
 set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID] = widget
+unset_widget(entity) = unset!(app.ecs, entity, WIDGET_COMPONENT_ID)
 get_window(entity) = app.ecs[entity, WINDOW_COMPONENT_ID]::Window
 set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID] = window
 
