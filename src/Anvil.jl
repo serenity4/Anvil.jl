@@ -25,6 +25,7 @@ using ShaderLibrary
 using ShaderLibrary: Instance, aspect_ratio
 using OpenType
 using GeometryExperiments
+using Graphs
 using Entities
 using MLStyle
 using Dictionaries
@@ -62,6 +63,9 @@ const P2f = Point2f
 
 include("renderer.jl")
 include("components.jl")
+include("modules/Layout.jl")
+@reexport using .Layout
+using .Layout: Direction
 include("layout.jl")
 include("bindings.jl")
 include("widgets.jl")

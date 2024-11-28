@@ -31,7 +31,7 @@ function read_application_config()
   open(TOML.parse, joinpath(APPLICATION_DIRECTORY[], config_file))
 end
 
-function initialize(f::Function; record_events::Bool = false)
+function initialize(f::Optional{Function} = nothing; record_events::Bool = false)
   options = read_application_config()
   app.is_release = get(ENV, "ANVIL_RELEASE", "false") == "true"
 
@@ -83,7 +83,7 @@ function initialize(f::Function; record_events::Bool = false)
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
   app.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
   start(systems.rendering.renderer)
-  f()
+  !isnothing(f) && f()
 
   map_window(window)
   nothing
@@ -109,17 +109,29 @@ function set_name(entity::EntityID, name::Symbol)
   nothing
 end
 
-macro set_name(ex::Expr)
+macro set_name(ex, exs...)
+  exs = (ex, exs...)
+  exs, ex = exs[1:(end - 1)], exs[end]
   Meta.isexpr(ex, :(=), 2) || error("Expected assignment of the form `lhs = rhs`, got $(repr(ex))")
   name = ex.args[1]::Symbol
   lhs = esc(name)
   ex = esc(ex)
-  quote
-    $ex
-    set_name($lhs, $(QuoteNode(name)))
+  if isempty(exs)
+    quote
+      $ex
+      set_name($lhs, $(QuoteNode(name)))
+    end
+  else
+    quote
+      $ex
+      namespace = join($(Expr(:tuple, esc.(exs)...)), '/')
+      set_name($lhs, Symbol(namespace, '/', $(QuoteNode(name))))
+    end
   end
 end
-macro set_name(exs::Symbol...)
+
+macro set_name(ex::Symbol, exs::Symbol...)
+  ex = (ex, exs...)
   ret = Expr(:block)
   for ex in exs
     push!(ret.args, :(set_name($(esc(ex)), $(QuoteNode(ex)))))

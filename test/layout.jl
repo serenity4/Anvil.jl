@@ -1,6 +1,6 @@
 using Anvil
-using Anvil: LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, positional_feature, P2
-using Anvil: object_type, position_type, coordinate_type, geometry_type, get_position, get_coordinates, set_coordinates, get_geometry, set_position!, set_geometry!
+using Anvil: LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, P2
+using Anvil.Layout: object_type, position_type, coordinate_type, geometry_type, get_position, get_coordinates, set_coordinates, get_geometry, set_position!, set_geometry!, positional_feature
 using GeometryExperiments
 using Entities
 using Entities: new!
@@ -47,7 +47,7 @@ test_storage_interface!(engine.storage, objects)
 test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachindex(objects))
 
 @testset "Layout" begin
-  at(args...) = Anvil.at(engine, args...)
+  at(args...) = Layout.at(engine, args...)
 
   @testset "Features" begin
     object = EntityID(1)
