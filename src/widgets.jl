@@ -962,4 +962,7 @@ end
 
 at(arg, args...) = Layout.at(app.systems.layout.engine, arg, args...)
 
+width() = Layout.width_of
+height() = Layout.height_of
+
 const WidgetComponent = Union{subtypes(Widget)...}

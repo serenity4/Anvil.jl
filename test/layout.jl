@@ -76,6 +76,16 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
     @test get_coordinates(engine, at(objects[1], :right)) == P2(11, 10)
     @test get_coordinates(engine, at(objects[1], :bottom)) == P2(10, 8)
     @test get_coordinates(engine, at(objects[1], :top)) == P2(10, 12)
+
+    height = height_of(objects[1])
+    @test isa(height, PositionalFeature)
+    @test height.data.fraction == 1.0
+    height *= 0.7
+    @test height.data.fraction == 0.7
+    height *= 0.9
+    @test height.data.fraction == 0.63
+    @test get_coordinates(engine, height_of(objects[1])) == locations[1] .+ (0, geometries[1].height)
+    @test get_coordinates(engine, width_of(objects[1])) == locations[1] .+ (geometries[1].width, 0)
   end
 
   @testset "Layout computations" begin

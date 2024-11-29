@@ -1,5 +1,6 @@
 module Layout
 
+using Accessors: @set
 using ForwardMethods: @forward_methods
 using MLStyle: @match, @switch, @when
 using StaticArrays: SVector
@@ -55,11 +56,12 @@ set_coordinates(storage::LayoutStorage{<:Any,T,T}, position::T, coords::T) where
 # will also need similar functions to access geometry
 
 @enum FeatureLocation begin
-  FEATURE_LOCATION_CENTER = 1
-  FEATURE_LOCATION_ORIGIN = 2
-  FEATURE_LOCATION_CORNER = 3
-  FEATURE_LOCATION_EDGE   = 4
-  FEATURE_LOCATION_CUSTOM = 5
+  FEATURE_LOCATION_CENTER   = 1
+  FEATURE_LOCATION_ORIGIN   = 2
+  FEATURE_LOCATION_CORNER   = 3
+  FEATURE_LOCATION_EDGE     = 4
+  FEATURE_LOCATION_GEOMETRY = 5
+  FEATURE_LOCATION_CUSTOM   = 6
 end
 
 function FeatureLocation(name::Symbol)
@@ -296,8 +298,39 @@ function Corner(name::Symbol)
   Corner(i)
 end
 
+@enum GeometryAttribute begin
+  GEOMETRY_ATTRIBUTE_WIDTH  = 1
+  GEOMETRY_ATTRIBUTE_HEIGHT = 2
+end
+
+struct GeometryFeature
+  attribute::GeometryAttribute
+  fraction::Float64
+end
+
+GeometryFeature(attribute) = GeometryFeature(attribute, 1.0)
+
+width_of(object) = PositionalFeature(object, FEATURE_LOCATION_GEOMETRY, GeometryFeature(GEOMETRY_ATTRIBUTE_WIDTH))
+height_of(object) = PositionalFeature(object, FEATURE_LOCATION_GEOMETRY, GeometryFeature(GEOMETRY_ATTRIBUTE_HEIGHT))
+
+Base.:(*)(x::Real, ::typeof(width_of)) = object -> x * width_of(object)
+Base.:(*)(x::Real, ::typeof(height_of)) = object -> x * height_of(object)
+
+Base.:(*)(::typeof(width_of), x::Real) = x * width_of
+Base.:(*)(::typeof(height_of), x::Real) = x * height_of
+
+Base.:(*)(x::Real, feature::GeometryFeature) = GeometryFeature(feature.attribute, feature.fraction * x)
+Base.:(*)(feature::GeometryFeature, x::Real) = x * feature
+
+function Base.:(*)(x::Real, feature::PositionalFeature)
+  feature.location == FEATURE_LOCATION_GEOMETRY || error("Multiplication is only supported with geometry features")
+  @set feature.data = x * feature.data
+end
+Base.:(*)(feature::PositionalFeature, x::Real) = x * feature
+
 FeatureLocation(::Edge) = FEATURE_LOCATION_EDGE
 FeatureLocation(::Corner) = FEATURE_LOCATION_CORNER
+FeatureLocation(::GeometryFeature) = FEATURE_LOCATION_GEOMETRY
 
 PositionalFeature(object, edge::Edge) = PositionalFeature(object, FeatureLocation(edge), edge)
 PositionalFeature(object, corner::Corner) = PositionalFeature(object, FeatureLocation(corner), corner)
@@ -318,6 +351,7 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
     &FEATURE_LOCATION_CENTER => centroid(get_geometry(engine, feature[]))
     &FEATURE_LOCATION_CORNER => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Corner)
     &FEATURE_LOCATION_EDGE => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Edge)
+    &FEATURE_LOCATION_GEOMETRY => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::GeometryFeature)
     &FEATURE_LOCATION_CUSTOM => feature.data
   end
 end
@@ -341,6 +375,12 @@ function coordinates(geometry::Box{2,T}, edge::Edge) where {T}
     &EDGE_BOTTOM => 0.5 .* (geometry.bottom_left .+ geometry.bottom_right)
     &EDGE_TOP => 0.5 .* (geometry.top_left .+ geometry.top_right)
   end
+end
+
+function coordinates(geometry::Box{2,T}, feature::GeometryFeature) where {T}
+  feature.attribute == GEOMETRY_ATTRIBUTE_WIDTH && return SVector{2,T}(geometry.width * feature.fraction, 0.0)
+  feature.attribute == GEOMETRY_ATTRIBUTE_HEIGHT && return SVector{2,T}(0.0, geometry.height * feature.fraction)
+  @assert false
 end
 
 # Closures.
@@ -654,11 +694,12 @@ export
   OPERATION_TYPE_PLACE,
   OPERATION_TYPE_ALIGN,
   OPERATION_TYPE_DISTRIBUTE,
-  PositionalFeature,
+  PositionalFeature, width_of, height_of,
   FEATURE_LOCATION_ORIGIN,
   FEATURE_LOCATION_CENTER,
   FEATURE_LOCATION_CORNER,
   FEATURE_LOCATION_EDGE,
+  FEATURE_LOCATION_GEOMETRY,
   FEATURE_LOCATION_CUSTOM,
   Corner,
   CORNER_BOTTOM_LEFT,
