@@ -22,14 +22,14 @@ end
 
 function read_application_config()
   config_file = nothing
-  for file in readdir(APPLICATION_DIRECTORY[]; join = false)
+  for file in readdir(APPLICATION_DIRECTORY; join = false)
     if file == "Application.toml" || file == "JuliaApplication.toml"
       config_file = file
       break
     end
   end
   isnothing(config_file) && return Dict{String,Any}()
-  open(TOML.parse, joinpath(APPLICATION_DIRECTORY[], config_file))
+  open(TOML.parse, joinpath(APPLICATION_DIRECTORY, config_file))
 end
 
 function initialize(f::Optional{Function} = nothing; record_events::Bool = false)

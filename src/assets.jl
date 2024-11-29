@@ -1,7 +1,7 @@
-font_file(name) = joinpath(ASSET_DIRECTORY[], "fonts", name * ".ttf")
+font_file(name) = joinpath(ASSET_DIRECTORY, "fonts", name * ".ttf")
 get_font(name::AbstractString) = get!(() -> OpenTypeFont(font_file(name)), app.fonts, name)
 
-texture_file(name) = joinpath(ASSET_DIRECTORY[], "textures", name)
+texture_file(name) = joinpath(ASSET_DIRECTORY, "textures", name)
 get_texture(name) = get!(() -> load_texture(texture_file(name)), app.textures, name)
 
 load_texture(filename) = load_texture(read_image(filename))

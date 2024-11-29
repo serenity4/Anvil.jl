@@ -79,16 +79,16 @@ include("theme.jl")
 const app = Application()
 const WINDOW_ENTITY_COUNTER = Entities.Counter()
 
-@compile_traces "precompilation_traces.jl"
+global APPLICATION_DIRECTORY::String
+global ASSET_DIRECTORY::String
 
-const APPLICATION_DIRECTORY = Ref{String}()
-const ASSET_DIRECTORY = Ref{String}()
+@compile_traces "precompilation_traces.jl"
 
 function __init__()
   addface!(:application_shortcut_show => Face(underline = true))
   addface!(:application_shortcut_hide => Face(underline = false))
-  APPLICATION_DIRECTORY[] = dirname(@__DIR__)
-  ASSET_DIRECTORY[] = joinpath(dirname(@__DIR__), "assets")
+  global APPLICATION_DIRECTORY = dirname(@__DIR__)
+  global ASSET_DIRECTORY = joinpath(dirname(@__DIR__), "assets")
 end
 
 @reexport using XCB
