@@ -492,7 +492,7 @@ end
 function edit_selection!(edit::TextEditState, replacement)
   @assert !isempty(edit.selection)
   edit_buffer!(edit, edit.selection, replacement)
-  set_cursor!(edit, edit.cursor_index + length(replacement) - length(edit.selection))
+  set_cursor!(edit, first(edit.selection) + length(replacement) - 1)
   clear_selection!(edit)
 end
 
