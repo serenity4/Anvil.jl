@@ -123,9 +123,9 @@ Rectangle((width, height)::Tuple, args...) = Rectangle(geometry(width, height), 
 Rectangle(geometry::GeometryComponent, color::Colorant) = Rectangle(geometry, RectangleVisual(color))
 Rectangle(geometry::GeometryComponent, image::Texture, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, ImageVisual(image, parameters))
 Rectangle(geometry::GeometryComponent, data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, texture(data), parameters)
-Rectangle(data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(texture(data), parameters)
-function Rectangle(image::Texture, parameters::ImageParameters = ImageParameters())
-  width, height = dimensions(image) .* parameters.scale .* 0.001
+Rectangle(data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters(); scale = 1.0) = Rectangle(texture(data), parameters; scale)
+function Rectangle(image::Texture, parameters::ImageParameters = ImageParameters(); scale = 1.0)
+  width, height = dimensions(image) .* scale .* 0.001
   Rectangle((width, height), image, parameters)
 end
 
@@ -463,7 +463,7 @@ function commit_modifications!(edit::TextEditState)
   edit.text.value = edit.buffer
   clear_modifications!(edit)
   edit.on_edit === nothing && return
-  edit.on_edit(text.value)
+  edit.on_edit(edit.text.value)
 end
 
 function insert_after!(edit::TextEditState, value)

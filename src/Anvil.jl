@@ -103,7 +103,7 @@ export
        ENTITY_COMPONENT_ID, RENDER_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID, WIDGET_COMPONENT_ID, WINDOW_COMPONENT_ID,
 
        RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT,
-       ImageParameters,
+       ImageModeStretched, ImageModeTiled, ImageModeCropped, ImageParameters,
 
        window_geometry,
 

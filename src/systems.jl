@@ -138,12 +138,6 @@ function render_transparent_objects!(nodes, (; renderer)::RenderingSystem, ecs::
   !isempty(pass.pass_2) && push!(nodes, RenderNode(pass.pass_2))
 end
 
-function generate_quad_uvs((umin, umax), (vmin, vmax))
-  Vec2[(umin, vmax), (umax, vmax), (umin, vmin), (umax, vmin)]
-end
-
-const FULL_IMAGE_UV = generate_quad_uvs((0, 1), (0, 1))
-
 struct UserInterface
   overlay::UIOverlay
   entities::Dictionary{InputArea, EntityID}

@@ -24,13 +24,29 @@ function vertex_colors(visual::RectangleVisual)
   [Vec4(r, g, b, alpha) for _ in 1:4]
 end
 
-struct ImageParameters
-  is_opaque::Bool
-  tiled::Bool
+struct ImageModeStretched end
+
+struct ImageModeTiled
   scale::Float64
+  offset::Vec{2,Float64}
 end
 
-ImageParameters(; is_opaque = false, tiled = false, scale = 1.0) = ImageParameters(is_opaque, tiled, scale)
+ImageModeTiled(; scale = 1.0, offset = Vec(0.0, 0.0)) = ImageModeTiled(scale, offset)
+
+struct ImageModeCropped
+  focus::Optional{Vec2}
+end
+
+ImageModeCropped(; focus = nothing) = ImageModeCropped(focus)
+
+struct ImageParameters
+  is_opaque::Bool
+  mode::Union{ImageModeStretched, ImageModeTiled, ImageModeCropped}
+end
+
+function ImageParameters(; is_opaque = false, mode = ImageModeStretched())
+  ImageParameters(is_opaque, mode)
+end
 
 struct ImageVisual
   sprite::Sprite
@@ -39,12 +55,55 @@ end
 
 function ImageVisual(texture::Texture, parameters::ImageParameters)
   (; sampling) = texture
-  if parameters.tiled
+  if isa(parameters.mode, ImageModeTiled)
     @reset sampling.address_modes = ntuple(_ -> Vk.SAMPLER_ADDRESS_MODE_REPEAT, 3)
     @reset texture.sampling = sampling
   end
   sprite = Sprite(texture)
   ImageVisual(sprite, parameters)
+end
+
+function generate_quad_uvs((umin, umax), (vmin, vmax))
+  Vec2[(umin, vmax), (umax, vmax), (umin, vmin), (umax, vmin)]
+end
+
+const FULL_IMAGE_UV = generate_quad_uvs((0, 1), (0, 1))
+
+image_uvs(geometry, visual::ImageVisual) = image_uvs(geometry, visual.parameters.mode, visual)
+image_uvs(geometry, mode::ImageModeStretched, visual::ImageVisual) = FULL_IMAGE_UV
+
+function image_uvs(geometry, mode::ImageModeTiled, visual::ImageVisual)
+  (; width, height) = geometry
+  (; scale, offset) = mode
+  generate_quad_uvs((0, width * scale) .+ offset, (0, height * scale) .+ offset)
+end
+
+function image_uvs(geometry, mode::ImageModeCropped, visual::ImageVisual)
+  (; image) = visual.sprite.texture
+  image_width, image_height = dimensions(image)
+  focus = @something(mode.focus, Vec(0.5, 0.5))
+  image_aspect_ratio = image_width / image_height
+  geometry_aspect_ratio = geometry.width / geometry.height
+  image_aspect_ratio ≈ geometry_aspect_ratio && return FULL_IMAGE_UV
+  if geometry_aspect_ratio > image_aspect_ratio
+    # The geometry is wider than the image.
+    # The image will be cropped vertically.
+    ratio = image_aspect_ratio / geometry_aspect_ratio
+    vmin, vmax = focus.y .+ (-ratio, ratio) ./ 2
+    @assert vmin ≥ 0 || vmax ≤ 1
+    vmax > 1 && ((vmin, vmax) = (vmin - (1 - vmax), 1.0))
+    vmin < 0 && ((vmin, vmax) = (0.0, vmax + (0 - vmin), 1.0))
+    generate_quad_uvs((0, 1), (vmin, vmax))
+  else
+    # The geometry is thinner than the image.
+    # The image will be cropped horizontally.
+    ratio = geometry_aspect_ratio / image_aspect_ratio
+    umin, umax = focus.x .+ (-ratio, ratio) ./ 2
+    @assert umin ≥ 0 || umax ≤ 1
+    umax > 1 && ((umin, umax) = (umin - (1 - umax), 1.0))
+    umin < 0 && ((umin, umax) = (0.0, umax + (0 - umin), 1.0))
+    generate_quad_uvs((umin, umax), (0, 1))
+  end
 end
 
 const LocationComponent = P2
@@ -95,7 +154,7 @@ function add_commands!(pass, program_cache::ProgramCache, component::RenderCompo
 
     @case &RENDER_OBJECT_IMAGE
     render = component.primitive_data::ImageVisual
-    uvs = render.parameters.tiled ? tiled_uvs(geometry, render.parameters.scale) : FULL_IMAGE_UV
+    uvs = image_uvs(geometry, render)
     rect = ShaderLibrary.Rectangle(geometry, uvs, nothing)
     primitive = Primitive(rect, location)
     command = Command(program_cache, render.sprite, parameters, primitive)
@@ -106,11 +165,6 @@ function add_commands!(pass, program_cache::ProgramCache, component::RenderCompo
     parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
     add_commands!(pass, renderables(program_cache, text, parameters_ssaa, location))
   end
-end
-
-function tiled_uvs(geometry::Box, scale::Real)
-  (; width, height) = geometry
-  generate_quad_uvs((0, width * scale), (0, height * scale))
 end
 
 Base.show(io::IO, render::RenderComponent) = print(io, RenderComponent, "(", render.type, ", ", typeof(render.vertex_data), ", ", typeof(render.primitive_data))
