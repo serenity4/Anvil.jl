@@ -46,7 +46,8 @@ import AbstractGUI: overlay!, unoverlay!
 using Base: Callable, annotate!, annotations
 using .Meta: isexpr
 @reexport using StyledStrings
-using StyledStrings: eachregion, Face, addface!
+using StyledStrings: AnnotatedString, annotatedstring, eachregion, Face, addface!
+using StyledStrings.StyledMarkup: annotatedstring_optimize!
 using InteractiveUtils: subtypes
 using TOML
 

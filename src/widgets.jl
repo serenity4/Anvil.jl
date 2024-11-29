@@ -497,12 +497,27 @@ function edit_selection!(edit::TextEditState, replacement)
 end
 
 edit_buffer!(edit::TextEditState, range::UnitRange, replacement) = edit_buffer!(edit, (first(range), last(range)), replacement)
+
 function edit_buffer!(edit::TextEditState, (start, stop), replacement)
+  isa(replacement, AnnotatedString) || (replacement = inherit_style(replacement, edit.buffer, (start, stop)))
   i = byte_index(edit.buffer, start - 1)
   j = byte_index(edit.buffer, stop + 1)
-  new = @view(edit.buffer[1:i]) * replacement * @view(edit.buffer[j:end])
+  new = annotatedstring(@view(edit.buffer[1:i]), replacement, @view(edit.buffer[j:end]))
+  # Compact identically-styled regions to avoid accumulating too many of them.
+  annotatedstring_optimize!(new)
   edit.buffer = new
   synchronize!(edit.text)
+end
+
+function inherit_style(str, buffer, (start, stop))
+  n = length(buffer)
+  reference_index = start > n ? n : stop < 1 ? 1 : start
+  i = byte_index(buffer, reference_index)
+  str = annotatedstring(str)
+  for (_, style) in annotations(buffer, i:i)
+    annotate!(str, style)
+  end
+  str
 end
 
 function navigate_previous!(edit::TextEditState)
