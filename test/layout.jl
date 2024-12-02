@@ -1,6 +1,7 @@
 using Anvil
 using Anvil: LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, P2
-using Anvil.Layout: object_type, position_type, coordinate_type, geometry_type, get_position, get_coordinates, set_coordinates, get_geometry, set_position!, set_geometry!, positional_feature
+using Anvil.Layout: object_type, position_type, coordinate_type, geometry_type, get_position, get_coordinates, set_coordinates, set_position!, set_geometry!, positional_feature
+import Anvil.Layout as L
 using GeometryExperiments
 using Entities
 using Entities: new!
@@ -20,10 +21,10 @@ function test_storage_interface!(engine::LayoutStorage, objects)
       @test get_position(engine, object) === new_position
       set_position!(engine, object, position)
       @test get_position(engine, object) === position
-      geometry = get_geometry(engine, object)
+      geometry = L.get_geometry(engine, object)
       @test isa(geometry, G)
       set_geometry!(engine, object, geometry)
-      @test get_geometry(engine, object) === geometry
+      @test L.get_geometry(engine, object) === geometry
     end
   end
 end
@@ -251,7 +252,7 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       pin!(engine, objects[1], :right, objects[2] |> at(:right))
       compute_layout!(engine)
       @test get_coordinates.(engine, objects) == locations
-      gs = get_geometry.(engine, objects)
+      gs = L.get_geometry.(engine, objects)
       @test gs[1].top_right[1] == 30 + 30 - 10
       @test gs[1].bottom_left == geometries[1].bottom_left
       @test gs[2:3] == geometries[2:3]
@@ -262,11 +263,11 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       pin!(engine, objects[1], :left, objects[2] |> at(:left))
       compute_layout!(engine)
       @test get_coordinates.(engine, objects) == locations
-      gs = get_geometry.(engine, objects)
+      gs = L.get_geometry.(engine, objects)
       @test gs[1].bottom_left[1] == 0 - 10
       @test gs[1].top_right == geometries[1].top_right
       compute_layout!(engine)
-      @test gs == get_geometry.(engine, objects)
+      @test gs == L.get_geometry.(engine, objects)
 
       # Corner pinning.
       reset_location.([1, 2, 3])
@@ -275,7 +276,7 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       pin!(engine, objects[1], :bottom_right, objects[2] |> at(:bottom_right))
       compute_layout!(engine)
       @test get_coordinates.(engine, objects) == locations
-      gs = get_geometry.(engine, objects)
+      gs = L.get_geometry.(engine, objects)
       @test gs[1] ≠ geometries[1]
       @test gs[2:3] == geometries[2:3]
     end
