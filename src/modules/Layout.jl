@@ -225,9 +225,10 @@ get_coordinates(engine::LayoutEngine, group::Group) = centroid(boundingelement(e
 get_position(engine::LayoutEngine, group::Group) = get_coordinates(engine, group)
 
 function GeometryExperiments.boundingelement(engine::LayoutEngine, group::Group)
-  object, objects = Iterators.peel(group.objects)
+  object = group.objects[1]
+  objects = @view group.objects[2]
   geometry = get_geometry(engine, object) + get_position(engine, object)
-  foldl((x, y) -> boundingelement(x, get_geometry(engine, y) + get_position(engine, y)), objects; init = geometry)
+  foldl((x, y) -> boundingelement(x, get_geometry(engine, y) + get_position(engine, y)), objects; init = geometry)::geometry_type(engine)
 end
  
 function get_geometry(engine::LayoutEngine, group::Group)
@@ -352,13 +353,19 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
     &FEATURE_LOCATION_CORNER => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Corner)
     &FEATURE_LOCATION_EDGE => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Edge)
     &FEATURE_LOCATION_GEOMETRY => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::GeometryFeature)
-    &FEATURE_LOCATION_CUSTOM => feature.data
+    &FEATURE_LOCATION_CUSTOM => feature.data::Union{T, C}
   end
 end
 
 add_coordinates(x, y) = x .+ y
 
-get_coordinates(engine::LayoutEngine, feature::PositionalFeature) = add_coordinates(get_coordinates(engine, feature.object), get_relative_coordinates(engine, feature))
+function get_coordinates(engine::LayoutEngine, feature::PositionalFeature)
+  C = coordinate_type(engine)
+  T = eltype(C)
+  absolute = get_coordinates(engine, feature.object)::C
+  relative = get_relative_coordinates(engine, feature)::Union{C, T}
+  add_coordinates(absolute, relative)
+end
 
 function coordinates(geometry::Box{2}, corner::Corner)
   @match corner begin
@@ -391,7 +398,17 @@ at(engine::LayoutEngine, coord::Real) = x -> at(engine, x, coord)
 at(engine::LayoutEngine, location::Symbol) = x -> at(engine, x, location)
 
 at(engine::LayoutEngine, object) = positional_feature(engine, object)
-at(engine::LayoutEngine{O}, object, position) where {O} = at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
+function at(engine::LayoutEngine{O}, object, position::Real) where {O}
+  C = coordinate_type(engine)
+  T = eltype(C)
+  position = convert(T, position)::T
+  at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
+end
+function at(engine::LayoutEngine{O}, object, position) where {O}
+  C = coordinate_type(engine)
+  position = convert(C, position)::C
+  at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
+end
 at(engine::LayoutEngine{O}, object, location::FeatureLocation, argument = nothing) where {O} = at(O, to_object(engine, object), location, argument)
 function at(::Type{O}, object::Union{O, PositionalFeature{O}, Group{O}}, location::FeatureLocation, argument = nothing) where {O}
   if location in (FEATURE_LOCATION_ORIGIN, FEATURE_LOCATION_CENTER)
@@ -576,7 +593,12 @@ function compute_spacing(engine::LayoutEngine, operation::Operation)
   if isa(spacing.amount, Float64)
     value = spacing.amount
   else
-    spacings = [get_coordinates(engine, at(engine, y, :edge, edges[1])).a[i] - get_coordinates(engine, at(engine, x, :edge, edges[2])).a[i] for (x, y) in zip(xs, ys)]
+    spacings = coordinate_type(engine)[]
+    for (x, y) in zip(xs, ys)
+      xc = get_coordinates(engine, at(engine, y, :edge, edges[1])).a[i]
+      yc = get_coordinates(engine, at(engine, x, :edge, edges[2])).a[i]
+      push!(spacings, xc - yc)
+    end
     value = @match spacing.amount begin
       &SPACING_TARGET_MINIMUM => minimum(spacings)
       &SPACING_TARGET_MAXIMUM => maximum(spacings)
@@ -602,7 +624,9 @@ function apply_spacing(engine::LayoutEngine, operation::Operation, x::Positional
     end
   end
   xc, yr = get_coordinates(engine, x), get_relative_coordinates(engine, y)
-  base, offset = alignment_or_distribution_target.((xc, yr), Int64(direction))
+  i = Int64(direction)
+  base = alignment_or_distribution_target(xc, i)
+  offset = alignment_or_distribution_target(yr, i)
   @match direction begin
     &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(base - offset + spacing, coords[2]))
     &DIRECTION_VERTICAL => set_coordinates(engine, position, C(coords[1], base - offset + spacing))
