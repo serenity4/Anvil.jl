@@ -171,27 +171,28 @@ end
 
 geometry(width, height) = Box(P2(width/2, height/2))
 
-get_location(entity) = app.ecs[entity, LOCATION_COMPONENT_ID]::LocationComponent
-set_location(entity, location) = app.ecs[entity, LOCATION_COMPONENT_ID] = location
+get_location(entity) = app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent]
+set_location(entity, location) = app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent] = location
 unset_location(entity) = unset!(app.ecs, entity, LOCATION_COMPONENT_ID)
-get_geometry(entity) = app.ecs[entity, GEOMETRY_COMPONENT_ID]::GeometryComponent
-set_geometry(entity, geometry::GeometryComponent) = app.ecs[entity, GEOMETRY_COMPONENT_ID] = geometry
+get_geometry(entity) = app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent]
+set_geometry(entity, geometry::GeometryComponent) = app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent] = geometry
 set_geometry(entity, (width, height)::Tuple) = set_geometry(entity, geometry(width, height))
 unset_geometry(entity) = unset!(app.ecs, entity, GEOMETRY_COMPONENT_ID)
-get_z(entity) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID]::ZCoordinateComponent
-set_z(entity, z::Real) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID] = convert(ZCoordinateComponent, z)
+get_z(entity) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID, ZCoordinateComponent]
+set_z(entity, z::Real) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID, ZCoordinateComponent] = convert(ZCoordinateComponent, z)
 unset_z(entity) = unset!(app.ecs, entity, ZCOORDINATE_COMPONENT_ID)
 has_z(entity) = haskey(app.ecs, entity, ZCOORDINATE_COMPONENT_ID)
-get_render(entity) = app.ecs[entity, RENDER_COMPONENT_ID]::RenderComponent
-set_render(entity, render::RenderComponent) = app.ecs[entity, RENDER_COMPONENT_ID] = render
+get_render(entity) = app.ecs[entity, RENDER_COMPONENT_ID, RenderComponent]
+set_render(entity, render::RenderComponent) = app.ecs[entity, RENDER_COMPONENT_ID, RenderComponent] = render
 has_render(entity) = haskey(app.ecs, entity, RENDER_COMPONENT_ID)
 unset_render(entity) = unset!(app.ecs, entity, RENDER_COMPONENT_ID)
-get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID]::WidgetComponent
+get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID, WidgetComponent]
 get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
-set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID] = widget
+has_widget(entity) = haskey(app.ecs, entity, WIDGET_COMPONENT_ID)
+set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID, WidgetComponent] = widget
 unset_widget(entity) = unset!(app.ecs, entity, WIDGET_COMPONENT_ID)
-get_window(entity) = app.ecs[entity, WINDOW_COMPONENT_ID]::Window
-set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID] = window
+get_window(entity) = app.ecs[entity, WINDOW_COMPONENT_ID, Window]
+set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID, Window] = window
 
 add_callback(f, entity, args...) = add_callback(entity, InputCallback(f, args...))
 
