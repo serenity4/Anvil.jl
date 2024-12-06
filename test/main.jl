@@ -1,4 +1,4 @@
-using Anvil: Text
+using Anvil: Text, MENU_ITEM_COLOR, MENU_ITEM_ACTIVE_COLOR, exit
 using Lava: image_resource
 using ShaderLibrary: Sprite
 using LinearAlgebra: norm
@@ -17,10 +17,11 @@ random_image() = RGBA.(rand(AGray{Float32}, 512, 512))
 @observable mutable struct ApplicationState
   image::Matrix{RGBA{Float32}}
   number_of_saves::Int64
-  ApplicationState() = new(random_image(), 0)
+  info::Dict{Symbol, Any}
+  ApplicationState() = new(random_image(), 0, Dict())
 end
 
-function generate_user_interface(state::ApplicationState = ApplicationState())
+function generate_user_interface(state::ApplicationState)
   @set_name image = Rectangle((10, 10), state.image)
   @bind image.texture => state.image
   set_location(image, P2(-5, 0))
@@ -55,24 +56,20 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
   add_callback(on_input, image, BUTTON_PRESSED, DRAG)
 
   # File menu.
-  file_menu_head = Button(() -> collapse!(file_menu), (3, 1); text = Text("File"))
-  file_menu_item_1 = MenuItem(Text("New file"), (3, 1)) do
-    save_button.background.color = RGB{Float32}(0.1, 0.3, 0.2)
-  end
-  file_menu_item_2 = MenuItem(Text("Open..."), (3, 1)) do
-    save_button.background.color = RGB{Float32}(0.3, 0.2, 0.1)
-  end
-  file_menu_item_3 = MenuItem(exit, Text("Exit"), (3, 1), 'x')
-  @set_name file_menu = Menu(file_menu_head, [file_menu_item_1, file_menu_item_2, file_menu_item_3], 'F')
-  place(file_menu |> at(:top_left), app.windows[app.window] |> at(:top_left))
+  file_menu_head = Rectangle((3, 1), MENU_ITEM_COLOR)
+  file_menu_head_text = Text("File")
+  file_menu = Menu(file_menu_head, 'F'; on_expand = menu -> generate_file_menu!(menu, state), on_collapse = close!)
+  place(file_menu_head |> at(:top_left), app.windows[app.window] |> at(:top_left))
+  place(at(file_menu_head_text, :center), at(file_menu_head, :center))
+  state.info[:file_menu] = file_menu
 
   # Edit menu.
-  edit_menu_head = Button(() -> collapse!(edit_menu), (3, 1); text = Text("Edit"))
-  edit_menu_item_1 = MenuItem(Text("Regenerate"), (3, 1)) do
-    regenerate_image(state)
-  end
-  @set_name edit_menu = Menu(edit_menu_head, [edit_menu_item_1], 'E')
-  place(edit_menu |> at(:top_left), file_menu |> at(:top_right))
+  edit_menu_head = Rectangle((3, 1), MENU_ITEM_COLOR)
+  edit_menu_text = Text("Edit")
+  edit_menu = Menu(edit_menu_head, 'E'; on_expand = menu -> generate_edit_menu!(menu, state), on_collapse = close!)
+  place(edit_menu_head |> at(:top_left), file_menu_head |> at(:top_right))
+  place(at(edit_menu_text, :center), at(edit_menu_head, :center))
+  state.info[:edit_menu] = edit_menu
 
   vline_left = side_panel |> at(:left) |> at(3.0)
   vline_right = vline_left |> at(1.5)
@@ -100,4 +97,48 @@ function generate_user_interface(state::ApplicationState = ApplicationState())
   place(save_button, left_column[end] |> at(3.0, -2.0))
 end
 
-main(; async = false, record_events = false) = Anvil.main(generate_user_interface; async, record_events)
+on_active(widget) = active -> widget.color = ifelse(active, MENU_ITEM_ACTIVE_COLOR, MENU_ITEM_COLOR)
+
+generate_menu_item(f, text::AbstractString, dimensions; shortcut = nothing) = generate_menu_item(f, Text(text), dimensions; shortcut)
+
+function generate_menu_item(f, text::Text, dimensions; shortcut = nothing)
+  background = Rectangle(dimensions, MENU_ITEM_COLOR)
+  place(at(text, :left), at(background, :left) |> at(0.2, 0.0))
+  MenuItem(f, background; text, on_active = on_active(background), shortcut)
+end
+
+function generate_file_menu!(menu::Menu, state::ApplicationState)
+  dimensions = (3, 1)
+  items = MenuItem[]
+
+  push!(items, generate_menu_item("New file", dimensions) do
+    @get_widget save_button
+    save_button.background.color = RGB{Float32}(0.1, 0.3, 0.2)
+  end)
+
+  push!(items, generate_menu_item("Open...", dimensions) do
+    @get_widget save_button
+    save_button.background.color = RGB{Float32}(0.3, 0.2, 0.1)
+  end)
+
+  push!(items, generate_menu_item(exit, "Exit", dimensions; shortcut = 'x'))
+
+  align([at(item.widget, :left) for item in items], :vertical, at(menu.head, :left))
+  distribute([menu.head; [item.widget for item in items]], :vertical, 0.0, :geometry)
+  add_menu_items!(menu, items)
+end
+
+function generate_edit_menu!(menu::Menu, state::ApplicationState)
+  dimensions = (3, 1)
+  items = MenuItem[]
+
+  push!(items, generate_menu_item("Regenerate", dimensions) do
+    regenerate_image(state)
+  end)
+
+  align([at(item.widget, :left) for item in items], :vertical, at(menu.head, :left))
+  distribute([menu.head; [item.widget for item in items]], :vertical, 0.0, :geometry)
+  add_menu_items!(menu, items)
+end
+
+main(state = ApplicationState(); async = false, record_events = false) = Anvil.main(() -> generate_user_interface(state); async, record_events)

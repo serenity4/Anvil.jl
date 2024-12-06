@@ -39,17 +39,18 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
 
   @testset "Interactions" begin
     CURSOR[] = (0.5, 0.5)
-    main(async = true, record_events = true)
+    state = ApplicationState()
+    main(state; async = true, record_events = true)
     synchronize()
     sleep(0.1)
     synchronize()
 
     # Menu.
 
-    menu = get_widget(:file_menu)
+    menu = state.info[:file_menu]::Menu
     @test !menu.expanded
 
-    move_cursor(menu)
+    move_cursor(menu.head)
     left_click()
     synchronize()
     @test menu.expanded
@@ -65,12 +66,12 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
     @test menu.expanded
 
     item_1 = menu.items[1]
-    move_cursor(item_1)
+    move_cursor(item_1.widget)
     synchronize()
     @test Anvil.active_item(menu) === item_1
 
     item_2 = menu.items[2]
-    move_cursor(item_2)
+    move_cursor(item_2.widget)
     synchronize()
     @test Anvil.active_item(menu) === item_2
 
@@ -80,9 +81,9 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
     @test Anvil.active_item(menu) === nothing
 
     ## Key-based navigation.
-    move_cursor(menu)
+    move_cursor(menu.head)
     left_click()
-    move_cursor(get_location(menu) .+ (10, 0))
+    move_cursor(get_location(menu.head) .+ (10, 0))
     press_key(:UP)
     synchronize()
     @test Anvil.active_item(menu) === menu.items[end]
@@ -92,9 +93,9 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
     @test Anvil.active_item(menu) === nothing
     @test !menu.expanded
 
-    move_cursor(menu)
+    move_cursor(menu.head)
     left_click()
-    move_cursor(get_location(menu) .+ (10, 0))
+    move_cursor(get_location(menu.head) .+ (10, 0))
     press_key(:UP)
     press_key(:UP)
     synchronize()
@@ -104,32 +105,32 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
     synchronize()
     @test count(Anvil.isactive, menu.items) == 1
     @test Anvil.active_item(menu) === menu.items[end]
-    move_cursor(item_1)
+    move_cursor(menu.items[1].widget)
     synchronize()
     @test count(Anvil.isactive, menu.items) == 1
-    @test Anvil.active_item(menu) === item_1
+    @test Anvil.active_item(menu) == menu.items[1]
     press_key(:RTRN)
     synchronize()
     @test Anvil.active_item(menu) === nothing
     @test !menu.expanded
 
     ## Wheel-based navigation.
-    move_cursor(menu)
+    move_cursor(menu.head)
     left_click()
-    move_cursor(get_location(menu) .+ (10, 0))
+    move_cursor(get_location(menu.head) .+ (10, 0))
     scroll_up()
     synchronize()
     @test Anvil.active_item(menu) === menu.items[end]
     scroll_down()
     synchronize()
-    @test Anvil.active_item(menu) === item_1
+    @test Anvil.active_item(menu) === menu.items[1]
     press_key(:RTRN)
     synchronize()
     @test Anvil.active_item(menu) === nothing
     @test !menu.expanded
 
     ## Shortcut navigation.
-    move_cursor(menu)
+    move_cursor(menu.head)
     left_click()
     synchronize()
     @test menu.expanded
@@ -166,23 +167,24 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
 
     # Shortcut display.
 
-    text = item_1.text.value
-    @test annotations(text, 1) == []
-    move_cursor(menu)
+    move_cursor(menu.head)
     left_click()
+    synchronize()
+    text = menu.items[1].text.value
+    @test annotations(text, 1) == [(region = 1:1, label = :face, value = :application_shortcut_hide)]
     press_key(:LALT)
     synchronize()
-    @test annotations(text, 1) == [(1:1, :face => :application_shortcut_show)]
+    @test annotations(text, 1) == [(region = 1:1, label = :face, value = :application_shortcut_show)]
     face = getface(last.(annotations(text)))
     @test face.underline === true
     press_key(:LALT)
     synchronize()
-    @test annotations(text, 1) == [(1:1, :face => :application_shortcut_hide)]
+    @test annotations(text, 1) == [(region = 1:1, label = :face, value = :application_shortcut_hide)]
     face = getface(last.(annotations(text)))
     @test face.underline === false
     press_key(:LALT)
     synchronize()
-    @test annotations(text, 1) == [(1:1, :face => :application_shortcut_show)]
+    @test annotations(text, 1) == [(region = 1:1, label = :face, value = :application_shortcut_show)]
     face = getface(last.(annotations(text)))
     @test face.underline === true
     left_click() # close menu
@@ -202,8 +204,8 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         @test String(text.edit.buffer) == "Value"
         @test text.edit.cursor_index == length(text.value)
         @test text.edit.selection == 1:length(text.value)
-        @test length(Base.annotations(text.edit.buffer)) == 1
-        (region, (label, _)) = Base.annotations(text.edit.buffer)[1]
+        @test length(annotations(text.edit.buffer)) == 1
+        (region, label, _) = annotations(text.edit.buffer)[1]
         @test region == 1:5 && label == :background
         @test has_render(text.edit.cursor)
 
@@ -219,7 +221,7 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         left_click()
         synchronize()
         @test isempty(text.edit.selection)
-        @test isempty(Base.annotations(text.edit.buffer))
+        @test isempty(annotations(text.edit.buffer))
         @test text.edit.cursor_index == 2
         press_key(:ESC)
       end
@@ -232,7 +234,7 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         @test text.edit.buffer == "Vaslue"
         synchronize()
         @test isempty(text.edit.selection)
-        @test isempty(Base.annotations(text.edit.buffer))
+        @test isempty(annotations(text.edit.buffer))
         @test text.edit.cursor_index == 3
         press_key(:ESC)
         synchronize()
@@ -468,7 +470,7 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
 
     # Exit.
 
-    move_cursor(menu)
+    move_cursor(menu.head)
     left_click()
     press_key(:AB02) # 'x' to exit
     wait(app)

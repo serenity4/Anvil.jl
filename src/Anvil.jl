@@ -61,6 +61,7 @@ const Optional{T} = Union{T,Nothing}
 const Box2 = Box{2,Float64}
 const P2 = Point2
 const P2f = Point2f
+const WidgetID = EntityID
 
 include("renderer.jl")
 include("components.jl")
@@ -69,6 +70,7 @@ include("modules/Layout.jl")
 using .Layout: Direction
 include("layout.jl")
 include("bindings.jl")
+include("interaction_set.jl")
 include("widgets.jl")
 include("systems.jl")
 include("assets.jl")
@@ -111,8 +113,12 @@ export
        # Widgets.
        Widget, disable!, enable!,
        Rectangle, ImageVisual, RectangleVisual,
-       Text, Button, Checkbox, MenuItem, Menu, collapse!, expand!,
+       Text, Button, Checkbox,
+       MenuItem, Menu, collapse!, expand!, close!, constituents, add_menu_item!, add_menu_items!,
        line_center,
+
+       # Interaction sets.
+       InteractionSet, wipe!, use_interaction_set, current_interaction_set,
 
        # Application state.
        get_entity, get_location, get_geometry, get_z, get_render, get_widget, set_widget, unset_widget, get_window,

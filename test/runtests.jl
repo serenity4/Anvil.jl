@@ -1,5 +1,4 @@
 using Anvil, Test, Logging
-using Anvil: exit
 
 !@isdefined(includet) && (includet = include)
 includet("main.jl")

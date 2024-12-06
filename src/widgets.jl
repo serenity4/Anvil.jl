@@ -1,5 +1,3 @@
-const WidgetID = EntityID
-
 """
 A widget is a user-interface element rendered on screen that a user may or may not interact with.
 
@@ -32,6 +30,8 @@ function new_widget(::Type{T}, args...) where {T<:Widget}
   set_geometry(entity, Box2(zero(P2)))
   set_z(entity, 0)
   widget = T(entity, args...)
+  set = INTERACTION_SET[]
+  !isnothing(set) && push!(set, widget)
   set_widget(entity, widget)
   synchronize!(widget)
   widget
@@ -40,14 +40,18 @@ end
 # XXX: Use `EntityID` or `Widget` iterators to recursively get widget constituents,
 # instead of performing the recursion manually.
 
-disable!(widget::WidgetID) = disable!(get_widget(widget))
-function disable!(widget::Widget)
-  for part in constituents(widget)
-    disable!(part)
-  end
+function disable!(widget::WidgetID)
   unset_render(widget)
   unoverlay(widget)
   remove_layout_operations(widget)
+end
+
+function disable!(widget::Widget)
+  disable!(widget.id)
+  for part in constituents(widget)
+    has_widget(part) || continue
+    disable!(get_widget(part))
+  end
   widget.disabled = true
   widget
 end
@@ -66,6 +70,14 @@ function unset_widget(widget::Widget)
   for part in constituents(widget)
     unset_widget(part)
   end
+end
+
+function delete_widget(widget)
+  disable!(widget)
+  unset_z(widget)
+  unset_location(widget)
+  unset_geometry(widget)
+  unset_widget(widget)
 end
 
 function set_name(widget::Widget, name::Symbol)
@@ -199,21 +211,21 @@ function unset_shortcut(text::Text, shortcut::Char)
     if lowercase(char) == shortcut
       range = i:(nextind(text, i) - 1)
       prev = annotations(text, range)
-      j = findfirst(prev) do (_, (label, value))
+      j = findfirst(prev) do (_, label, value)
         label === :face && in(value, (:application_shortcut_show, :application_shortcut_hide))
       end
       isnothing(j) && return false
       region = prev[j][1]
-      faces = findall(prev) do (_region, (label, value))
+      faces = findall(prev) do (_region, label, value)
         label === :face && _region == region
       end
       if length(faces) == 1
-        annotate!(text, region, :face => nothing)
+        annotate!(text, region, :face, nothing)
       else
-        annotate!(text, region, :face => nothing)
+        annotate!(text, region, :face, nothing)
         for face in faces
           face == j && continue
-          annotate!(text, region, :face => prev[face][2][2])
+          annotate!(text, region, :face, prev[face][2][2])
         end
       end
       return true
@@ -228,11 +240,11 @@ function set_shortcut(text::Text, shortcut::Char)
     if lowercase(char) == shortcut
       range = i:(nextind(text, i) - 1)
       prev = annotations(text, range)
-      any(prev) do (range, (label, value))
+      any(prev) do (range, label, value)
         label === :face && in(value, (:application_shortcut_show, :application_shortcut_hide))
       end && return true
       annotation = ifelse(app.show_shortcuts, :application_shortcut_show, :application_shortcut_hide)
-      annotate!(text, range, :face => annotation)
+      annotate!(text, range, :face, annotation)
       return true
     end
   end
@@ -349,12 +361,12 @@ is_cursor_active(edit::TextEditState) = edit.cursor_index ≥ 0
 function add_selection_background!(edit::TextEditState)
   isempty(edit.selection) && return
   remove_selection_background!(edit)
-  Base.annotate!(edit.buffer, edit.selection, :background => RGBA(0.3, 0.1, 0.1, 1))
+  annotate!(edit.buffer, edit.selection, :background, RGBA(0.3, 0.1, 0.1, 1))
 end
 
 function remove_selection_background!(edit::TextEditState)
-  for (range, (label, _)) in Base.annotations(edit.buffer)
-    label == :background && Base.annotate!(edit.buffer, range, :background => nothing)
+  for (range, label, _) in annotations(edit.buffer)
+    label == :background && annotate!(edit.buffer, range, :background, nothing)
   end
 end
 
@@ -514,8 +526,8 @@ function inherit_style(str, buffer, (start, stop))
   reference_index = start > n ? n : stop < 1 ? 1 : start
   i = byte_index(buffer, reference_index)
   str = annotatedstring(str)
-  for (_, style) in annotations(buffer, i:i)
-    annotate!(str, style)
+  for (_, label, value) in annotations(buffer, i:i)
+    annotate!(str, label, value)
   end
   str
 end
@@ -760,61 +772,63 @@ function synchronize(checkbox::Checkbox)
   checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
 end
 
-@widget struct MenuItem
-  const on_selected::Function
-  const background::Rectangle
-  const text::Text
+mutable struct MenuItem
+  const widget::WidgetID
   # Whether the item is currently active in navigation (pointer actively over it, navigation via keyboard)
   active::Bool
-  shortcut::Char
+  const on_selected::Any
+  const on_active::Any
+  const text::Optional{Text}
+  const shortcut::Optional{Char}
 end
 
-constituents(item::MenuItem) = [item.background, item.text]
-
-function set_name(item::MenuItem, name::Symbol)
-  set_name(item.id, name)
-  set_name(item.background, Symbol(name, :_background))
+function set_active(item::MenuItem)
+  item.active && return
+  item.active = true
+  item.on_active === nothing && return
+  item.on_active(true)
 end
 
-set_active(item::MenuItem) = (item.active = true)
-set_inactive(item::MenuItem) = (item.active = false)
+function set_inactive(item::MenuItem)
+  !item.active && return
+  item.active = false
+  item.on_active === nothing && return
+  item.on_active(false)
+end
+
 isactive(item::MenuItem) = item.active
 
-function MenuItem(on_selected, text, geometry, shortcut = lowercase(first(text.value)))
-  background = Rectangle(geometry, MENU_ITEM_COLOR)
-  new_widget(MenuItem, on_selected, background, text, false, shortcut)
+function MenuItem(on_selected, widget; text = nothing, shortcut = nothing, on_active = nothing)
+  !isnothing(text) && isnothing(shortcut) && (shortcut = lowercase(first(text.value)))
+  MenuItem(widget, false, on_selected, on_active, text, shortcut)
 end
 
-function synchronize(item::MenuItem)
-  set_geometry(item, item.background.geometry)
-  put_behind(item.text, item)
-  put_behind(item.background, item.text)
-  place(item.background, item)
-  place(at(item.text, :center), item)
-  color = ifelse(item.active, MENU_ITEM_ACTIVE_COLOR, MENU_ITEM_COLOR)
-  item.background.color = color
+function disable!(item::MenuItem)
+  disable!(item.widget)
+  isnothing(item.text) && return
+  disable!(item.text)
 end
 
-@widget struct Menu
-  on_input::Function
-  head::WidgetID
-  items::Vector{MenuItem}
-  direction::Direction
+function enable!(item::MenuItem)
+  enable!(item.widget)
+  isnothing(item.text) && return
+  enable!(item.text)
+end
+
+mutable struct Menu
+  const on_expand::Any
+  const on_collapse::Any
+  const head::WidgetID
+  const items::Vector{MenuItem}
+  const set::InteractionSet
   expanded::Bool
-  overlay::EntityID # entity that overlays the whole window on menu expand to allow scrolling outside the menu area
+  const overlay::EntityID # entity that overlays the whole window on menu expand to allow scrolling outside the menu area
   shortcuts::Union{Nothing, KeyBindingsToken}
-  shortcut::Char
+  const shortcut::Char
 end
 
-constituents(menu::Menu) = [menu.head; menu.items]
-
-function set_name(menu::Menu, name::Symbol)
-  set_name(menu.id, name)
-  set_name(menu.head, Symbol(name, :_head))
-  for (i, item) in enumerate(menu.items)
-    set_name(item, Symbol(name, :_item_, i))
-  end
-end
+add_menu_item!(menu::Menu, item::MenuItem) = push!(menu.items, item)
+add_menu_items!(menu::Menu, items) = append!(menu.items, items)
 
 function active_item(menu::Menu)
   i = findfirst(isactive, menu.items)
@@ -828,19 +842,11 @@ function select_item(menu::Menu, item::MenuItem)
   collapse!(menu)
 end
 
-function Menu(head, items::Vector{MenuItem}, shortcut::Char, direction::Direction = DIRECTION_VERTICAL)
-  menu = new_widget(Menu, identity, head, items, direction, false, new_entity(), 0, lowercase(shortcut))
-  menu.on_input = function (input::Input)
-    # Expand the menu if the head is left-clicked (only the head is reachable if collapsed).
+function Menu(head, shortcut::Char; set = InteractionSet(), on_expand = nothing, on_collapse = nothing)
+  menu = Menu(on_expand, on_collapse, head, WidgetID[], set, false, new_entity(), 0, lowercase(shortcut))
+  add_callback(menu.head, BUTTON_PRESSED) do input::Input
     is_left_click(input) && !menu.expanded && return expand!(menu)
-
-    # Propagate the event to menu items, triggering the selection of the target item.
-    subareas = InputArea[]
-    push!(subareas, app.systems.event.ui.areas[menu.head])
-    append!(subareas, app.systems.event.ui.areas[item.id] for item in menu.items)
-    propagate!(input, subareas) do propagated
-      propagated && is_left_click(input) && collapse!(menu)
-    end
+    is_left_click(input) && menu.expanded && return collapse!(menu)
   end
   menu
 end
@@ -865,14 +871,54 @@ end
 
 function expand!(menu::Menu)
   menu.expanded && return false
-  register_shortcuts!(menu)
   menu.expanded = true
+  create_window_overlay!(menu)
+
+  menu.on_expand !== nothing && use_interaction_set(() -> menu.on_expand(menu), menu.set)
+
+  register_shortcuts!(menu)
+  for item in menu.items
+    add_callback(item.widget, BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED) do input::Input
+      if is_left_click(input)
+        item.on_selected()
+        collapse!(menu)
+      end
+      input.type === POINTER_ENTERED && set_active(menu, item)
+      input.type === POINTER_EXITED && set_inactive(item)
+    end
+  end
+
+  true
 end
 
 function collapse!(menu::Menu)
+  menu.expanded || return false
+  menu.expanded = false
   foreach(set_inactive, menu.items)
   unregister_shortcuts!(menu)
-  menu.expanded = false
+  delete_widget(menu.overlay)
+  menu.on_collapse !== nothing && use_interaction_set(() -> menu.on_collapse(menu), menu.set)
+  false
+end
+
+function close!(menu::Menu)
+  wipe!(menu.set)
+  empty!(menu.items)
+end
+
+function create_window_overlay!(menu::Menu)
+  window = app.windows[app.window]
+  set_location(menu.overlay, get_location(window))
+  set_geometry(menu.overlay, get_geometry(window))
+  set_z(menu.overlay, Inf)
+  add_callback(menu.overlay, BUTTON_PRESSED) do input::Input
+    propagate!(input) do propagated
+      propagated && return
+      click = input.event.mouse_event.button
+      !in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN)) && return collapse!(menu)
+      navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
+    end
+  end
 end
 
 function register_shortcuts!(menu::Menu)
@@ -880,6 +926,7 @@ function register_shortcuts!(menu::Menu)
   shortcuts = [item.shortcut for item in menu.items]
   bindings = Pair{KeyCombination, Callable}[]
   for (item, shortcut) in zip(menu.items, shortcuts)
+    isnothing(shortcut) && continue
     set_shortcut(item.text, shortcut)
     indices = findall(==(shortcut), shortcuts)
     key = KeyCombination(shortcut)
@@ -906,58 +953,6 @@ function unregister_shortcuts!(menu::Menu)
     unset_shortcut(item.text, item.shortcut)
   end
   menu.shortcuts = nothing
-end
-
-function synchronize(menu::Menu)
-  if menu.expanded
-    for item in menu.items
-      enable!(item)
-      add_callback(item, BUTTON_PRESSED | POINTER_ENTERED | POINTER_EXITED) do input::Input
-        is_left_click(input) && item.on_selected()
-        input.type === POINTER_ENTERED && set_active(menu, item)
-        input.type === POINTER_EXITED && set_inactive(item)
-      end
-    end
-    window = app.windows[app.window]
-    set_location(menu.overlay, get_location(window))
-    set_geometry(menu.overlay, get_geometry(window))
-    set_z(menu.overlay, Inf)
-    add_callback(menu.overlay, BUTTON_PRESSED) do input::Input
-      propagate!(input, app.systems.event.ui.areas[menu.id]) do propagated
-        propagated && return
-        click = input.event.mouse_event.button
-        !in(click, (BUTTON_SCROLL_UP, BUTTON_SCROLL_DOWN)) && return collapse!(menu)
-        navigate_to_next_item(menu, ifelse(click == BUTTON_SCROLL_UP, -1, 1))
-      end
-    end
-  else
-    foreach(disable!, menu.items)
-    unoverlay(menu.overlay)
-  end
-  set_geometry(menu, menu_geometry(menu))
-  place_items(menu)
-  add_callback(menu.on_input, menu, BUTTON_PRESSED)
-end
-
-function menu_geometry(menu::Menu)
-  box = get_geometry(menu.head)
-  !menu.expanded && return box
-  bottom_left = box.bottom_left .- @SVector [0.0, sum(item -> get_geometry(item).height, menu.items; init = 0.0)]
-  Box(bottom_left, box.top_right)
-end
-
-function place_items(menu::Menu)
-  menu.direction === DIRECTION_VERTICAL || error("Unsupported direction $direction")
-  place(menu.head, menu)
-  prev_item = menu.head
-  for item in menu.items
-    place(item |> at(:top_left), prev_item |> at(:bottom_left))
-    prev_item = item
-  end
-
-  for part in constituents(menu)
-    put_behind(get_widget(part), menu)
-  end
 end
 
 at(arg, args...) = Layout.at(app.systems.layout.engine, arg, args...)
