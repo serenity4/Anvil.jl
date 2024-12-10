@@ -389,8 +389,14 @@ function register_shortcuts!(edit::TextEditState)
   push!(bindings, key"backspace" => () -> begin
     isempty(edit.selection) ? delete_previous!(edit) : delete_selection!(edit)
   end)
+  push!(bindings, key"ctrl+backspace" => () -> begin
+    isempty(edit.selection) ? delete_previous_word!(edit) : delete_selection!(edit)
+  end)
   push!(bindings, key"delete" => () -> begin
     isempty(edit.selection) ? delete_next!(edit) : delete_selection!(edit)
+  end)
+  push!(bindings, key"ctrl+delete" => () -> begin
+    isempty(edit.selection) ? delete_next_word!(edit) : delete_selection!(edit)
   end)
   push!(bindings, key"enter" => () -> commit_modifications!(edit))
   push!(bindings, key"escape" => () -> clear_modifications!(edit))
@@ -489,15 +495,27 @@ function delete_previous!(edit::TextEditState)
   set_cursor!(edit, edit.cursor_index - 1)
 end
 
+function delete_previous_word!(edit::TextEditState)
+  navigate_and_select_previous!(navigate_previous_word!, edit)
+  isempty(edit.selection) && return
+  delete_selection!(edit)
+end
+
 function delete_next!(edit::TextEditState)
   edit.cursor_index == length(edit.buffer) && return
   edit_buffer!(edit, (edit.cursor_index + 1, edit.cursor_index + 1), "")
 end
 
+function delete_next_word!(edit::TextEditState)
+  navigate_and_select_next!(navigate_next_word!, edit)
+  isempty(edit.selection) && return
+  delete_selection!(edit)
+end
+
 function delete_selection!(edit::TextEditState)
   @assert !isempty(edit.selection)
   edit_buffer!(edit, edit.selection, "")
-  set_cursor!(edit, edit.cursor_index - length(edit.selection))
+  set_cursor!(edit, first(edit.selection) - 1)
   clear_selection!(edit)
 end
 

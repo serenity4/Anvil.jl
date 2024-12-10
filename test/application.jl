@@ -407,6 +407,38 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         synchronize()
         @test text.edit.buffer == "or"
         press_key(:AD09)
+        press_key(:ESC)
+
+        text.value = "testing something here"
+        left_click()
+        synchronize()
+        press_key(:KP1)
+        synchronize()
+        @test text.edit.cursor_index == lastindex(text.edit.buffer)
+        press_key(:BKSP; modifiers = CTRL_MODIFIER)
+        synchronize()
+        @test text.edit.buffer == "testing something "
+        press_key(:KP7)
+        synchronize()
+        @test text.edit.cursor_index == 0
+        press_key(:RGHT)
+        press_key(:RGHT)
+        synchronize()
+        press_key(:BKSP; modifiers = CTRL_MODIFIER)
+        synchronize()
+        @test text.edit.buffer == "sting something "
+        @test text.edit.cursor_index == 0
+        press_key(:DELE; modifiers = CTRL_MODIFIER)
+        synchronize()
+        @test text.edit.buffer == " something "
+        @test text.edit.cursor_index == 0
+        press_key(:RGHT)
+        press_key(:RGHT)
+        press_key(:RGHT)
+        press_key(:DELE; modifiers = CTRL_MODIFIER)
+        synchronize()
+        @test text.edit.buffer == " so "
+        @test text.edit.cursor_index == 3
 
         press_key(:AD01; modifiers = CTRL_MODIFIER)
         press_key(:DELE)
