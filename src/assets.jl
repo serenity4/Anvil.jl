@@ -6,15 +6,15 @@ get_texture(name) = get!(() -> load_texture(texture_file(name)), app.textures, n
 
 load_texture(filename) = load_texture(read_image(filename))
 function load_texture(data::AbstractMatrix)
-  resource = Lava.image_resource(app.systems.rendering.renderer.device, data)
-  texture = Lava.Texture(resource)
-  texture
+  data = convert(Matrix{RGBA{N0f8}}, data)
+  resource = Lava.image_resource(app.systems.rendering.renderer.device, data; format = Vk.FORMAT_R8G8B8A8_SRGB)
+  Lava.Texture(resource)
 end
 
 read_transposed(::Type{T}, file) where {T} = convert(Matrix{T}, permutedims(FileIO.load(file), (2, 1)))
-read_transposed(file) = read_transposed(RGBA{Float16}, file)
+read_transposed(file) = read_transposed(RGBA{N0f8}, file)
 read_png(::Type{T}, file) where {T} = read_transposed(T, file)
-read_png(file) = read_png(RGBA{Float16}, file)
+read_png(file) = read_png(RGBA{N0f8}, file)
 read_jpeg(file) = read_transposed(file)
 function read_image(filename)
   ext = last(splitext(filename))
