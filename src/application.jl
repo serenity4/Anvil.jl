@@ -34,7 +34,7 @@ function read_application_config()
   open(TOML.parse, joinpath(APPLICATION_DIRECTORY, config_file))
 end
 
-function initialize(f::Optional{Function} = nothing; record_events::Bool = false, renderer_period)
+function initialize(f::Optional{Function} = nothing; record_events::Bool = false, renderer_period = 0.000)
   options = read_application_config()
   app.is_release = get(ENV, "ANVIL_RELEASE", "false") == "true"
 
@@ -189,7 +189,11 @@ set_render(entity, render::RenderComponent) = app.ecs[entity, RENDER_COMPONENT_I
 has_render(entity) = haskey(app.ecs, entity, RENDER_COMPONENT_ID)
 unset_render(entity) = unset!(app.ecs, entity, RENDER_COMPONENT_ID)
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID, WidgetComponent]
-get_widget(name::Symbol) = get_widget(get_entity(name)::EntityID)
+function get_widget(name::Symbol)
+  entity = get_entity(name)
+  isnothing(entity) && throw(ArgumentError("No widget exists with the name $(repr(name))"))
+  get_widget(entity)
+end
 has_widget(entity) = haskey(app.ecs, entity, WIDGET_COMPONENT_ID)
 set_widget(entity, widget::WidgetComponent) = app.ecs[entity, WIDGET_COMPONENT_ID, WidgetComponent] = widget
 unset_widget(entity) = unset!(app.ecs, entity, WIDGET_COMPONENT_ID)

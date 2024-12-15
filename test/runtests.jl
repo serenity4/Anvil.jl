@@ -17,6 +17,7 @@ main()
   include("layout.jl")
   include("bindings.jl")
   include("observables.jl")
+  include("debug.jl")
   include("application.jl")
 end;
 
