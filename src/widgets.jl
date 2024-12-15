@@ -266,6 +266,7 @@ mutable struct TextEditState
   edit_on_select::InputCallback
   select_cursor::InputCallback
   character_input::InputCallback
+  stop_on_foreign_selection::InputCallback
   shortcuts::Optional{KeyBindingsToken}
   typing_overlay::EntityID # overlay that allows typing from anywhere on the screen
   function TextEditState(on_edit, text::Text)
@@ -300,6 +301,18 @@ mutable struct TextEditState
       isempty(edit.selection) ? insert_after!(edit, char) : edit_selection!(edit, char)
     end
 
+    edit.stop_on_foreign_selection = InputCallback(BUTTON_PRESSED) do input
+      is_left_click(input) || return
+      areas = InputArea.(app, (edit.text, edit.typing_overlay))
+      propagate!(input, areas) do propagated
+        propagated && return
+        input.propagate_to = nothing
+        propagate!(input) do propagated
+          propagated && stop_editing!(edit)
+        end
+      end
+    end
+
     edit.shortcuts = nothing
     edit.typing_overlay = new_entity()
 
@@ -315,6 +328,8 @@ function start_editing!(edit::TextEditState)
   set_z(edit.typing_overlay, Inf)
   remove_callback(edit.text, edit.edit_on_select)
   add_callback(edit.text, edit.select_cursor; drag_threshold = 0.1)
+  add_callback(edit.typing_overlay, edit.character_input)
+  add_callback(edit.typing_overlay, edit.stop_on_foreign_selection)
   set_cursor!(edit, length(edit.buffer))
   edit.pending = true
 end
@@ -326,6 +341,7 @@ function stop_editing!(edit::TextEditState)
   unset_z(edit.typing_overlay)
   add_callback(edit.text, edit.edit_on_select)
   remove_callback(edit.text, edit.select_cursor)
+  remove_callback(edit.typing_overlay, edit.stop_on_foreign_selection)
   unset_cursor!(edit)
   edit.buffer = nothing
   edit.pending = false
@@ -422,7 +438,6 @@ end
 
 function set_cursor!(edit::TextEditState, i)
   edit.cursor_index = clamp(i, 0, length(edit.buffer))
-  add_callback(edit.typing_overlay, edit.character_input)
   display_cursor!(edit)
 end
 

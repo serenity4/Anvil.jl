@@ -14,6 +14,8 @@ mutable struct Application
   Application() = new()
 end
 
+Base.broadcastable(app::Application) = (app,)
+
 is_release() = app.is_release
 
 function Base.show(io::IO, app::Application)
@@ -201,6 +203,9 @@ unoverlay(args...; kwargs...) = unoverlay!(app.systems.event.ui, args...; kwargs
 
 add_callback(entity, callback::InputCallback; kwargs...) = overlay(entity, callback; options = OverlayOptions(; kwargs...))
 remove_callback(entity, callback::InputCallback) = unoverlay(entity, callback)
+
+AbstractGUI.InputArea(widget::Widget) = InputArea(app, widget)
+AbstractGUI.InputArea(app::Application, entity) = InputArea(app.systems.event.ui, entity)
 
 bind(f::Callable, key::KeyCombination) = bind(key => f)
 bind(f::Callable, bindings::Pair...) = bind!(f, app.systems.event.ui.bindings, bindings...)

@@ -157,6 +157,11 @@ function UserInterface(window::Window)
   UserInterface(overlay, Dictionary(), Dictionary(), window, bindings)
 end
 
+function InputArea(ui::UserInterface, entity)
+  entity = convert(EntityID, entity)
+  ui.areas[entity]
+end
+
 retrieve_input_area!(ui::UserInterface, entity) = retrieve_input_area!(ui, convert(EntityID, entity))
 
 function retrieve_input_area!(ui::UserInterface, entity::EntityID)
