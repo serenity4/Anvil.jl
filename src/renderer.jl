@@ -38,8 +38,8 @@ end
 
 new_color_attachment(device::Device, window::Window) = attachment_resource(device, nothing; format = RGBA{Float16}, dims = collect(Int64, extent(window)), usage_flags = Vk.IMAGE_USAGE_TRANSFER_SRC_BIT | Vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT, samples = 8, name = :color)
 
-function start(renderer::Renderer)
-  options = SpawnOptions(start_threadid = RENDERER_THREADID, disallow_task_migration = true, execution_mode = LoopExecution(0.005))
+function start(renderer::Renderer; period = 0.000)
+  options = SpawnOptions(start_threadid = RENDERER_THREADID, disallow_task_migration = true, execution_mode = LoopExecution(period))
   renderer.task = spawn(() -> render(app, renderer), options)
 end
 

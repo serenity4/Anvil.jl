@@ -34,7 +34,7 @@ function read_application_config()
   open(TOML.parse, joinpath(APPLICATION_DIRECTORY, config_file))
 end
 
-function initialize(f::Optional{Function} = nothing; record_events::Bool = false)
+function initialize(f::Optional{Function} = nothing; record_events::Bool = false, renderer_period)
   options = read_application_config()
   app.is_release = get(ENV, "ANVIL_RELEASE", "false") == "true"
 
@@ -85,7 +85,7 @@ function initialize(f::Optional{Function} = nothing; record_events::Bool = false
 
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
   app.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
-  start(systems.rendering.renderer)
+  start(systems.rendering.renderer; period = renderer_period)
   !isnothing(f) && f()
 
   map_window(window)
@@ -268,13 +268,13 @@ function (app::Application)()
   app.systems.event(app.ecs)
 end
 
-function main(f; async = false, record_events = false)
+function main(f; async = false, application_period = 0.000, renderer_period = 0.000, record_events = false)
   nthreads() ≥ 3 || error("Three threads or more are required to execute the application.")
   GC.gc(true)
   CooperativeTasks.reset()
   app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, disallow_task_migration = true)) do
-    initialize(f; record_events)
-    LoopExecution(0.001; shutdown = false)(app)()
+    initialize(f; record_events, renderer_period)
+    LoopExecution(application_period; shutdown = false)(app)()
   end
   async && return false
   wait(app)
