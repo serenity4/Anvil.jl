@@ -13,6 +13,13 @@ ENV["JULIA_DEBUG"] = "Anvil"
 
 main()
 
+#=
+TODO:
+- Test interaction sets.
+- Test geometry features.
+- Test image modes.
+=#
+
 @testset "Anvil.jl" begin
   include("layout.jl")
   include("bindings.jl")
@@ -20,6 +27,8 @@ main()
   include("debug.jl")
   include("application.jl")
 end;
+
+# For debugging.
 
 using DataFrames
 df = DataFrame(Anvil.app.ecs)
