@@ -279,6 +279,7 @@ function main(f; async = false, application_period = 0.000, renderer_period = 0.
   app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, disallow_task_migration = true)) do
     initialize(f; record_events, renderer_period)
     LoopExecution(application_period; shutdown = false)(app)()
+    finalize(app)
   end
   async && return false
   wait(app)
