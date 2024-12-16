@@ -58,6 +58,11 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
     @test feature == PositionalFeature(object, :origin)
     @test positional_feature(engine, feature) === feature
     @test at(object, 4.0) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, 4.0)
+    ref = Ref(5.0)
+    @test at(object, ref) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, ref)
+    ref = Ref(P2(1, 2))
+    @test_throws "automatic conversion cannot be made" at(object, Ref((1, 2)))
+    @test at(object, ref) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, ref)
     @test at(object, FEATURE_LOCATION_CENTER) == PositionalFeature(object, FEATURE_LOCATION_CENTER, nothing)
     @test at(object, :center) == PositionalFeature(object, :center)
 
@@ -145,10 +150,34 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       compute_layout!(engine)
       @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
       @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(10 + 1 + 30, 10)
+
+      # Use a `Ref` for dynamic placement.
+      reset_location.([1, 2])
+      remove_operations!(engine)
+      ref = Ref(P2(0, 0))
+      place!(engine, objects[2], at(objects[1], ref))
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(10, 10)
+      ref[] = P2(5, 2)
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(15, 12)
+
+      reset_location.([1, 2])
+      remove_operations!(engine)
+      ref = Ref(0.0)
+      place!(engine, objects[2], at(objects[1], ref))
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(10, 10)
+      ref[] = 7
+      compute_layout!(engine)
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(17, 17)
     end
 
     @testset "Alignment" begin
-
       # Align objects.
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])

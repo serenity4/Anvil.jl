@@ -7,6 +7,8 @@ using StaticArrays: SVector
 using Graphs
 using GeometryExperiments: GeometryExperiments, boundingelement, Box, centroid
 
+using Base: RefValue
+
 const Optional{T} = Union{Nothing, T}
 
 """
@@ -353,9 +355,12 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
     &FEATURE_LOCATION_CORNER => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Corner)
     &FEATURE_LOCATION_EDGE => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Edge)
     &FEATURE_LOCATION_GEOMETRY => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::GeometryFeature)
-    &FEATURE_LOCATION_CUSTOM => feature.data::Union{T, C}
+    &FEATURE_LOCATION_CUSTOM => extract_custom_attribute(feature.data::Union{T, C, RefValue{T}, RefValue{C}})::Union{T, C}
   end
 end
+
+extract_custom_attribute(attribute::RefValue) = attribute[]
+extract_custom_attribute(attribute) = attribute
 
 add_coordinates(x, y) = x .+ y
 
@@ -395,6 +400,7 @@ at(engine::LayoutEngine, x::Real, y::Real) = at(engine, (x, y))
 at(engine::LayoutEngine, (x, y)::Tuple) = at(engine, SVector(x, y))
 at(engine::LayoutEngine, p::SVector{2}) = x -> at(engine, x, p)
 at(engine::LayoutEngine, coord::Real) = x -> at(engine, x, coord)
+at(engine::LayoutEngine, p::RefValue) = x -> at(engine, x, p)
 at(engine::LayoutEngine, location::Symbol) = x -> at(engine, x, location)
 
 at(engine::LayoutEngine, object) = positional_feature(engine, object)
@@ -406,8 +412,14 @@ function at(engine::LayoutEngine{O}, object, position::Real) where {O}
 end
 function at(engine::LayoutEngine{O}, object, position) where {O}
   C = coordinate_type(engine)
-  position = convert(C, position)::C
-  at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
+  T = eltype(C)
+  if isa(position, RefValue)
+    isa(position, RefValue{T}) || isa(position, RefValue{C}) || throw(ArgumentError("If a `Ref` is provided for a custom feature location, it must be of type $T or of type $C; automatic conversion cannot be made for mutable objects"))
+    at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
+  else
+    position = convert(C, position)::C
+    at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
+  end
 end
 at(engine::LayoutEngine{O}, object, location::FeatureLocation, argument = nothing) where {O} = at(O, to_object(engine, object), location, argument)
 function at(::Type{O}, object::Union{O, PositionalFeature{O}, Group{O}}, location::FeatureLocation, argument = nothing) where {O}
