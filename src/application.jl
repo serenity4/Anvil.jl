@@ -253,7 +253,7 @@ function exit(code::Int = 0)
     _exit(code)
     true
   else
-    execute(_exit, app.task, code)
+    execute(_exit, code)
     wait(app)
   end
 end
@@ -265,11 +265,12 @@ function _exit(code::Int)
 end
 
 function (app::Application)()
-  shutdown_scheduled() && return
+  shutdown_scheduled() && return false
   # Make sure that the drawing order (which also defines interaction order)
   # has been resolved prior to resolving which object receives which event based on that order.
   run_systems()
   app.systems.event(app.ecs)
+  true
 end
 
 function main(f; async = false, application_period = 0.000, renderer_period = 0.000, record_events = false)
@@ -285,7 +286,13 @@ function main(f; async = false, application_period = 0.000, renderer_period = 0.
   wait(app)
 end
 
-synchronize() = fetch(execute(() -> (app(); true), app.task))
-
 save_events() = save_history(app.systems.event.queue.wm, app.systems.event.queue)
 replay_events(events; time_factor = 1.0) = replay_history(app.systems.event.queue.wm, events; time_factor)
+
+execute(f, args...; kwargs...) = fetch(CooperativeTasks.execute(f, app.task, args...; kwargs...))
+
+macro execute(ex)
+  :(execute(() -> $(esc(ex))))
+end
+
+synchronize() = execute(app)

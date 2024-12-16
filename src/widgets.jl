@@ -147,7 +147,7 @@ function Rectangle(image::Texture, parameters::ImageParameters = ImageParameters
 end
 
 texture(data::Texture) = data
-texture(data::AbstractMatrix) = fetch(execute(load_texture, app.systems.rendering.renderer.task, data))
+texture(data::AbstractMatrix) = fetch(CooperativeTasks.execute(load_texture, app.systems.rendering.renderer.task, data))
 texture(filename::String) = get_texture(filename)
 
 function Base.setproperty!(rect::Rectangle, name::Symbol, value)

@@ -1,6 +1,5 @@
 using Anvil
 using Anvil: EntityID, get_widget, get_entity, get_location, synchronize, Widget, to_metric_coordinate_system, to_window_coordinate_system, exit, has_render
-using CooperativeTasks: execute
 using LinearAlgebra: norm
 using XCB
 using Test

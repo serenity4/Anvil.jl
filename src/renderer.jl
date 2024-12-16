@@ -48,7 +48,7 @@ function Lava.render(app, rdr::Renderer)
     if collect(Int, extent(app.window)) ≠ dimensions(rdr.color.attachment)
       rdr.color = new_color_attachment(rdr.device, app.window)
     end
-    ret = tryfetch(execute(() -> frame_nodes(rdr.color), task_owner()))
+    ret = tryfetch(CooperativeTasks.execute(() -> frame_nodes(rdr.color), task_owner()))
     iserror(ret) && shutdown_scheduled() && return nothing
     nodes = unwrap(ret)::Vector{RenderNode}
     draw_and_prepare_for_presentation(rdr.device, nodes, rdr.color, frame)
