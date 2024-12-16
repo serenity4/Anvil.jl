@@ -72,7 +72,12 @@ function unset_widget(widget::Widget)
   end
 end
 
-function delete_widget(widget)
+function delete_widget(widget::Widget)
+  finalize(widget)
+  delete_widget(widget.id)
+end
+
+function delete_widget(widget::WidgetID)
   disable!(widget)
   unset_z(widget)
   unset_location(widget)
@@ -175,7 +180,10 @@ end
 
 function Text(value::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ", editable = false, on_edit = nothing)
   text = new_widget(Text, value, OpenType.Line[], size, font, script, language, editable, nothing)
-  editable && (text.edit = TextEditState(on_edit, text))
+  if editable
+    text.edit = TextEditState(on_edit, text)
+    finalizer(x -> finalize(x.edit::TextEditState), text)
+  end
   text
 end
 
@@ -316,7 +324,7 @@ mutable struct TextEditState
     edit.shortcuts = nothing
     edit.typing_overlay = new_entity()
 
-    edit
+    finalizer(stop_editing!, edit)
   end
 end
 
@@ -335,6 +343,7 @@ function start_editing!(edit::TextEditState)
 end
 
 function stop_editing!(edit::TextEditState)
+  isnothing(edit.buffer) && !edit.pending && return
   unregister_shortcuts!(edit)
   unset_location(edit.typing_overlay)
   unset_geometry(edit.typing_overlay)
