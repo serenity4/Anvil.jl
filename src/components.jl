@@ -35,9 +35,13 @@ ImageModeTiled(; scale = 1.0, offset = Vec(0.0, 0.0)) = ImageModeTiled(scale, of
 
 struct ImageModeCropped
   focus::Optional{Vec2}
+  zoom::Optional{Float64}
 end
 
-ImageModeCropped(; focus = nothing) = ImageModeCropped(focus)
+function ImageModeCropped(; focus = nothing, zoom = nothing)
+  !isnothing(zoom) && (zoom ≈ 1 || zoom ≥ 1 || throw(ArgumentError("The zoom factor must be greater than 1")))
+  ImageModeCropped(focus, zoom)
+end
 
 struct ImageParameters
   is_opaque::Bool
@@ -82,27 +86,37 @@ function image_uvs(geometry, mode::ImageModeCropped, visual::ImageVisual)
   (; image) = visual.sprite.texture
   image_width, image_height = dimensions(image)
   focus = @something(mode.focus, Vec(0.5, 0.5))
+  @reset focus.y = 1 - focus.y
+  zoom = 0.5 / something(mode.zoom, 1.0)
   image_aspect_ratio = image_width / image_height
   geometry_aspect_ratio = geometry.width / geometry.height
-  image_aspect_ratio ≈ geometry_aspect_ratio && return FULL_IMAGE_UV
+  image_aspect_ratio ≈ geometry_aspect_ratio && zoom ≈ 1 && return FULL_IMAGE_UV
   if geometry_aspect_ratio > image_aspect_ratio
     # The geometry is wider than the image.
     # The image will be cropped vertically.
     ratio = image_aspect_ratio / geometry_aspect_ratio
-    vmin, vmax = focus.y .+ (-ratio, ratio) ./ 2
+    umin, umax = focus.x .+ (-zoom, zoom)
+    vmin, vmax = focus.y .+ (-ratio, ratio) .* zoom
+    @assert umin ≥ 0 || umax ≤ 1
     @assert vmin ≥ 0 || vmax ≤ 1
-    vmax > 1 && ((vmin, vmax) = (vmin - (1 - vmax), 1.0))
-    vmin < 0 && ((vmin, vmax) = (0.0, vmax + (0 - vmin), 1.0))
-    generate_quad_uvs((0, 1), (vmin, vmax))
+    umax > 1 && ((umin, umax) = (umin - (umax - 1), 1.0))
+    umin < 0 && ((umin, umax) = (0.0, umax + (0 - umin)))
+    vmax > 1 && ((vmin, vmax) = (vmin - (vmax - 1), 1.0))
+    vmin < 0 && ((vmin, vmax) = (0.0, vmax + (0 - vmin)))
+    generate_quad_uvs((umin, umax), (vmin, vmax))
   else
     # The geometry is thinner than the image.
     # The image will be cropped horizontally.
     ratio = geometry_aspect_ratio / image_aspect_ratio
-    umin, umax = focus.x .+ (-ratio, ratio) ./ 2
+    umin, umax = focus.x .+ (-ratio, ratio) .* zoom
+    vmin, vmax = focus.y .+ (-zoom, zoom)
     @assert umin ≥ 0 || umax ≤ 1
-    umax > 1 && ((umin, umax) = (umin - (1 - umax), 1.0))
-    umin < 0 && ((umin, umax) = (0.0, umax + (0 - umin), 1.0))
-    generate_quad_uvs((umin, umax), (0, 1))
+    @assert vmin ≥ 0 || vmax ≤ 1
+    umax > 1 && ((umin, umax) = (umin - (umax - 1), 1.0))
+    umin < 0 && ((umin, umax) = (0.0, umax + (0 - umin)))
+    vmax > 1 && ((vmin, vmax) = (vmin - (vmax - 1), 1.0))
+    vmin < 0 && ((vmin, vmax) = (0.0, vmax + (0 - vmin)))
+    generate_quad_uvs((umin, umax), (vmin, vmax))
   end
 end
 
