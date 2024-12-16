@@ -455,6 +455,13 @@ Alignment{O}(direction::Symbol, target) where {O} = Alignment{O}(Direction(direc
   SPACING_TARGET_AVERAGE = 3
 end
 
+function SpacingAmount(name::Symbol)
+  names = (:minimum, :maximum, :average)
+  i = findfirst(==(name), names)
+  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
+  SpacingAmount(i)
+end
+
 """
 Specify which notion of distance to use for spacing out objects.
 
@@ -484,6 +491,7 @@ struct Spacing
   Spacing(direction::Direction, amount::Real, mode) = new(direction, convert(Float64, amount), mode)
   Spacing(direction::Direction, amount::SpacingAmount, mode) = new(direction, amount, mode)
 end
+Spacing(direction::Direction, amount::Symbol, mode) = Spacing(direction, SpacingAmount(amount), mode)
 Spacing(direction::Symbol, amount, mode) = Spacing(Direction(direction), amount, mode)
 Spacing(direction, amount, mode::Symbol) = Spacing(direction, amount, SpacingMode(mode))
 Spacing(direction::Symbol, amount, mode::Symbol) = Spacing(Direction(direction), amount, SpacingMode(mode))
@@ -586,18 +594,26 @@ end
 function compute_spacing(engine::LayoutEngine, operation::Operation)
   @assert operation.type == OPERATION_TYPE_DISTRIBUTE
   (; spacing) = operation
-  objects = operation.on
-  xs, ys = @view(objects[1:(end - 1)]), @view(objects[2:end])
-  i = 3 - Int64(spacing.direction)
-  edges = ((:left, :right), (:top, :bottom))[i]
   if isa(spacing.amount, Float64)
     value = spacing.amount
   else
-    spacings = coordinate_type(engine)[]
-    for (x, y) in zip(xs, ys)
-      xc = get_coordinates(engine, at(engine, y, :edge, edges[1])).a[i]
-      yc = get_coordinates(engine, at(engine, x, :edge, edges[2])).a[i]
-      push!(spacings, xc - yc)
+    objects = operation.on
+    xs, ys = @view(objects[1:(end - 1)]), @view(objects[2:end])
+    spacings = eltype(coordinate_type(engine))[]
+    i = 3 - Int64(spacing.direction)
+    if spacing.mode == SPACING_MODE_POINT
+      for (x, y) in zip(xs, ys)
+        xc = get_coordinates(engine, x)[i]
+        yc = get_coordinates(engine, y)[i]
+        push!(spacings, xc - yc)
+      end
+    else
+      edges = ((:left, :right), (:top, :bottom))[i]
+      for (x, y) in zip(xs, ys)
+        xc = get_coordinates(engine, at(engine, y, edges[1]))[i]
+        yc = get_coordinates(engine, at(engine, x, edges[2]))[i]
+        push!(spacings, xc - yc)
+      end
     end
     value = @match spacing.amount begin
       &SPACING_TARGET_MINIMUM => minimum(spacings)

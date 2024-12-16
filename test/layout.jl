@@ -242,6 +242,16 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       @test xs[1] == locations[1]
       @test xs[2] == P2(-17, locations[2].y)
       @test xs[3] == P2(-85, locations[3].y)
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      distribute!(engine, at.(objects, :right), :horizontal, :average, :point)
+      compute_layout!(engine)
+      xs = get_coordinates.(engine, objects)
+      @test xs ≠ locations
+      compute_layout!(engine)
+      @test get_coordinates.(engine, objects) == xs
     end
 
     @testset "Pinning" begin
