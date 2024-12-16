@@ -137,7 +137,7 @@ export
        place, place_after, align, distribute, pin, at, width, height, remove_layout_operations, put_behind, synchronize,
 
        is_release, @set_name, EntityID, new_entity, @get_widget,
-       observe!, @observable, @bind,
+       observe!, unobserve!, @observable, @bind,
        P2, P2f, Box
 
 end

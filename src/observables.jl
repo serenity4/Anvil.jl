@@ -39,6 +39,7 @@ macro observable(ex)
   quote
     $(esc(def))
     $(esc(:(Base.setproperty!)))(x::$name, name::Symbol, value) = setproperty_observed!(x, name, value)
+    $(esc(:(Base.propertynames)))(::Type{<:$name}) = $(Tuple(filter(≠(:field_callbacks), names)))
     $(esc(:($(@__MODULE__()).field_callbacks)))(x::$name) = x.field_callbacks
     $name
   end
@@ -92,6 +93,8 @@ function observe!(f, x, name)
   callbacks = field_callbacks(x)
   push!(get!(Vector{Any}, callbacks, name), f)
 end
+
+unobserve!(x) = empty!(field_callbacks(x))
 
 function find_struct(ex::Expr)
   isexpr(ex, :struct) && return ex
