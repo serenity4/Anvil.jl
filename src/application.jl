@@ -200,7 +200,7 @@ unset_widget(entity) = unset!(app.ecs, entity, WIDGET_COMPONENT_ID)
 get_window(entity) = app.ecs[entity, WINDOW_COMPONENT_ID, Window]
 set_window(entity, window::Window) = app.ecs[entity, WINDOW_COMPONENT_ID, Window] = window
 
-add_callback(f, entity, args...) = add_callback(entity, InputCallback(f, args...))
+add_callback(f, entity, args...; kwargs...) = add_callback(entity, InputCallback(f, args...); kwargs...)
 
 overlay(args...; kwargs...) = overlay!(app.systems.event.ui, args...; kwargs...)
 unoverlay(args...; kwargs...) = unoverlay!(app.systems.event.ui, args...; kwargs...)
