@@ -411,13 +411,13 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         text.value = "testing something here"
         left_click()
         synchronize()
-        press_key(:KP1)
+        press_key(:END)
         synchronize()
         @test text.edit.cursor_index == lastindex(text.edit.buffer)
         press_key(:BKSP; modifiers = CTRL_MODIFIER)
         synchronize()
         @test text.edit.buffer == "testing something "
-        press_key(:KP7)
+        press_key(:HOME)
         synchronize()
         @test text.edit.cursor_index == 0
         press_key(:RGHT)
@@ -439,7 +439,9 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         @test text.edit.buffer == " so "
         @test text.edit.cursor_index == 3
 
-        press_key(:AD01; modifiers = CTRL_MODIFIER)
+        left_click()
+        left_click()
+        left_click()
         press_key(:DELE)
         press_key(:AC02)
         press_key(:AD07)
@@ -460,7 +462,7 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
         left_click()
         synchronize()
         @test text.edit.cursor_index == 2
-        move_cursor(get_location(text) .+ (1.4, 0.1))
+        move_cursor(get_location(text) .+ (1.3, 0.1))
         # XXX: Dynamically set a shorter double-click period to avoid having to wait here.
         sleep(0.5)
         left_click(release = false)
