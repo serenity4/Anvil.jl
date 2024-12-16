@@ -62,6 +62,7 @@ function initialize(f::Optional{Function} = nothing; record_events::Bool = false
   set_location(window_id, zero(P2))
   set_geometry(window_id, window_geometry(window))
 
+  app.entity_pool = EntityPool(; limit = WINDOW_ENTITY_COUNTER[] - 1)
   systems = Systems(
     LayoutSystem(ecs),
     DrawingOrderSystem(),
@@ -69,7 +70,6 @@ function initialize(f::Optional{Function} = nothing; record_events::Bool = false
     EventSystem(EventQueue(wm; record_history = record_events), UserInterface(window)),
   )
   app.wm = wm
-  app.entity_pool = EntityPool(; limit = WINDOW_ENTITY_COUNTER[] - 1)
   app.window = window
   app.windows = Dict(window => window_id)
   app.systems = systems

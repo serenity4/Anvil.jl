@@ -143,18 +143,24 @@ struct UserInterface
   entities::Dictionary{InputArea, EntityID}
   areas::Dictionary{EntityID, InputArea}
   window::Window
+  root::EntityID
   bindings::KeyBindings
 end
 
 function UserInterface(window::Window)
   overlay = UIOverlay{Window}()
   bindings = KeyBindings()
-  bindings_area = InputArea(Box2(Point2(-Inf, -Inf), Point2(Inf, Inf)), 1000, _ -> true)
-  overlay!(overlay, window, bindings_area, KEY_PRESSED) do input
+  root = new_entity()
+  set_name(root, :root)
+  ui = UserInterface(overlay, Dictionary(), Dictionary(), window, root, bindings)
+  set_location(root, (0, 0))
+  set_geometry(root, (Inf, Inf))
+  set_z(root, Inf)
+  overlay!(ui, root, KEY_PRESSED) do input
     bound = execute_binding(bindings, input.event.key_event)
     !bound && propagate!(input)
   end
-  UserInterface(overlay, Dictionary(), Dictionary(), window, bindings)
+  ui
 end
 
 function InputArea(ui::UserInterface, entity)
@@ -170,9 +176,9 @@ function retrieve_input_area!(ui::UserInterface, entity::EntityID)
   end
 end
 
-function overlay(f, ui::UserInterface, entity, args...; options = OverlayOptions())
+function overlay!(f, ui::UserInterface, entity, args...; options = OverlayOptions())
   entity = convert(EntityID, entity)
-  overlay(ui, entity, InputCallback(f, args...; options))
+  overlay!(ui, entity, InputCallback(f, args...); options)
 end
 
 function overlay!(ui::UserInterface, entity, callback::InputCallback; options = OverlayOptions())
@@ -199,8 +205,8 @@ function unoverlay!(ui::UserInterface, entity, callback::InputCallback)
 end
 
 function Base.insert!(ui::UserInterface, entity::EntityID, area::InputArea)
-  ui.entities[area] = entity
-  ui.areas[entity] = area
+  insert!(ui.entities, area, entity)
+  insert!(ui.areas, entity, area)
 end
 
 function Base.delete!(ui::UserInterface, entity::EntityID)
@@ -263,9 +269,9 @@ pixel_to_metric(box::Box{2}) = Box(pixel_to_metric(box.min), pixel_to_metric(box
 
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
   event.type == WINDOW_RESIZED && (set_geometry(app.windows[event.window], window_geometry(event.window)))
-  event.type == WINDOW_CLOSED && return exit()
   update_overlays!(system, ecs)
   consume!(system.ui.overlay, event)
+  event.type == WINDOW_CLOSED && exit()
 end
 
 function update_overlays!(system::EventSystem, ecs::ECSDatabase)

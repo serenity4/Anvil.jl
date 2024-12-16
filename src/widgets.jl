@@ -26,8 +26,8 @@ end
 
 function new_widget(::Type{T}, args...) where {T<:Widget}
   entity = new_entity()
-  set_location(entity, zero(LocationComponent))
-  set_geometry(entity, Box2(zero(P2)))
+  set_location(entity, (0, 0))
+  set_geometry(entity, (0, 0))
   set_z(entity, 0)
   widget = T(entity, args...)
   set = INTERACTION_SET[]
