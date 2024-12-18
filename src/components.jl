@@ -10,6 +10,7 @@ const WINDOW_COMPONENT_ID = ComponentID(7) # Window
   RENDER_OBJECT_RECTANGLE = 1
   RENDER_OBJECT_IMAGE = 2
   RENDER_OBJECT_TEXT = 3
+  RENDER_OBJECT_USER_DEFINED = 4
 end
 
 struct RectangleVisual
@@ -157,6 +158,13 @@ function add_commands!(pass::TransparencyPass, commands::Vector{Vector{Command}}
   append!(pass.pass_2, commands[2])
 end
 
+struct UserDefinedRender
+  create_renderables!::Any
+  is_opaque::Bool
+end
+
+UserDefinedRender(f; is_opaque::Bool = false) = UserDefinedRender(f, is_opaque)
+
 function add_commands!(pass, program_cache::ProgramCache, component::RenderComponent, location, geometry, parameters::ShaderParameters)
   @switch component.type begin
     @case &RENDER_OBJECT_RECTANGLE
@@ -178,6 +186,10 @@ function add_commands!(pass, program_cache::ProgramCache, component::RenderCompo
     text = component.primitive_data::ShaderLibrary.Text
     parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
     add_commands!(pass, renderables(program_cache, text, parameters_ssaa, location))
+
+    @case &RENDER_OBJECT_USER_DEFINED
+    (; create_renderables!) = component.primitive_data::UserDefinedRender
+    create_renderables!(pass, program_cache, location, geometry, parameters)
   end
 end
 

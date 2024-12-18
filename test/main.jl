@@ -1,6 +1,6 @@
 using Anvil: Text, MENU_ITEM_COLOR, MENU_ITEM_ACTIVE_COLOR, exit
 using Lava: image_resource
-using ShaderLibrary: Sprite
+using ShaderLibrary: ShaderLibrary
 using LinearAlgebra: norm
 
 function save(state)
@@ -95,6 +95,17 @@ function generate_user_interface(state::ApplicationState)
   end
 
   place(save_button, left_column[end] |> at(3.0, -2.0))
+
+  @set_name my_object = new_entity()
+  set_location(my_object, (5, 5))
+  set_geometry(my_object, (3, 3))
+  set_render(my_object; is_opaque = true) do pass, program_cache, location, geometry, parameters
+    vertex_data = ShaderLibrary.Vec3[(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0)]
+    rect = ShaderLibrary.Rectangle(geometry, vertex_data, nothing)
+    primitive = ShaderLibrary.Primitive(rect, location)
+    command = ShaderLibrary.Command(program_cache, ShaderLibrary.Gradient(), parameters, primitive)
+    push!(pass, command)
+  end
 end
 
 on_active(widget) = active -> widget.color = ifelse(active, MENU_ITEM_ACTIVE_COLOR, MENU_ITEM_COLOR)

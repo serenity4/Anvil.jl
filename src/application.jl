@@ -186,6 +186,8 @@ unset_z(entity) = unset!(app.ecs, entity, ZCOORDINATE_COMPONENT_ID)
 has_z(entity) = haskey(app.ecs, entity, ZCOORDINATE_COMPONENT_ID)
 get_render(entity) = app.ecs[entity, RENDER_COMPONENT_ID, RenderComponent]
 set_render(entity, render::RenderComponent) = app.ecs[entity, RENDER_COMPONENT_ID, RenderComponent] = render
+set_render(entity, render::UserDefinedRender) = set_render(entity, RenderComponent(RENDER_OBJECT_USER_DEFINED, nothing, render; render.is_opaque))
+set_render(f, entity; is_opaque::Bool = false) = set_render(entity, UserDefinedRender(f; is_opaque))
 has_render(entity) = haskey(app.ecs, entity, RENDER_COMPONENT_ID)
 unset_render(entity) = unset!(app.ecs, entity, RENDER_COMPONENT_ID)
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID, WidgetComponent]
