@@ -84,8 +84,8 @@ function image_uvs(geometry, mode::ImageModeTiled, visual::ImageVisual)
 end
 
 function image_uvs(geometry, mode::ImageModeCropped, visual::ImageVisual)
-  (; image) = visual.sprite.texture
-  image_width, image_height = dimensions(image)
+  (; resource) = visual.sprite.texture
+  image_width, image_height = dimensions(resource)
   focus = @something(mode.focus, Vec(0.5, 0.5))
   @reset focus.y = 1 - focus.y
   zoom = 0.5 / something(mode.zoom, 1.0)
