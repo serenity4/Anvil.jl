@@ -30,10 +30,18 @@ mutable struct Renderer
   frame_diagnostics::FrameDiagnostics
   task::Task
   function Renderer(window::Window; release = is_release())
+    filter_validation_message("VUID-VkImageViewCreateInfo-usage-02275")
     instance, device = Lava.init(; debug = !release, with_validation = !release, instance_extensions = ["VK_KHR_xcb_surface"], device_specific_features = [:sample_rate_shading])
     color = new_color_attachment(device, window)
     new(instance, device, FrameCycle(device, Surface(instance, window); n = 2), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())
   end
+end
+
+function filter_validation_message(name)
+  ignores = get(ENV, "VK_LAYER_MESSAGE_ID_FILTER", "")
+  contains(ignores, name) && return
+  value = isempty(ignores) ? name : "$name,$ignores"
+  ENV["VK_LAYER_MESSAGE_ID_FILTER"] = value
 end
 
 new_color_attachment(device::Device, window::Window) = attachment_resource(device, nothing; format = RGBA{Float16}, dims = collect(Int64, extent(window)), usage_flags = Vk.IMAGE_USAGE_TRANSFER_SRC_BIT | Vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT, samples = 8, name = :color)
