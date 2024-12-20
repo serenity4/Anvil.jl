@@ -180,6 +180,8 @@ function add_commands!(pass, program_cache::ProgramCache, component::RenderCompo
     rect = ShaderLibrary.Rectangle(geometry, uvs, nothing)
     primitive = Primitive(rect, location)
     command = Command(program_cache, render.sprite, parameters, primitive)
+    parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
+    command = Command(program_cache, render.sprite, parameters_ssaa, primitive)
     add_command!(pass, command)
 
     @case &RENDER_OBJECT_TEXT
