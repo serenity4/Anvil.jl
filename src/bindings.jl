@@ -90,15 +90,14 @@ function unbind!(kb::KeyBindings, token::KeyBindingsToken)
   delete!(kb.bindings, token)
   for (key, callable) in bindings
     active = get(kb.active, key, nothing)
-    if !isnothing(active)
-      prev = get(kb.inactive, key, nothing)
-      if !isnothing(prev) && !isempty(prev)
-        kb.active[key] = pop!(prev)
+    inactive = get(kb.inactive, key, nothing)
+    if !isnothing(active) && in(key => active, bindings)
+      if !isnothing(inactive) && !isempty(inactive)
+        kb.active[key] = pop!(inactive)
       else
         delete!(kb.active, key)
       end
     end
-    inactive = get(kb.inactive, key, nothing)
     if !isnothing(inactive)
       i = findfirst(==(callable), inactive)
       !isnothing(i) && deleteat!(inactive, i)

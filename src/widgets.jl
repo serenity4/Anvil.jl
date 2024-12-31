@@ -322,7 +322,9 @@ mutable struct TextEditState
     end
 
     edit.shortcuts = nothing
-    edit.typing_overlay = new_entity()
+    # Use the root overlay for this, to avoid having multiple
+    # entities competing while all having an infinite Z index.
+    edit.typing_overlay = app.systems.event.ui.root
 
     finalizer(stop_editing!, edit)
   end
@@ -331,9 +333,6 @@ end
 function start_editing!(edit::TextEditState)
   edit.buffer = deepcopy(edit.text.value)
   register_shortcuts!(edit)
-  set_location(edit.typing_overlay, (0, 0))
-  set_geometry(edit.typing_overlay, (Inf, Inf))
-  set_z(edit.typing_overlay, Inf)
   remove_callback(edit.text, edit.edit_on_select)
   add_callback(edit.text, edit.select_cursor; drag_threshold = 0.1)
   add_callback(edit.typing_overlay, edit.character_input)
@@ -345,9 +344,6 @@ end
 function stop_editing!(edit::TextEditState)
   isnothing(edit.buffer) && !edit.pending && return
   unregister_shortcuts!(edit)
-  unset_location(edit.typing_overlay)
-  unset_geometry(edit.typing_overlay)
-  unset_z(edit.typing_overlay)
   add_callback(edit.text, edit.edit_on_select)
   remove_callback(edit.text, edit.select_cursor)
   remove_callback(edit.typing_overlay, edit.stop_on_foreign_selection)

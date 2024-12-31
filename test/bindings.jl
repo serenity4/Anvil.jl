@@ -10,9 +10,10 @@ key_event(key::Symbol) = KeyEvent(km, PhysicalKey(km, key))
 @testset "Key bindings" begin
   kb = KeyBindings()
   @test isempty(kb)
-  placeholder() = () -> nothing
+  # Create a Ref to generate a unique closure every time.
+  placeholder() = let x = Ref(nothing); () -> x; end
 
-  token = bind!(kb, key"f" => placeholder)
+  token = bind!(kb, key"f" => placeholder())
   @test token == 1
   @test length(kb.active) == 1
   @test length(kb.inactive) == 0
@@ -28,20 +29,25 @@ key_event(key::Symbol) = KeyEvent(km, PhysicalKey(km, key))
   end
   @test isempty(kb)
 
-  token = bind!(kb, key"f" => placeholder, [key"g", key")"] => placeholder)
-  token2 = bind!(kb, key"g" => placeholder)
+  a = placeholder()
+  b = placeholder()
+  token = bind!(kb, key"f" => placeholder(), [key"g", key")"] => a)
+  @test kb.active[key"g"] === a
+  token2 = bind!(kb, key"g" => b)
+  @test kb.active[key"g"] === b
   @test execute_binding(kb, key_event(:AC04))
   @test execute_binding(kb, key_event(:AC05))
   @test execute_binding(kb, key_event(:AE11))
 
   unbind!(kb, token)
+  @test kb.active[key"g"] === b
   @test !execute_binding(kb, key_event(:AC04))
   @test execute_binding(kb, key_event(:AC05))
 
   unbind!(kb, token2)
   @test isempty(kb)
 
-  token = bind!(kb, key"ctrl+q" => placeholder)
+  token = bind!(kb, key"ctrl+q" => placeholder())
   @test execute_binding(kb, KeyEvent(:AC01, KeySymbol(:q), '\0', CTRL_MODIFIER))
   @test execute_binding(kb, KeyEvent(:AC01, KeySymbol(:q), '\0', CTRL_MODIFIER, MOD2_MODIFIER | LOCK_MODIFIER))
   @test !execute_binding(kb, KeyEvent(:AC01, KeySymbol(:q), '\0', CTRL_MODIFIER, CTRL_MODIFIER))
@@ -49,13 +55,13 @@ key_event(key::Symbol) = KeyEvent(km, PhysicalKey(km, key))
   @test !execute_binding(kb, KeyEvent(:AC01, KeySymbol(:Q), '\0', CTRL_MODIFIER | SHIFT_MODIFIER, CTRL_MODIFIER | SHIFT_MODIFIER))
   unbind!(kb, token)
 
-  token = bind!(kb, key")" => placeholder)
+  token = bind!(kb, key")" => placeholder())
   @test execute_binding(kb, KeyEvent(:AE11, KeySymbol(')'), ')'))
   @test !execute_binding(kb, KeyEvent(:AE11, KeySymbol(')'), ')', SHIFT_MODIFIER))
   @test execute_binding(kb, KeyEvent(:AE10, KeySymbol(')'), ')', SHIFT_MODIFIER, SHIFT_MODIFIER))
   unbind!(kb, token)
 
-  token = bind!(kb, key"shift+)" => placeholder)
+  token = bind!(kb, key"shift+)" => placeholder())
   @test !execute_binding(kb, KeyEvent(:AE11, KeySymbol(')'), ')'))
   @test execute_binding(kb, KeyEvent(:AE11, KeySymbol(')'), ')', SHIFT_MODIFIER))
   @test execute_binding(kb, KeyEvent(:AE10, KeySymbol(')'), ')', SHIFT_MODIFIER, SHIFT_MODIFIER))

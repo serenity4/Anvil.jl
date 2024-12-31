@@ -55,6 +55,7 @@ function ((; behind)::DrawingOrderSystem)(ecs::ECSDatabase)
   for id in components(ecs, ENTITY_COMPONENT_ID, EntityID)
     # Do not process objects whose z-coordinate will depend on other objects first.
     haskey(behind, id) && continue
+    has_z(id) && isinf(get_z(id)) && continue
     n = reinterpret(UInt32, id)
     z = Float32(n)
     set_z(id, z)
