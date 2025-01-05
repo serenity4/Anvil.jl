@@ -25,25 +25,32 @@ struct DrawingOrderSystem <: System
   `A` was specified as behind `C` *before* `B`.
   """
   behind::Dictionary{EntityID, EntityID}
+  in_front::Dictionary{EntityID, EntityID}
 end
-DrawingOrderSystem() = DrawingOrderSystem(Dictionary())
+DrawingOrderSystem() = DrawingOrderSystem(Dictionary(), Dictionary())
 
 put_behind!(drawing_order::DrawingOrderSystem, behind, of) = set!(drawing_order.behind, convert(EntityID, behind), of)
+put_in_front!(drawing_order::DrawingOrderSystem, in_front, of) = set!(drawing_order.in_front, convert(EntityID, in_front), of)
 
-function drawing_order_graph(behind)
+function drawing_order_graph(behind, in_front)
   g = SimpleDiGraph{Int64}()
   node_indices = Dict{EntityID, Int64}()
   entities = Dict{Int64, EntityID}()
-  for (id, in_front) in pairs(behind)
-    v = get!(node_indices, in_front) do
+  get_vertex!(i) = get!(node_indices, i) do
       Graphs.add_vertex!(g)
       Graphs.nv(g)
     end
-    entities[v] = in_front
-    w = get!(node_indices, id) do
-      Graphs.add_vertex!(g)
-      Graphs.nv(g)
-    end
+  for (id, front) in pairs(behind)
+    v = get_vertex!(front)
+    entities[v] = front
+    w = get_vertex!(id)
+    entities[w] = id
+    Graphs.add_edge!(g, v, w)
+  end
+  for (front, id) in pairs(in_front)
+    v = get_vertex!(front)
+    entities[v] = front
+    w = get_vertex!(id)
     entities[w] = id
     Graphs.add_edge!(g, v, w)
   end
@@ -51,28 +58,21 @@ function drawing_order_graph(behind)
   g, entities
 end
 
-function ((; behind)::DrawingOrderSystem)(ecs::ECSDatabase)
-  for id in components(ecs, ENTITY_COMPONENT_ID, EntityID)
+function ((; behind, in_front)::DrawingOrderSystem)(ecs::ECSDatabase)
+  for entity in components(ecs, ENTITY_COMPONENT_ID, EntityID)
     # Do not process objects whose z-coordinate will depend on other objects first.
-    haskey(behind, id) && continue
-    has_z(id) && isinf(get_z(id)) && continue
-    n = reinterpret(UInt32, id)
+    haskey(behind, entity) && continue
+    haskey(in_front, entity) && continue
+    has_z(entity) && isinf(get_z(entity)) && continue
+    n = reinterpret(UInt32, entity)
     z = Float32(n)
-    set_z(id, z)
+    set_z(entity, z)
   end
-  g, entities = drawing_order_graph(behind)
-  for v in topological_sort(g)
-    in_front = entities[v]
-    z_front = get_z(in_front)
-    prev = z_front
-    for w in outneighbors(g, v)
-      id = entities[w]
-      n = reinterpret(UInt32, id)
-      has_z(in_front) || error("Object $id has been placed behind object $in_front, but $in_front has no assigned Z component.")
-      z_behind = prevfloat(prev, 100)
-      set_z(id, z_behind)
-      prev = z_behind
-    end
+  g, entities = drawing_order_graph(behind, in_front)
+  vs = topological_sort(g)
+  for (i, v) in enumerate(reverse(vs))
+    entity = entities[v]
+    set_z(entity, i)
   end
 end
 
@@ -173,7 +173,7 @@ retrieve_input_area!(ui::UserInterface, entity) = retrieve_input_area!(ui, conve
 
 function retrieve_input_area!(ui::UserInterface, entity::EntityID)
   get!(ui.areas, entity) do
-    InputArea(geometry(0, 0), 0, () -> false)
+    InputArea(geometry(0, 0), 0, p -> false)
   end
 end
 

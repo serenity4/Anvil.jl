@@ -232,12 +232,12 @@ function GeometryExperiments.boundingelement(engine::LayoutEngine, group::Group)
   geometry = get_geometry(engine, object) + get_position(engine, object)
   foldl((x, y) -> boundingelement(x, get_geometry(engine, y) + get_position(engine, y)), objects; init = geometry)::geometry_type(engine)
 end
- 
+
 function get_geometry(engine::LayoutEngine, group::Group)
   geometry = boundingelement(engine, group)
   geometry - centroid(geometry)
 end
- 
+
 get_relative_coordinates(engine::LayoutEngine, group::Group) = get(engine.group_positions, group, zero(position_type(engine)))
 function set_position!(engine::LayoutEngine, group::Group, position)
   offset = position .- get_position(engine, group)

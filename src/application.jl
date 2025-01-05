@@ -220,6 +220,7 @@ bind(bindings::AbstractVector) = bind!(app.systems.event.ui.bindings, bindings)
 unbind(token) = unbind!(app.systems.event.ui.bindings, token)
 
 put_behind(behind, of) = put_behind!(app.systems.drawing_order, behind, of)
+put_in_front(in_front, of) = put_in_front!(app.systems.drawing_order, in_front, of)
 
 Group(object, objects...) = Group(app.systems.layout.engine, object, objects...)
 place(object, onto) = place!(app.systems.layout.engine, object, onto)

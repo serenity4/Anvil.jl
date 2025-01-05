@@ -79,10 +79,9 @@ end
 
 function delete_widget(widget::WidgetID)
   disable!(widget)
-  unset_z(widget)
-  unset_location(widget)
-  unset_geometry(widget)
-  unset_widget(widget)
+  unset!(app.systems.drawing_order.behind, widget)
+  unset!(app.systems.drawing_order.in_front, widget)
+  delete!(app.ecs, widget)
 end
 
 function set_name(widget::Widget, name::Symbol)

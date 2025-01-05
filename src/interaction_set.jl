@@ -82,13 +82,11 @@ end
 "Call `f()` using the provided interaction set, then restore the original set."
 function use_interaction_set(f, set::InteractionSet)
   old = use_interaction_set(set)
-  local ret
   try
-    ret = f()
+    f()
   finally
     use_interaction_set(old)
   end
-  ret
 end
 
 "Return the interaction set currently in use."
