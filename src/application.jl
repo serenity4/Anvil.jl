@@ -177,7 +177,9 @@ get_location(entity) = app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent]
 set_location(entity, location) = app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent] = location
 unset_location(entity) = unset!(app.ecs, entity, LOCATION_COMPONENT_ID)
 get_geometry(entity) = app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent]
+get_bounding_box(entity) = get_geometry(entity).aabb
 set_geometry(entity, geometry::GeometryComponent) = app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent] = geometry
+set_geometry(entity, geometry) = set_geometry(entity, GeometryComponent(geometry))
 set_geometry(entity, (width, height)::Tuple) = set_geometry(entity, geometry(width, height))
 unset_geometry(entity) = unset!(app.ecs, entity, GEOMETRY_COMPONENT_ID)
 get_z(entity) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID, ZCoordinateComponent]
@@ -222,7 +224,7 @@ unbind(token) = unbind!(app.systems.event.ui.bindings, token)
 put_behind(behind, of) = put_behind!(app.systems.drawing_order, behind, of)
 put_in_front(in_front, of) = put_in_front!(app.systems.drawing_order, in_front, of)
 
-Group(object, objects...) = Group(app.systems.layout.engine, object, objects...)
+Layout.Group(object, objects...) = Group(app.systems.layout.engine, object, objects...)
 place(object, onto) = place!(app.systems.layout.engine, object, onto)
 place_after(object, onto; kwargs...) = place_after!(app.systems.layout.engine, object, onto; kwargs...)
 align(objects, direction, target) = align!(app.systems.layout.engine, objects, direction, target)

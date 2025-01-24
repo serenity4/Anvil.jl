@@ -122,7 +122,6 @@ function image_uvs(geometry, mode::ImageModeCropped, visual::ImageVisual)
 end
 
 const LocationComponent = P2
-const GeometryComponent = Box2
 const ZCoordinateComponent = Float32
 
 struct RenderComponent
@@ -165,10 +164,10 @@ end
 
 UserDefinedRender(f; is_opaque::Bool = false) = UserDefinedRender(f, is_opaque)
 
-function add_commands!(pass, program_cache::ProgramCache, component::RenderComponent, location, geometry, parameters::ShaderParameters)
+function add_commands!(pass, program_cache::ProgramCache, component::RenderComponent, location, geometry::GeometryComponent, parameters::ShaderParameters)
   @switch component.type begin
     @case &RENDER_OBJECT_RECTANGLE
-    rect = ShaderLibrary.Rectangle(geometry, component.vertex_data, nothing)
+    rect = ShaderLibrary.Rectangle(geometry.rectangle, component.vertex_data, nothing)
     gradient = component.primitive_data::Gradient
     primitive = Primitive(rect, location)
     command = Command(program_cache, gradient, parameters, primitive)
@@ -176,10 +175,9 @@ function add_commands!(pass, program_cache::ProgramCache, component::RenderCompo
 
     @case &RENDER_OBJECT_IMAGE
     render = component.primitive_data::ImageVisual
-    uvs = image_uvs(geometry, render)
-    rect = ShaderLibrary.Rectangle(geometry, uvs, nothing)
+    uvs = image_uvs(geometry.aabb, render)
+    rect = ShaderLibrary.Rectangle(geometry.aabb, uvs, nothing)
     primitive = Primitive(rect, location)
-    command = Command(program_cache, render.sprite, parameters, primitive)
     parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
     command = Command(program_cache, render.sprite, parameters_ssaa, primitive)
     add_command!(pass, command)

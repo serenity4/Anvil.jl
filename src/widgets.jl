@@ -129,16 +129,16 @@ end
 constituents(widget::Widget) = Widget[]
 
 @widget struct Rectangle
-  geometry::GeometryComponent
+  geometry::Box2
   visual::Union{ImageVisual, RectangleVisual}
 end
 
-Rectangle(geometry::GeometryComponent, visual::Union{ImageVisual, RectangleVisual}) = new_widget(Rectangle, geometry, visual)
+Rectangle(geometry::Box2, visual::Union{ImageVisual, RectangleVisual}) = new_widget(Rectangle, geometry, visual)
 Rectangle((width, height)::Tuple, args...) = Rectangle(geometry(width, height), args...)
 
-Rectangle(geometry::GeometryComponent, color::Colorant) = Rectangle(geometry, RectangleVisual(color))
-Rectangle(geometry::GeometryComponent, image::Texture, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, ImageVisual(image, parameters))
-Rectangle(geometry::GeometryComponent, data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, texture(data), parameters)
+Rectangle(geometry::Box2, color::Colorant) = Rectangle(geometry, RectangleVisual(color))
+Rectangle(geometry::Box2, image::Texture, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, ImageVisual(image, parameters))
+Rectangle(geometry::Box2, data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, texture(data), parameters)
 Rectangle(data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters(); scale = 1.0) = Rectangle(texture(data), parameters; scale)
 function Rectangle(image::Texture, parameters::ImageParameters = ImageParameters(); scale = 1.0)
   width, height = dimensions(image) .* scale .* 0.001
@@ -354,7 +354,7 @@ end
 
 function select_at_cursor!(edit::TextEditState, input::Input)
   location = get_location(edit.text)
-  geometry = get_geometry(edit.text)
+  geometry = get_bounding_box(edit.text)
   origin = geometry.bottom_left .+ location
   i = cursor_index(edit.buffer, edit.text.lines, input.event.location .- origin)
   clear_selection!(edit)
@@ -363,7 +363,7 @@ end
 
 function select_at_selection!(edit::TextEditState, input::Input)
   location = get_location(edit.text)
-  geometry = get_geometry(edit.text)
+  geometry = get_bounding_box(edit.text)
   origin = geometry.bottom_left .+ location
   area, event = input.drag
   i = cursor_index(edit.buffer, edit.text.lines, input.source.event.location .- origin)
@@ -455,7 +455,7 @@ function display_cursor!(edit::TextEditState)
   # TODO: Implement a substitution-aware mapping.
   glyph_index = edit.cursor_index
   location = get_location(edit.text)
-  geometry = get_geometry(edit.text)
+  geometry = get_bounding_box(edit.text)
   origin = geometry.bottom_left .+ location
   # XXX: Remove this visual hack and actually address the vertical position issue.
   origin = origin .+ P2(0, 0.15)
@@ -763,15 +763,11 @@ end
 function synchronize(button::Button)
   add_callback(input -> is_left_click(input) && button.on_input(input), button, BUTTON_PRESSED)
   isnothing(button.text) && return
+  put_behind(button.text, button)
   put_behind(button.background, button.text)
   set_geometry(button, get_geometry(button.background))
   place(button.background, button)
   place(button.text |> at(:center) |> at(0.0, -0.08), button)
-end
-
-function put_behind(button::Button, of)
-  put_behind(button.text, of)
-  put_behind(button.id, button.text)
 end
 
 @widget struct Checkbox

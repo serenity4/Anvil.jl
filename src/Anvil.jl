@@ -65,6 +65,7 @@ const P2f = Point2f
 const WidgetID = EntityID
 
 include("renderer.jl")
+include("geometry.jl")
 include("components.jl")
 include("modules/Layout.jl")
 @reexport using .Layout
@@ -104,7 +105,9 @@ export
        execute, @execute,
 
        # Components.
-       RenderComponent, LocationComponent, GeometryComponent, ZCoordinateComponent,
+       RenderComponent, LocationComponent,
+       GeometryComponent, GeometryType, GEOMETRY_TYPE_RECTANGLE, GEOMETRY_TYPE_FILLED_CIRCLE, FilledCircle,
+       ZCoordinateComponent,
        ENTITY_COMPONENT_ID, RENDER_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID, WIDGET_COMPONENT_ID, WINDOW_COMPONENT_ID,
 
        RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT,

@@ -95,13 +95,14 @@ function generate_user_interface(state::ApplicationState)
   end
 
   place(save_button, left_column[end] |> at(3.0, -2.0))
+  put_in_front(save_button, side_panel)
 
   @set_name my_object = new_entity()
   set_location(my_object, (5, 5))
-  set_geometry(my_object, (3, 3))
+  set_geometry(my_object, FilledCircle(1.5))
   set_render(my_object; is_opaque = true) do pass, program_cache, location, geometry, parameters
     vertex_data = ShaderLibrary.Vec3[(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0)]
-    rect = ShaderLibrary.Rectangle(geometry, vertex_data, nothing)
+    rect = ShaderLibrary.Rectangle(geometry.aabb, vertex_data, nothing)
     primitive = ShaderLibrary.Primitive(rect, location)
     command = ShaderLibrary.Command(program_cache, ShaderLibrary.Gradient(), parameters, primitive)
     push!(pass, command)
@@ -115,6 +116,7 @@ generate_menu_item(f, text::AbstractString, dimensions; shortcut = nothing) = ge
 function generate_menu_item(f, text::Text, dimensions; shortcut = nothing)
   background = Rectangle(dimensions, MENU_ITEM_COLOR)
   place(at(text, :left), at(background, :left) |> at(0.2, 0.0))
+  put_in_front(text, background)
   MenuItem(f, background; text, on_active = on_active(background), shortcut)
 end
 

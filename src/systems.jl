@@ -87,14 +87,18 @@ end
 
 function (rendering::RenderingSystem)(ecs::ECSDatabase, target::Resource)
   nodes = RenderNode[]
-  depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, dimensions(target.attachment))
+  depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, dimensions(target.attachment); name = :depth)
   color_clear = [ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1f0))]
   camera = camera_metric_to_viewport(target, rendering.renderer.frame_cycle.swapchain.surface.target)
   parameters = ShaderParameters(target; depth, color_clear, camera)
-  @reset parameters.depth_clear = ClearValue(1f0)
+  @reset parameters.depth_clear = 1f0
+  compute_depth_mask_for_opaque_objects!(nodes, rendering, ecs, parameters)
+  !isempty(nodes) && @reset parameters.depth_clear = nothing
   render_opaque_objects!(nodes, rendering, ecs, parameters)
+  @reset parameters.depth_clear = nothing
   @reset parameters.color_clear[1] = nothing
   @reset parameters.render_state.enable_depth_write = false
+  # compute_depth_mask_for_transparent_objects!(nodes, rendering, ecs, parameters)
   render_transparent_objects!(nodes, rendering, ecs, parameters)
   nodes
 end
@@ -118,11 +122,34 @@ function physical_size(window::Window)
   window_dimensions .* physical_scale
 end
 
+function compute_depth_mask_for_opaque_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
+  (; program_cache) = renderer
+  commands = Command[]
+  @reset parameters.render_state.enable_fragment_supersampling = true
+  for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+    object.is_opaque || continue
+    geometry.type == GEOMETRY_TYPE_RECTANGLE && continue
+    center = location
+    location = Point3f(location..., -1/z)
+    @switch geometry.type begin
+      @case &GEOMETRY_TYPE_FILLED_CIRCLE
+      (; circle) = geometry
+      shader = FragmentLocationTest(p -> in(p - center, circle))
+      rect = ShaderLibrary.Rectangle(geometry.aabb, nothing, nothing)
+      primitive = Primitive(rect, location)
+      command = Command(program_cache, shader, parameters, primitive)
+      add_command!(commands, command)
+    end
+  end
+  !isempty(commands) && push!(nodes, RenderNode(commands))
+end
+
 function render_opaque_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
   commands = Command[]
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
     object.is_opaque || continue
     location = Point3f(location..., -1/z)
+    @reset parameters.render_state.depth_compare_op = ifelse(geometry.type ≠ GEOMETRY_TYPE_RECTANGLE, Vk.COMPARE_OP_EQUAL, Vk.COMPARE_OP_LESS_OR_EQUAL)
     add_commands!(commands, renderer.program_cache, object, location, geometry, parameters)
   end
   !isempty(commands) && push!(nodes, RenderNode(commands))
@@ -280,7 +307,7 @@ function update_overlays!(system::EventSystem, ecs::ECSDatabase)
     location = get_location(entity)
     geometry = get_geometry(entity)
     z = get_z(entity)
-    area.aabb = geometry
+    area.aabb = geometry.aabb
     area.z = z
     area.contains = x -> in(x .- location, geometry)
   end
