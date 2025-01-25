@@ -160,10 +160,6 @@ end
 function render_transparent_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
   pass = TransparencyPass()
   data = components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
-  # XXX: Sorting transparent objects may not be sufficient,
-  # because draw order is based on flushing order for command batches,
-  # not on command recording order.
-  sort!(data, by = last, rev = true)
   for (location, geometry, object, z) in data
     object.is_opaque && continue
     location = Point3f(location..., -1/z)
