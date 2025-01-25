@@ -1,4 +1,4 @@
-using Anvil: Text, MENU_ITEM_COLOR, MENU_ITEM_ACTIVE_COLOR, exit
+using Anvil: Text, MENU_ITEM_COLOR, MENU_ITEM_ACTIVE_COLOR, exit, add_command!, RenderComponent, RectangleVisual
 using Lava: image_resource
 using ShaderLibrary: ShaderLibrary
 using LinearAlgebra: norm
@@ -77,11 +77,11 @@ function generate_user_interface(state::ApplicationState)
 
   place(side_panel |> at(:left), image |> at(:right))
 
-  @set_name node_name_text = Text("Name")
-  @set_name node_name_value = Text("Value"; editable = true)
-  @set_name node_color_text = Text("Color")
+  @set_name node_name_text = Text(styled"{color=#ffbb00:Name}")
+  @set_name node_name_value = Text(styled"{background=#ffbb0022,color=magenta:Value}"; editable = true)
+  @set_name node_color_text = Text(styled"{color=#ffbb00:Color}")
   @set_name node_color_value = Rectangle((1.0, 0.4), RGBA(0.3, 0.2, 0.9, 0.2))
-  @set_name node_hide_text = Text("Hide")
+  @set_name node_hide_text = Text(styled"{color=#ffbb00:Hide}")
   @set_name node_hide_value = Checkbox(_ -> nothing)
   left_column = [node_name_text, node_color_text, node_hide_text]
   right_column = [node_name_value, node_color_value, node_hide_value]
@@ -105,8 +105,20 @@ function generate_user_interface(state::ApplicationState)
     rect = ShaderLibrary.Rectangle(geometry.aabb, vertex_data, nothing)
     primitive = ShaderLibrary.Primitive(rect, location)
     command = ShaderLibrary.Command(program_cache, ShaderLibrary.Gradient(), parameters, primitive)
-    push!(pass, command)
+    add_command!(pass, command)
   end
+
+  @set_name my_transparent_object = new_entity()
+  set_location(my_transparent_object, (4.5, 4.5))
+  set_geometry(my_transparent_object, FilledCircle(1.5))
+  set_render(my_transparent_object, RenderComponent(RectangleVisual(RGBA(1, 0, 0, 0.3))))
+
+  # XXX: Make this object layer nicely on top of `my_transparent_object`,
+  # currently it just overrides it without blending.
+  @set_name my_transparent_object_2 = new_entity()
+  set_location(my_transparent_object_2, (3, 4.8))
+  set_geometry(my_transparent_object_2, FilledCircle(1.5))
+  set_render(my_transparent_object_2, RenderComponent(RectangleVisual(RGBA(1, 0.8, 0, 0.1))))
 end
 
 on_active(widget) = active -> widget.color = ifelse(active, MENU_ITEM_ACTIVE_COLOR, MENU_ITEM_COLOR)

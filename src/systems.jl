@@ -92,13 +92,15 @@ function (rendering::RenderingSystem)(ecs::ECSDatabase, target::Resource)
   camera = camera_metric_to_viewport(target, rendering.renderer.frame_cycle.swapchain.surface.target)
   parameters = ShaderParameters(target; depth, color_clear, camera)
   @reset parameters.depth_clear = 1f0
-  compute_depth_mask_for_opaque_objects!(nodes, rendering, ecs, parameters)
+  compute_depth_mask!(nodes, rendering, ecs, parameters; opaque = true)
   !isempty(nodes) && @reset parameters.depth_clear = nothing
   render_opaque_objects!(nodes, rendering, ecs, parameters)
   @reset parameters.depth_clear = nothing
   @reset parameters.color_clear[1] = nothing
+  !isempty(nodes) && @reset parameters.depth_clear = nothing
+  compute_depth_mask!(nodes, rendering, ecs, parameters; opaque = false)
+  !isempty(nodes) && @reset parameters.depth_clear = nothing
   @reset parameters.render_state.enable_depth_write = false
-  # compute_depth_mask_for_transparent_objects!(nodes, rendering, ecs, parameters)
   render_transparent_objects!(nodes, rendering, ecs, parameters)
   nodes
 end
@@ -122,12 +124,12 @@ function physical_size(window::Window)
   window_dimensions .* physical_scale
 end
 
-function compute_depth_mask_for_opaque_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
+function compute_depth_mask!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters; opaque::Bool)
   (; program_cache) = renderer
   commands = Command[]
   @reset parameters.render_state.enable_fragment_supersampling = true
   for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
-    object.is_opaque || continue
+    object.is_opaque == opaque || continue
     geometry.type == GEOMETRY_TYPE_RECTANGLE && continue
     center = location
     location = Point3f(location..., -1/z)
@@ -157,9 +159,15 @@ end
 
 function render_transparent_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
   pass = TransparencyPass()
-  for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+  data = components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+  # XXX: Sorting transparent objects may not be sufficient,
+  # because draw order is based on flushing order for command batches,
+  # not on command recording order.
+  sort!(data, by = last, rev = true)
+  for (location, geometry, object, z) in data
     object.is_opaque && continue
     location = Point3f(location..., -1/z)
+    @reset parameters.render_state.depth_compare_op = ifelse(geometry.type ≠ GEOMETRY_TYPE_RECTANGLE, Vk.COMPARE_OP_EQUAL, Vk.COMPARE_OP_LESS_OR_EQUAL)
     add_commands!(pass, renderer.program_cache, object, location, geometry, parameters)
   end
   !isempty(pass.pass_1) && push!(nodes, RenderNode(pass.pass_1))

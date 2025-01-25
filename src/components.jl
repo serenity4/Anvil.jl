@@ -140,6 +140,8 @@ RenderComponent(visual::RectangleVisual) = RenderComponent(RENDER_OBJECT_RECTANG
 RenderComponent(visual::ImageVisual) = RenderComponent(RENDER_OBJECT_IMAGE, nothing, visual; visual.parameters.is_opaque)
 
 add_command!(pass::Vector{Command}, command::Command) = push!(pass, command)
+add_commands!(pass::Vector{Command}, commands::Vector{Command}) = append!(pass, commands)
+add_commands!(pass::Vector{Command}, command_lists::Vector{Vector{Command}}) = foreach(commands -> add_commands!(pass, commands), command_lists)
 
 struct TransparencyPass
   pass_1::Vector{Command}
@@ -167,7 +169,7 @@ UserDefinedRender(f; is_opaque::Bool = false) = UserDefinedRender(f, is_opaque)
 function add_commands!(pass, program_cache::ProgramCache, component::RenderComponent, location, geometry::GeometryComponent, parameters::ShaderParameters)
   @switch component.type begin
     @case &RENDER_OBJECT_RECTANGLE
-    rect = ShaderLibrary.Rectangle(geometry.rectangle, component.vertex_data, nothing)
+    rect = ShaderLibrary.Rectangle(geometry.aabb, component.vertex_data, nothing)
     gradient = component.primitive_data::Gradient
     primitive = Primitive(rect, location)
     command = Command(program_cache, gradient, parameters, primitive)
@@ -185,6 +187,8 @@ function add_commands!(pass, program_cache::ProgramCache, component::RenderCompo
     @case &RENDER_OBJECT_TEXT
     text = component.primitive_data::ShaderLibrary.Text
     parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
+    # XXX: We may want to draw all opaque text backgrounds in the corresponding pass,
+    # not in the transparency pass.
     add_commands!(pass, renderables(program_cache, text, parameters_ssaa, location))
 
     @case &RENDER_OBJECT_USER_DEFINED
