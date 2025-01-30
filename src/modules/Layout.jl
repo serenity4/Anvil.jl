@@ -569,11 +569,9 @@ end
 function apply_place_operation(engine::LayoutEngine, operation::Operation, point)
   on = get_coordinates(engine, operation.on)
   to = get_coordinates(engine, operation.by)
-  displacement = place_operation_displacement(on, to)
+  displacement = to .- on
   point .+ displacement
 end
-
-place_operation_displacement(on, to) = to .- on
 
 function compute_alignment(engine::LayoutEngine, operation::Operation)
   @assert operation.type == OPERATION_TYPE_ALIGN
