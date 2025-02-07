@@ -78,6 +78,8 @@ struct Group{O}
   Group{O}(objects) where {O} = new{O}(convert(Vector{GroupElement{O}}, objects))
 end
 
+Base.broadcastable(group::Group) = Ref(group)
+
 function Base.getproperty(group::Group{O}, name::Symbol) where {O}
   name === :objects && return getfield(group, name)::Vector{GroupElement{O}}
   getfield(group, name)
@@ -93,6 +95,16 @@ end
 
 PositionalFeature(object, location::FeatureLocation) = PositionalFeature(object, location, nothing)
 
+Base.iterate(feature::PositionalFeature) = (feature, nothing)
+Base.iterate(feature::PositionalFeature, state) = nothing
+Base.broadcastable(feature::PositionalFeature) = Ref(feature)
+
+get_position(engine::LayoutEngine, feature::PositionalFeature) = get_coordinates(engine, feature)
+get_geometry(engine::LayoutEngine, feature::PositionalFeature) = get_geometry(engine, feature[])
+
+set_position!(engine::LayoutEngine, feature::PositionalFeature, position) = set_position!(engine, feature[], position .- get_relative_coordinates(engine, feature))
+set_geometry!(engine::LayoutEngine, feature::PositionalFeature, geometry) = set_geometry!(engine, feature[], geometry)
+
 function Base.getindex(feature::PositionalFeature{O}) where {O}
   (; object) = feature
   while isa(object, PositionalFeature{O})
@@ -103,45 +115,20 @@ end
 
 const GroupElement{O} = Union{O,Group{O}}
 
-@enum OperationType begin
-  OPERATION_TYPE_PLACE
-  OPERATION_TYPE_ALIGN
-  OPERATION_TYPE_DISTRIBUTE
-  OPERATION_TYPE_PIN
-end
-
-# TODO: Update docstrings.
-"Attach two features together, resulting in an identical position for both."
-OPERATION_TYPE_PLACE
-"""
-Position a set of features on a line along a [`Direction`](@ref), either along a horizontal (i.e. the vertical position is set to rest on a horizontal line) or along a vertical (the horizontal position is set to rest on a vertical line).
-"""
-OPERATION_TYPE_ALIGN
-"""
-Evenly space out a set of features along a [`Direction`](@ref).
-
-The notion of "space" may be defined with respect to points, or to geometries: either we talk about the distance between points, or about the distance between geometries.
-
-The desired spacing may be provided as a floating point value. However, for convenience, we also allow a [`SpacingAmount`](@ref) value, which will automatically compute the required spacing depending on the desired behavior.
-
-Automatic spacing includes taking the minimum, maximum or average of the distances between the provided features. Which notion of distance is used depends on the mode (see [`SpacingMode`](@ref)).
-
-Providing any positional feature for a [`SPACING_MODE_GEOMETRY`](@ref) mode will result in considering the geometry of associated objects to be offset by the relative offset between the feature and the center of the geometry. Therefore, the spacing will not appear even if any positional features are not positioned to the center of the objects.
-"""
-OPERATION_TYPE_DISTRIBUTE
-
 struct Operation{O}
-  type::OperationType
-  by::Optional{PositionalFeature{O}}
+  f!::Any #= Callable =#
+  by::Optional{Union{PositionalFeature{O}, Vector{PositionalFeature{O}}}}
   on::Union{PositionalFeature{O}, Vector{PositionalFeature{O}}}
-  data::Any
 end
 
-function Base.getproperty(operation::Operation{O}, name::Symbol) where {O}
-  name === :alignment && return getfield(operation, :data)::Alignment{O}
-  name === :spacing && return getfield(operation, :data)::Spacing
-  name === :pinning && return getfield(operation, :data)::PinningParameters
-  getfield(operation, name)
+broadcast_positional_feature(::Type{O}, object) where {O} = positional_feature(O, object)
+broadcast_positional_feature(::Type{O}, objects::AbstractVector) where {O} = positional_feature.(O, objects)
+
+function Operation(f!, engine, by, on)
+  O = object_type(engine)
+  !isnothing(by) && (by = broadcast_positional_feature(O, by))
+  on = broadcast_positional_feature(O, on)
+  Operation{O}(f!, by, on)
 end
 
 struct LayoutEngine{O,S<:LayoutStorage{O}}
@@ -166,15 +153,17 @@ end
 
 Base.broadcastable(engine::LayoutEngine) = Ref(engine)
 
-to_object(engine::LayoutEngine{O}, object::O) where {O} = object
-to_object(engine::LayoutEngine{O}, feature::PositionalFeature{O}) where {O} = feature
-to_object(engine::LayoutEngine{O}, group::Group{O}) where {O} = group
-to_object(engine::LayoutEngine{O}, object) where {O} = convert(O, object)
+to_object(::Type{O}, object::O) where {O} = object
+to_object(::Type{O}, feature::PositionalFeature{O}) where {O} = feature
+to_object(::Type{O}, group::Group{O}) where {O} = group
+to_object(::Type{O}, object) where {O} = convert(O, object)
+to_object(engine::LayoutEngine{O}, object) where {O} = to_object(O, object)
 
 positional_feature(::Type{O}, object::O) where {O} = PositionalFeature(object, FEATURE_LOCATION_ORIGIN)
 positional_feature(::Type{O}, group::Group{O}) where {O} = PositionalFeature(group, FEATURE_LOCATION_ORIGIN)
 positional_feature(::Type{O}, feature::PositionalFeature{O}) where {O} = feature
-positional_feature(engine::LayoutEngine{O}, object) where {O} = positional_feature(O, to_object(engine, object))
+positional_feature(::Type{O}, object) where {O} = positional_feature(O, to_object(O, object))
+positional_feature(engine::LayoutEngine{O}, object) where {O} = positional_feature(O, object)
 
 remove_operations!(engine::LayoutEngine) = empty!(engine.operations)
 function remove_operations!(engine::LayoutEngine{O}, object) where {O}
@@ -264,12 +253,6 @@ ArrayLayoutStorage{P,C,G}() where {P,C,G} = ArrayLayoutStorage{Int64,P,C,G}()
 ArrayLayoutStorage{O,P,C,G}() where {O,P,C,G} = ArrayLayoutStorage{O,P,C,G}(P[], G[])
 ArrayLayoutStorage(positions, geometries) = ArrayLayoutStorage{Int64}(positions, geometries)
 ArrayLayoutStorage{O}(positions::AbstractVector{P}, geometries::AbstractVector{G}) where {O,P,G} = ArrayLayoutStorage{O,P,P,G}(positions, geometries)
-
-function compute_layout!(engine::LayoutEngine{O}) where {O}
-  for operation in engine.operations
-    apply_operation!(engine, operation)
-  end
-end
 
 @enum Edge begin
   EDGE_LEFT = 1
@@ -380,6 +363,7 @@ function coordinates(geometry::Box{2}, corner::Corner)
     &CORNER_TOP_RIGHT => geometry.top_right
   end
 end
+
 function coordinates(geometry::Box{2,T}, edge::Edge) where {T}
   @match edge begin
     &EDGE_LEFT => 0.5 .* (geometry.bottom_left .+ geometry.top_left)
@@ -449,31 +433,6 @@ function Direction(name::Symbol)
   Direction(i)
 end
 
-@enum AlignmentTarget begin
-  ALIGNMENT_TARGET_MINIMUM = 1
-  ALIGNMENT_TARGET_MAXIMUM = 2
-  ALIGNMENT_TARGET_AVERAGE = 3
-end
-
-struct Alignment{O}
-  direction::Direction
-  target::Union{AlignmentTarget,PositionalFeature{O}}
-end
-Alignment{O}(direction::Symbol, target) where {O} = Alignment{O}(Direction(direction), target)
-
-@enum SpacingAmount begin
-  SPACING_TARGET_MINIMUM = 1
-  SPACING_TARGET_MAXIMUM = 2
-  SPACING_TARGET_AVERAGE = 3
-end
-
-function SpacingAmount(name::Symbol)
-  names = (:minimum, :maximum, :average)
-  i = findfirst(==(name), names)
-  isnothing(i) && throw(ArgumentError("Symbol `$name` must be one of $names"))
-  SpacingAmount(i)
-end
-
 """
 Specify which notion of distance to use for spacing out objects.
 
@@ -496,180 +455,135 @@ function SpacingMode(name::Symbol)
   SpacingMode(i)
 end
 
-struct Spacing
-  direction::Direction
-  amount::Union{Float64,SpacingAmount}
-  mode::SpacingMode
-  Spacing(direction::Direction, amount::Real, mode) = new(direction, convert(Float64, amount), mode)
-  Spacing(direction::Direction, amount::SpacingAmount, mode) = new(direction, amount, mode)
-end
-Spacing(direction::Direction, amount::Symbol, mode) = Spacing(direction, SpacingAmount(amount), mode)
-Spacing(direction::Symbol, amount, mode) = Spacing(Direction(direction), amount, mode)
-Spacing(direction, amount, mode::Symbol) = Spacing(direction, amount, SpacingMode(mode))
-Spacing(direction::Symbol, amount, mode::Symbol) = Spacing(Direction(direction), amount, SpacingMode(mode))
-
 function pinned_part(part::Symbol)
   in(part, (:left, :right, :bottom, :top)) && return Edge(part)
   in(part, (:bottom_left, :bottom_right, :top_left, :top_right)) && return Corner(part)
   throw(ArgumentError("Expected part to designate an edge or corner, got $part"))
 end
 
-struct PinningParameters
-  part::Union{Edge, Corner}
-  offset::Float64
-end
-
-function PinningParameters(part::Symbol, offset)
-  part = pinned_part(part)
-  PinningParameters(part, offset)
-end
-
 # Apply operations.
 
-function apply_operation!(engine::LayoutEngine{O}, operation::Operation) where {O}
-  @switch operation.type begin
-    @case &OPERATION_TYPE_PLACE
-    operand = operation.on::PositionalFeature{O}
-    old = get_position(engine, operand[])
-    new = set_coordinates(engine, old, apply_place_operation(engine, operation, coordinates(engine, old)))
-    old ≠ new && set_position!(engine, operand[], new)
+struct ObjectData{P,G}
+  index::Int
+  position::P
+  geometry::G
+end
 
-    @case &OPERATION_TYPE_ALIGN
-    alignment = compute_alignment(engine, operation)
-    for feature in operation.on
-      object = feature[]
-      old = get_position(engine, object)
-      new = apply_alignment(engine, operation, feature, alignment)
-      new ≠ old && set_position!(engine, object, new)
+ObjectData(engine, i, object) = ObjectData(i, get_position(engine, object), get_geometry(engine, object))
+
+get_position(object::ObjectData) = object.position
+get_geometry(object::ObjectData) = object.geometry
+
+set_position(object::ObjectData, position) = @set object.position = position
+set_geometry(object::ObjectData, geometry) = @set object.geometry = geometry
+
+function compute_layout!(engine::LayoutEngine)
+  P = position_type(engine)
+  G = geometry_type(engine)
+  inputs = ObjectData{P,G}[]
+  previous = ObjectData{P,G}[]
+  outputs = ObjectData{P,G}[]
+  for operation in engine.operations
+    empty!(inputs)
+    empty!(previous)
+    empty!(outputs)
+    if !isnothing(operation.by)
+      for (i, object) in enumerate(operation.by) push!(inputs, ObjectData(engine, i, object)) end
     end
-
-    @case &OPERATION_TYPE_DISTRIBUTE
-    spacing = compute_spacing(engine, operation)
-    operands = operation.on::Vector{PositionalFeature{O}}
-    isempty(operands) && return
-    reference = operands[1]
-    for feature in @view operands[2:end]
-      object = feature[]
-      old = get_position(engine, object)
-      new = apply_spacing(engine, operation, reference, feature, spacing)
-      new ≠ old && set_position!(engine, object, new)
-      reference = feature
+    for (i, object) in enumerate(operation.on) push!(outputs, ObjectData(engine, i, object)) end
+    append!(previous, outputs)
+    operation.f!(outputs, inputs)
+    length(previous) == length(outputs) || error("Illegal addition or deletion of objects detected during the call to a user-defined layout function")
+    for (previous, output, feature) in zip(previous, outputs, operation.on)
+      previous.position ≠ output.position && set_position!(engine, feature, output.position)
+      previous.geometry ≠ output.geometry && set_geometry!(engine, feature, output.geometry)
     end
-
-    @case &OPERATION_TYPE_PIN
-    operand = operation.on::PositionalFeature{O}
-    operand.location === FEATURE_LOCATION_ORIGIN || throw(ArgumentError("Operand to pinning operation should represent an object or group with no positional features"))
-    object = operand.object::Union{O, Group{O}}
-    old = get_geometry(engine, object)
-    new = apply_pinning_operation(engine, operation, object, old)
-    old ≠ new && set_geometry!(engine, object, new)
   end
 end
 
-function apply_place_operation(engine::LayoutEngine, operation::Operation, point)
-  on = get_coordinates(engine, operation.on)
-  to = get_coordinates(engine, operation.by)
-  displacement = to .- on
-  point .+ displacement
+# Record operations.
+
+record!(engine::LayoutEngine, operation::Operation) = push!(engine.operations, operation)
+record!(f!, engine::LayoutEngine, input, output) = record!(engine, Operation(f!, engine, input, output))
+
+function apply_place!(outputs::Vector{<:ObjectData}, inputs::Vector{<:ObjectData})
+  outputs .= set_position.(outputs, get_position.(inputs))
 end
 
-function compute_alignment(engine::LayoutEngine, operation::Operation)
-  @assert operation.type == OPERATION_TYPE_ALIGN
-  (; direction, target) = operation.alignment
-  i = 3 - Int64(direction)
-  @match target begin
-    &ALIGNMENT_TARGET_MINIMUM => minimum(get_coordinates(engine, object)[i] for object in operation.on)
-    &ALIGNMENT_TARGET_MAXIMUM => maximum(get_coordinates(engine, object)[i] for object in operation.on)
-    &ALIGNMENT_TARGET_AVERAGE => sum(get_coordinates(engine, object)[i] for object in operation.on)/length(operation.on)
-    _ => alignment_target(get_coordinates(engine, target), direction)
+place!(engine::LayoutEngine, object, onto) = record!(apply_place!, engine, onto, object)
+
+function place_after!(engine::LayoutEngine, object, after; spacing = 0.0, direction::Union{Symbol, Direction} = DIRECTION_HORIZONTAL)
+  isa(direction, Symbol) && (direction = Direction(direction))
+  offset = direction == DIRECTION_HORIZONTAL ? (spacing, 0.0) : (0.0, spacing)
+  place!(engine, at(engine, object, :left), after |> at(engine, :right) |> at(engine, offset))
+end
+
+function apply_align!(target::F, outputs::Vector{<:ObjectData}, inputs::Vector{<:ObjectData}, direction::Direction) where {F}
+  i = Int(other_axis(direction))
+  alignment = target(get_position(input)[i] for input in inputs)
+  project = (position, value) -> @set position[i] = value
+  outputs .= set_position.(outputs, project.(get_position.(outputs), alignment))
+end
+
+function align!(target, engine::LayoutEngine, objects, onto, direction)
+  isa(direction, Symbol) && (direction = Direction(direction))
+  record!((outputs, inputs) -> apply_align!(target, outputs, inputs, direction), engine, onto, objects)
+end
+
+align!(target, engine::LayoutEngine, objects, direction) = align!(target, engine, objects, objects, direction)
+
+align!(engine::LayoutEngine, objects, args...) = align!(average, engine, objects, args...)
+
+average(xs) = sum(xs) ./ length(xs)
+
+function apply_distribute!(outputs::Vector{<:ObjectData}, inputs::Vector{<:ObjectData}, direction::Direction, mode::SpacingMode, spacing::Union{Float64, F}) where {F<:Function}
+  spacing = compute_spacing(inputs, direction, spacing)
+  for i in 2:length(outputs)
+    outputs[i] = apply_spacing(outputs[i], outputs[i - 1], direction, mode, spacing)
   end
 end
 
-alignment_target(coordinates, direction::Direction) = alignment_or_distribution_target(coordinates, 3 - Int64(direction))
-alignment_or_distribution_target(p::SVector, i::Integer) = p[i]
-
-function apply_alignment(engine::LayoutEngine, operation::Operation, feature::PositionalFeature, alignment)
-  C = coordinate_type(engine)
-  object = feature[]
-  position = get_position(engine, object)
-  coords = coordinates(engine, position)
-  relative = alignment_target(get_relative_coordinates(engine, feature), operation.alignment.direction)
-  @match operation.alignment.direction begin
-    &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(coords[1], alignment - relative))
-    &DIRECTION_VERTICAL => set_coordinates(engine, position, C(alignment - relative, coords[2]))
-  end
-end
-
-"Compute the required spacing between two elements `x` and `y` according to the provided `operation`."
-function compute_spacing(engine::LayoutEngine, operation::Operation)
-  @assert operation.type == OPERATION_TYPE_DISTRIBUTE
-  (; spacing) = operation
-  if isa(spacing.amount, Float64)
-    value = spacing.amount
-  else
-    objects = operation.on
-    xs, ys = @view(objects[1:(end - 1)]), @view(objects[2:end])
-    spacings = eltype(coordinate_type(engine))[]
-    i = 3 - Int64(spacing.direction)
-    if spacing.mode == SPACING_MODE_POINT
-      for (x, y) in zip(xs, ys)
-        xc = get_coordinates(engine, x)[i]
-        yc = get_coordinates(engine, y)[i]
-        push!(spacings, xc - yc)
-      end
-    else
-      edges = ((:left, :right), (:top, :bottom))[i]
-      for (x, y) in zip(xs, ys)
-        xc = get_coordinates(engine, at(engine, y, edges[1]))[i]
-        yc = get_coordinates(engine, at(engine, x, edges[2]))[i]
-        push!(spacings, xc - yc)
-      end
-    end
-    value = @match spacing.amount begin
-      &SPACING_TARGET_MINIMUM => minimum(spacings)
-      &SPACING_TARGET_MAXIMUM => maximum(spacings)
-      &SPACING_TARGET_AVERAGE => sum(spacings)/length(spacings)
-    end
-  end
+function compute_spacing(objects, direction::Direction, spacing::F) where {F<:Union{Float64, Function}}
   # Negate vertical spacing so that objects are laid out from top to bottom
-  spacing.direction == DIRECTION_VERTICAL && (value = -value)
-  value
+  sign = ifelse(direction == DIRECTION_VERTICAL, -1, 1)
+  isa(spacing, Float64) && return sign * spacing
+  xs, ys = @view(objects[1:(end - 1)]), @view(objects[2:end])
+  i = Int(other_axis(direction))
+  spacings = map(((x, y),) -> x.position[i] - y.position[i], zip(xs, ys))
+  sign * spacing(spacings)::Float64
 end
 
-function apply_spacing(engine::LayoutEngine, operation::Operation, x::PositionalFeature, y::PositionalFeature, spacing)
-  C = coordinate_type(engine)
-  (; direction) = operation.spacing
-  position = get_position(engine, y[])
-  coords = coordinates(engine, position)
-  @when &SPACING_MODE_GEOMETRY = operation.spacing.mode begin
-    xb, yb = get_geometry(engine, x[]), get_geometry(engine, y[])
-    sx, sy = (xb.max - xb.min) ./ 2, (yb.max - yb.min) ./ 2
-    spacing -= @match direction begin
-      &DIRECTION_HORIZONTAL => sx[1] + sy[1]
-      &DIRECTION_VERTICAL => sx[2] + sy[2]
+function apply_spacing(object, reference, direction::Direction, mode::SpacingMode, spacing::Float64)
+  @when &SPACING_MODE_GEOMETRY = mode begin
+    spacing += sign(spacing) * @match direction begin
+      &DIRECTION_HORIZONTAL => (object.geometry.width + reference.geometry.width) / 2
+      &DIRECTION_VERTICAL => (object.geometry.height + reference.geometry.height) / 2
     end
   end
-  xc, yr = get_coordinates(engine, x), get_relative_coordinates(engine, y)
-  i = Int64(direction)
-  base = alignment_or_distribution_target(xc, i)
-  offset = alignment_or_distribution_target(yr, i)
-  @match direction begin
-    &DIRECTION_HORIZONTAL => set_coordinates(engine, position, C(base - offset + spacing, coords[2]))
-    &DIRECTION_VERTICAL => set_coordinates(engine, position, C(coords[1], base - offset + spacing))
-  end
+  i = Int(direction)
+  @set object.position[i] = reference.position[i] + spacing
 end
 
-function apply_pinning_operation(engine::LayoutEngine{O}, operation::Operation, object::Union{O, Group{O}}, geometry) where {O}
-  target = get_coordinates(engine, operation.by)
-  parameters = operation.pinning
-  location = get_coordinates(engine, PositionalFeature(object, parameters.part))
-  displacement = (target .+ parameters.offset) .- location
-  distort_geometry(geometry, displacement, parameters)
+function distribute!(engine::LayoutEngine, objects, onto, direction; mode = SPACING_MODE_POINT, spacing = average)
+  isa(direction, Symbol) && (direction = Direction(direction))
+  isa(mode, Symbol) && (mode = SpacingMode(mode))
+  isa(spacing, Real) && (spacing = convert(Float64, spacing))
+  record!((outputs, inputs) -> apply_distribute!(outputs, inputs, direction, mode, spacing), engine, onto, objects)
 end
 
-function distort_geometry(geometry::Box{2}, displacement, parameters::PinningParameters)
+function distribute!(engine::LayoutEngine, objects, direction; mode = SPACING_MODE_POINT, spacing = average)
+  distribute!(engine, objects, objects, direction; mode, spacing)
+end
+
+function apply_pin!(outputs::Vector{<:ObjectData}, inputs::Vector{<:ObjectData}, part::Union{Edge, Corner}, offset::Float64)
+  outputs .= pin_geometry.(outputs, inputs, part, offset)
+end
+
+function pin_geometry(object::ObjectData, target::ObjectData, part::Union{Edge, Corner}, offset::Float64)
+  displacement = target.position .+ offset .- (object.position .+ coordinates(object.geometry, part))
   dx, dy = displacement
-  @match (parameters.part) begin
+  (; geometry) = object
+  pinned_geometry = @match part begin
     &CORNER_BOTTOM_LEFT => Box(geometry.min .+ displacement, geometry.max)
     &CORNER_BOTTOM_RIGHT => Box(geometry.min .+ (zero(dy), dy), geometry.max .+ (dx, zero(dx)))
     &CORNER_TOP_LEFT => Box(geometry.min .+ (dx, zero(dx)), geometry.max .+ (zero(dy), dy))
@@ -679,57 +593,13 @@ function distort_geometry(geometry::Box{2}, displacement, parameters::PinningPar
     &EDGE_BOTTOM => Box(geometry.min .+ (zero(dy), dy), geometry.max)
     &EDGE_TOP => Box(geometry.min, geometry.max .+ (zero(dy), dy))
   end
-end
-
-# Record operations.
-
-function place!(engine::LayoutEngine{O}, object, onto) where {O}
-  operation = Operation{O}(OPERATION_TYPE_PLACE, positional_feature(engine, onto), positional_feature(engine, object), nothing)
-  push!(engine.operations, operation)
-end
-
-function place_after!(engine::LayoutEngine, object, after; spacing = 0.0, direction::Union{Symbol, Direction} = DIRECTION_HORIZONTAL)
-  isa(direction, Symbol) && (direction = Direction(direction))
-  offset = direction == DIRECTION_HORIZONTAL ? (spacing, 0.0) : (0.0, spacing)
-  place!(engine, at(engine, object, :left), after |> at(engine, :right) |> at(engine, offset))
-end
-
-align!(engine::LayoutEngine, object, direction, target) = align!(engine, [positional_feature(engine, object)], direction, target)
-
-function align!(engine::LayoutEngine, objects::AbstractVector, direction, target)
-  align!(engine, positional_feature.(engine, objects), direction, target)
-end
-
-function align!(engine::LayoutEngine{O}, objects::AbstractVector{PositionalFeature{O}}, direction, target::AlignmentTarget) where {O}
-  operation = Operation{O}(OPERATION_TYPE_ALIGN, nothing, objects, Alignment{O}(direction, target))
-  push!(engine.operations, operation)
-end
-
-function align!(engine::LayoutEngine{O}, objects::AbstractVector{PositionalFeature{O}}, direction, target) where {O}
-  operation = Operation{O}(OPERATION_TYPE_ALIGN, nothing, objects, Alignment{O}(direction, positional_feature(engine, target)))
-  push!(engine.operations, operation)
-end
-
-function distribute!(engine::LayoutEngine, objects::AbstractVector, direction, spacing, mode = SPACING_MODE_POINT)
-  distribute!(engine, positional_feature.(engine, objects), direction, spacing, mode)
-end
-
-function distribute!(engine::LayoutEngine{O}, objects::AbstractVector{PositionalFeature{O}}, direction, spacing, mode = SPACING_MODE_POINT) where {O}
-  operation = Operation(OPERATION_TYPE_DISTRIBUTE, nothing, objects, Spacing(direction, spacing, mode))
-  push!(engine.operations, operation)
+  set_geometry(object, pinned_geometry)
 end
 
 function pin!(engine::LayoutEngine{O}, object, part, to; offset = 0.0) where {O}
-  object = to_object(engine, object)
-  parameters = PinningParameters(part, offset)
-  to = positional_feature(engine, to)
-  pin!(engine, object, to, parameters)
-end
-
-function pin!(engine::LayoutEngine{O}, object::Union{O, Group{O}}, to::PositionalFeature{O}, parameters::PinningParameters) where {O}
-  object = positional_feature(engine, object)
-  operation = Operation(OPERATION_TYPE_PIN, to, object, parameters)
-  push!(engine.operations, operation)
+  isa(part, Symbol) && (part = pinned_part(part))
+  offset = convert(Float64, offset)
+  record!((outputs, inputs) -> apply_pin!(outputs, inputs, part, offset), engine, to, object)
 end
 
 export
@@ -741,9 +611,6 @@ export
   Group,
 
   Operation,
-  OPERATION_TYPE_PLACE,
-  OPERATION_TYPE_ALIGN,
-  OPERATION_TYPE_DISTRIBUTE,
   PositionalFeature, width_of, height_of,
   FEATURE_LOCATION_ORIGIN,
   FEATURE_LOCATION_CENTER,
@@ -759,14 +626,6 @@ export
   Direction,
   DIRECTION_HORIZONTAL,
   DIRECTION_VERTICAL,
-  AlignmentTarget,
-  ALIGNMENT_TARGET_MINIMUM,
-  ALIGNMENT_TARGET_MAXIMUM,
-  ALIGNMENT_TARGET_AVERAGE,
-  SpacingAmount,
-  SPACING_AMOUNT_MINIMUM,
-  SPACING_AMOUNT_MAXIMUM,
-  SPACING_AMOUNT_AVERAGE,
   SpacingMode,
   SPACING_MODE_POINT,
   SPACING_MODE_GEOMETRY

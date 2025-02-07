@@ -86,12 +86,12 @@ function generate_user_interface(state::ApplicationState)
   left_column = [node_name_text, node_color_text, node_hide_text]
   right_column = [node_name_value, node_color_value, node_hide_value]
 
-  align(left_column .|> at(:right), :vertical, vline_left)
-  align(right_column .|> at(:left), :vertical, vline_right)
+  align(left_column .|> at(:right), vline_left, :vertical)
+  align(right_column .|> at(:left), vline_right, :vertical)
 
-  distribute(left_column, :vertical, vspacing, :point)
+  distribute(left_column, :vertical; spacing = vspacing)
   for (left, right) in zip(left_column, right_column)
-    align(right |> at(:bottom), :horizontal, left |> at(:bottom))
+    align(right |> at(:bottom), left |> at(:bottom), :horizontal)
   end
 
   place(save_button, left_column[end] |> at(3.0, -2.0))
@@ -148,8 +148,8 @@ function generate_file_menu!(menu::Menu, state::ApplicationState)
 
   push!(items, generate_menu_item(exit, "Exit", dimensions; shortcut = 'x'))
 
-  align([at(item.widget, :left) for item in items], :vertical, at(menu.head, :left))
-  distribute([menu.head; [item.widget for item in items]], :vertical, 0.0, :geometry)
+  align([at(item.widget, :left) for item in items], at(menu.head, :left), :vertical)
+  distribute([menu.head; [item.widget for item in items]], :vertical; spacing = 0.0, mode = :geometry)
   add_menu_items!(menu, items)
 end
 
@@ -161,8 +161,8 @@ function generate_edit_menu!(menu::Menu, state::ApplicationState)
     regenerate_image(state)
   end)
 
-  align([at(item.widget, :left) for item in items], :vertical, at(menu.head, :left))
-  distribute([menu.head; [item.widget for item in items]], :vertical, 0.0, :geometry)
+  align([at(item.widget, :left) for item in items], at(menu.head, :left), :vertical)
+  distribute([menu.head; [item.widget for item in items]], :vertical; spacing = 0.0, mode = :geometry)
   add_menu_items!(menu, items)
 end
 
