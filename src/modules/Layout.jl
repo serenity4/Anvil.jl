@@ -508,6 +508,7 @@ end
 
 record!(engine::LayoutEngine, operation::Operation) = push!(engine.operations, operation)
 record!(f!, engine::LayoutEngine, input, output) = record!(engine, Operation(f!, engine, input, output))
+record!(f!, engine::LayoutEngine, object) = record!(f!, engine, object, object)
 
 function apply_place!(outputs::Vector{<:ObjectData}, inputs::Vector{<:ObjectData})
   outputs .= set_position.(outputs, get_position.(inputs))

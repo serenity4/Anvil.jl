@@ -92,6 +92,8 @@ function initialize(f::Optional{Function} = nothing; record_events::Bool = false
   nothing
 end
 
+get_geometry(window::Window) = get_geometry(app.windows[window])
+set_geometry(window::Window, geometry::Tuple) = set_geometry(app.windows[window], geometry)
 window_geometry(window::Window) = physical_size(window)
 
 is_left_click(event::Event) = event.mouse_event.button == BUTTON_LEFT

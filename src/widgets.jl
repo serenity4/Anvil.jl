@@ -940,9 +940,8 @@ function close!(menu::Menu)
 end
 
 function create_window_overlay!(menu::Menu)
-  window = app.windows[app.window]
-  set_location(menu.overlay, get_location(window))
-  set_geometry(menu.overlay, get_geometry(window))
+  set_location(menu.overlay, zero(P2))
+  set_geometry(menu.overlay, get_geometry(app.window))
   set_z(menu.overlay, Inf)
   add_callback(menu.overlay, BUTTON_PRESSED) do input::Input
     propagate!(input) do propagated

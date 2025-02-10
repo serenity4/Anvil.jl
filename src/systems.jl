@@ -300,7 +300,7 @@ end
 pixel_to_metric(box::Box{2}) = Box(pixel_to_metric(box.min), pixel_to_metric(box.max))
 
 function (system::EventSystem)(ecs::ECSDatabase, event::Event)
-  event.type == WINDOW_RESIZED && (set_geometry(app.windows[event.window], window_geometry(event.window)))
+  event.type == WINDOW_RESIZED && (set_geometry(event.window, physical_size(event.window)))
   update_overlays!(system, ecs)
   consume!(system.ui.overlay, event)
   event.type == WINDOW_CLOSED && exit()
