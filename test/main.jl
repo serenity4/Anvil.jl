@@ -78,7 +78,7 @@ function generate_user_interface(state::ApplicationState)
   place(side_panel |> at(:left), image |> at(:right))
 
   @set_name node_name_text = Text(styled"{color=#ffbb00:Name}")
-  @set_name node_name_value = Text(styled"{background=#ffbb0022,color=magenta:Value}"; editable = true)
+  @set_name node_name_value = Text("Value"; editable = true)
   @set_name node_color_text = Text(styled"{color=#ffbb00:Color}")
   @set_name node_color_value = Rectangle((1.0, 0.4), RGBA(0.3, 0.2, 0.9, 0.2))
   @set_name node_hide_text = Text(styled"{color=#ffbb00:Hide}")

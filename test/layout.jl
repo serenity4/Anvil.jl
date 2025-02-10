@@ -266,9 +266,9 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       distribute!(engine, objects, :vertical; spacing = 2.0, mode = :geometry)
       compute_layout!(engine)
       xs = get_coordinates.(engine, objects)
-      @test xs[1] == locations[1]
-      @test xs[2] == P2(locations[2].x, -39)
-      @test xs[3] == P2(locations[3].x, -86.5)
+      @test xs[1] == P2(locations[1].x, 10)
+      @test xs[2] == P2(locations[2].x, xs[1].y - (45 + 2 + 2))
+      @test xs[3] == P2(locations[3].x, xs[2].y - (45 + 0.5 + 2))
 
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])

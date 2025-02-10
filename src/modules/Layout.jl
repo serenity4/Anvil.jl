@@ -99,12 +99,6 @@ Base.iterate(feature::PositionalFeature) = (feature, nothing)
 Base.iterate(feature::PositionalFeature, state) = nothing
 Base.broadcastable(feature::PositionalFeature) = Ref(feature)
 
-get_position(engine::LayoutEngine, feature::PositionalFeature) = get_coordinates(engine, feature)
-get_geometry(engine::LayoutEngine, feature::PositionalFeature) = get_geometry(engine, feature[])
-
-set_position!(engine::LayoutEngine, feature::PositionalFeature, position) = set_position!(engine, feature[], position .- get_relative_coordinates(engine, feature))
-set_geometry!(engine::LayoutEngine, feature::PositionalFeature, geometry) = set_geometry!(engine, feature[], geometry)
-
 function Base.getindex(feature::PositionalFeature{O}) where {O}
   (; object) = feature
   while isa(object, PositionalFeature{O})
@@ -151,6 +145,16 @@ LayoutEngine(storage::LayoutStorage{O}) where {O} = LayoutEngine{O,typeof(storag
   set_position!(_, object, position)
 end
 
+get_position(engine::LayoutEngine, feature::PositionalFeature) = get_coordinates(engine, feature)
+get_geometry(engine::LayoutEngine, feature::PositionalFeature) = get_geometry(engine, feature[])
+
+function set_position!(engine::LayoutEngine, feature::PositionalFeature, position)
+  object = feature[]
+  displacement = get_coordinates(engine, feature) .- get_coordinates(engine, object)
+  set_position!(engine, object, position .- displacement)
+end
+set_geometry!(engine::LayoutEngine, feature::PositionalFeature, geometry) = set_geometry!(engine, feature[], geometry)
+
 Base.broadcastable(engine::LayoutEngine) = Ref(engine)
 
 to_object(::Type{O}, object::O) where {O} = object
@@ -170,7 +174,7 @@ function remove_operations!(engine::LayoutEngine{O}, object) where {O}
   object = to_object(engine, object)
   to_delete = Int[]
   for (i, operation) in enumerate(engine.operations)
-    if !isnothing(operation.by) && operation.by[] == object
+    if !isnothing(operation.by) && any(by[] == object for by in operation.by)
       push!(to_delete, i)
       continue
     end
@@ -227,7 +231,6 @@ function get_geometry(engine::LayoutEngine, group::Group)
   geometry - centroid(geometry)
 end
 
-get_relative_coordinates(engine::LayoutEngine, group::Group) = get(engine.group_positions, group, zero(position_type(engine)))
 function set_position!(engine::LayoutEngine, group::Group, position)
   offset = position .- get_position(engine, group)
   for object in group.objects
@@ -544,23 +547,23 @@ function apply_distribute!(outputs::Vector{<:ObjectData}, inputs::Vector{<:Objec
 end
 
 function compute_spacing(objects, direction::Direction, spacing::F) where {F<:Union{Float64, Function}}
-  # Negate vertical spacing so that objects are laid out from top to bottom
-  sign = ifelse(direction == DIRECTION_VERTICAL, -1, 1)
-  isa(spacing, Float64) && return sign * spacing
+  isa(spacing, Float64) && return spacing
   xs, ys = @view(objects[1:(end - 1)]), @view(objects[2:end])
   i = Int(other_axis(direction))
   spacings = map(((x, y),) -> x.position[i] - y.position[i], zip(xs, ys))
-  sign * spacing(spacings)::Float64
+  spacing(spacings)::Float64
 end
 
 function apply_spacing(object, reference, direction::Direction, mode::SpacingMode, spacing::Float64)
   @when &SPACING_MODE_GEOMETRY = mode begin
-    spacing += sign(spacing) * @match direction begin
+    spacing += @match direction begin
       &DIRECTION_HORIZONTAL => (object.geometry.width + reference.geometry.width) / 2
       &DIRECTION_VERTICAL => (object.geometry.height + reference.geometry.height) / 2
     end
   end
   i = Int(direction)
+  # Negate vertical spacing so that objects are laid out from top to bottom
+  spacing *= ifelse(direction == DIRECTION_VERTICAL, -1, 1)
   @set object.position[i] = reference.position[i] + spacing
 end
 
