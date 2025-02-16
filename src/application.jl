@@ -284,7 +284,7 @@ function (app::Application)()
   true
 end
 
-function main(f; async = false, application_period = 0.000, renderer_period = 0.000, record_events = false)
+function main(f; async = false, application_period = 0.002, renderer_period = 0.005, record_events = false)
   nthreads() ≥ 3 || error("Three threads or more are required to execute the application.")
   GC.gc(true)
   CooperativeTasks.reset()
