@@ -8,6 +8,8 @@ using Graphs
 using GeometryExperiments: GeometryExperiments, boundingelement, Box, centroid
 
 using Base: RefValue
+using Core: OpaqueClosure
+using Base.Experimental: @opaque
 
 const Optional{T} = Union{Nothing, T}
 
@@ -109,33 +111,91 @@ end
 
 const GroupElement{O} = Union{O,Group{O}}
 
-struct Operation{O}
-  f!::Any #= Callable =#
+struct ObjectData{P,G}
+  index::Int
+  position::P
+  geometry::G
+end
+
+ObjectData(engine, i, object) = ObjectData(i, get_position(engine, object), get_geometry(engine, object))
+
+get_position(object::ObjectData) = object.position
+get_geometry(object::ObjectData) = object.geometry
+
+set_position(object::ObjectData, position) = @set object.position = position
+set_geometry(object::ObjectData, geometry) = @set object.geometry = geometry
+
+struct Operation{O,OD<:ObjectData}
+  callable::OpaqueClosure{Tuple{Vector{OD},Vector{OD}}, Nothing}
   by::Optional{Union{PositionalFeature{O}, Vector{PositionalFeature{O}}}}
   on::Union{PositionalFeature{O}, Vector{PositionalFeature{O}}}
+  may_cache::Bool
+  result::Vector{OD}
 end
 
 broadcast_positional_feature(::Type{O}, object) where {O} = positional_feature(O, object)
 broadcast_positional_feature(::Type{O}, objects::AbstractVector) where {O} = positional_feature.(O, objects)
 
 function Operation(f!, engine, by, on)
+  OD = object_data_type(engine)
+  callable = @opaque (outputs::Vector{OD}, inputs::Vector{OD}) -> begin
+    f!(outputs, inputs)
+    nothing
+  end
   O = object_type(engine)
   !isnothing(by) && (by = broadcast_positional_feature(O, by))
   on = broadcast_positional_feature(O, on)
-  Operation{O}(f!, by, on)
+  Operation{O,OD}(callable, by, on, may_cache(engine, by, on), OD[])
 end
 
-struct LayoutEngine{O,S<:LayoutStorage{O}}
-  storage::S
-  operations::Vector{Operation{O}}
+invalidate!(operation::Operation) = empty!(operation.results)
+
+function may_cache(engine, inputs, outputs)
+  C = coordinate_type(engine)
+  any(input -> contains_ref(C, input), inputs) && return false
+  any(output -> contains_ref(C, output), outputs) && return false
+  # true
+  false
 end
-LayoutEngine(storage::LayoutStorage{O}) where {O} = LayoutEngine{O,typeof(storage)}(storage, Operation{O}[])
+
+contains_ref(::Type{C}, group::Group) where {C} = any(object -> contains_ref(C, object), group.objects)
+contains_ref(::Type{C}, object) where {C} = false
+
+function contains_ref(feature::PositionalFeature)
+  uses_ref(feature) || contains_ref(feature.object)
+end
+
+function uses_ref(::Type{C}, feature) where {C}
+  feature.location === FEATURE_LOCATION_CUSTOM || return false
+  isa(feature.data, RefValue{C}) && return true
+  T = eltype(C)
+  isa(feature.data, RefValue{T}) && return true
+  false
+end
+
+struct LayoutEngine{O,S<:LayoutStorage{O},OP<:Operation{O}}
+  storage::S
+  operations::Vector{OP}
+end
+
+function LayoutEngine(storage::LayoutStorage{O}) where {O}
+  OD = object_data_type(storage)
+  OP = Operation{O,OD}
+  LayoutEngine{O,typeof(storage),OP}(storage, OP[])
+end
+
+function object_data_type(storage::LayoutStorage)
+  P = position_type(storage)
+  G = geometry_type(storage)
+  ObjectData{P,G}
+end
 
 @forward_methods LayoutEngine field = :storage begin
   object_type
   position_type
   coordinate_type
   geometry_type
+  object_data_type
   get_geometry(_, object)
   set_geometry!(_, object, geometry)
   coordinates(_, x)
@@ -466,41 +526,32 @@ end
 
 # Apply operations.
 
-struct ObjectData{P,G}
-  index::Int
-  position::P
-  geometry::G
-end
-
-ObjectData(engine, i, object) = ObjectData(i, get_position(engine, object), get_geometry(engine, object))
-
-get_position(object::ObjectData) = object.position
-get_geometry(object::ObjectData) = object.geometry
-
-set_position(object::ObjectData, position) = @set object.position = position
-set_geometry(object::ObjectData, geometry) = @set object.geometry = geometry
-
 function compute_layout!(engine::LayoutEngine)
-  P = position_type(engine)
-  G = geometry_type(engine)
-  inputs = ObjectData{P,G}[]
-  previous = ObjectData{P,G}[]
-  outputs = ObjectData{P,G}[]
+  OD = object_data_type(engine)
+  inputs = OD[]
+  previous = OD[]
   for operation in engine.operations
-    empty!(inputs)
-    empty!(previous)
-    empty!(outputs)
-    if !isnothing(operation.by)
-      for (i, object) in enumerate(operation.by) push!(inputs, ObjectData(engine, i, object)) end
+    outputs = operation.result
+    if !operation.may_cache
+      empty!(inputs)
+      empty!(previous)
+      empty!(outputs)
+      if !isnothing(operation.by)
+        for (i, object) in enumerate(operation.by) push!(inputs, ObjectData(engine, i, object)) end
+      end
+      for (i, object) in enumerate(operation.on) push!(outputs, ObjectData(engine, i, object)) end
+      append!(previous, outputs)
+      operation.callable(outputs, inputs)
+      length(previous) == length(outputs) || error("Pushing and deleting output objects is not allowed")
+    else
+      empty!(previous)
+      append!(previous, outputs)
     end
-    for (i, object) in enumerate(operation.on) push!(outputs, ObjectData(engine, i, object)) end
-    append!(previous, outputs)
-    operation.f!(outputs, inputs)
-    length(previous) == length(outputs) || error("Illegal addition or deletion of objects detected during the call to a user-defined layout function")
     for (previous, output, feature) in zip(previous, outputs, operation.on)
       previous.position ≠ output.position && set_position!(engine, feature, output.position)
       previous.geometry ≠ output.geometry && set_geometry!(engine, feature, output.geometry)
     end
+    !operation.may_cache && empty!(operation.result)
   end
 end
 
