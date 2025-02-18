@@ -24,8 +24,9 @@ function Base.setproperty!(widget::Widget, name::Symbol, value)
   value
 end
 
-function new_widget(::Type{T}, args...) where {T<:Widget}
-  entity = new_entity()
+new_widget(::Type{T}, args...) where {T<:Widget} = new_widget(new_entity(), T, args...)
+
+function new_widget(entity::EntityID, ::Type{T}, args...) where {T<:Widget}
   set_location(entity, (0, 0))
   set_geometry(entity, (0, 0))
   set_z(entity, 0)
@@ -744,11 +745,12 @@ end
   text::Optional{Text}
 end
 
-constituents(button::Button) = [button.background, button.text]
+constituents(button::Button) = (button.text,)
 
 function set_name(button::Button, name::Symbol)
   set_name(button.id, name)
-  set_name(button.background, Symbol(name, :_background))
+  isnothing(button.text) && return
+  set_name(button.text, Symbol(name, :_text))
 end
 
 Button(on_click, (width, height)::Tuple; background_color = BUTTON_BACKGROUND_COLOR, text = nothing) = Button(on_click, geometry(width, height); background_color, text)
@@ -757,16 +759,17 @@ function Button(on_click, background::Rectangle; text = nothing)
   on_input = function (input::Input)
     is_left_click(input) && on_click()
   end
-  new_widget(Button, on_input, background, text)
+  (; id) = background
+  geometry = get_geometry(background)
+  button = new_widget(id, Button, on_input, background, text)
+  set_geometry(background, geometry)
+  button
 end
 
 function synchronize(button::Button)
   add_callback(input -> is_left_click(input) && button.on_input(input), button, BUTTON_PRESSED)
   isnothing(button.text) && return
-  put_behind(button.text, button)
-  put_behind(button.background, button.text)
-  set_geometry(button, get_geometry(button.background))
-  place(button.background, button)
+  put_in_front(button.text, button)
   place(button.text |> at(:center) |> at(0.0, -0.08), button)
 end
 
@@ -778,17 +781,13 @@ end
   inactive_color::RGB{Float32}
 end
 
-constituents(checkbox::Checkbox) = [checkbox.background]
-
-function set_name(checkbox::Checkbox, name::Symbol)
-  set_name(checkbox.id, name)
-  set_name(checkbox.background, Symbol(name, :_background))
-end
+constituents(checkbox::Checkbox) = Widget[]
 
 function Checkbox(on_toggle, value::Bool = false; size::Float64 = CHECKBOX_SIZE, active_color = CHECKBOX_ACTIVE_COLOR, inactive_color = CHECKBOX_INACTIVE_COLOR)
   geometry = Box(Point2(0.5size, 0.5size))
   background = Rectangle(geometry, inactive_color)
-  checkbox = new_widget(Checkbox, identity, value, background, active_color, inactive_color)
+  checkbox = new_widget(background.id, Checkbox, identity, value, background, active_color, inactive_color)
+  set_geometry(background, geometry)
   checkbox.on_toggle = function (input::Input)
     if is_left_click(input)
       checkbox.value = !checkbox.value
@@ -799,8 +798,6 @@ function Checkbox(on_toggle, value::Bool = false; size::Float64 = CHECKBOX_SIZE,
 end
 
 function synchronize(checkbox::Checkbox)
-  set_geometry(checkbox, get_geometry(checkbox.background))
-  place(checkbox.background, checkbox)
   add_callback(input -> is_left_click(input) && checkbox.on_toggle(input), checkbox, BUTTON_PRESSED)
   checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
 end

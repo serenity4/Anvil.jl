@@ -59,8 +59,8 @@ function initialize(f::Optional{Function} = nothing; record_events::Bool = false
   )
   window_id = new_entity(EntityID(Entities.next!(WINDOW_ENTITY_COUNTER)))
   ecs[window_id, WINDOW_COMPONENT_ID] = window
-  set_location(window_id, zero(P2))
-  set_geometry(window_id, window_geometry(window))
+  set_location(window_id, zero(P2); invalidate = false)
+  set_geometry(window_id, window_geometry(window); invalidate = false)
 
   app.entity_pool = EntityPool(; limit = WINDOW_ENTITY_COUNTER[] - 1)
   systems = Systems(
@@ -176,13 +176,21 @@ end
 geometry(width, height) = Box(P2(width/2, height/2))
 
 get_location(entity) = app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent]
-set_location(entity, location) = app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent] = location
+function set_location(entity, location; invalidate = true)
+  app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent] = location
+  !invalidate && return
+  Layout.invalidate!(app.systems.layout.engine, entity)
+end
 unset_location(entity) = unset!(app.ecs, entity, LOCATION_COMPONENT_ID)
 get_geometry(entity) = app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent]
 get_bounding_box(entity) = get_geometry(entity).aabb
-set_geometry(entity, geometry::GeometryComponent) = app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent] = geometry
-set_geometry(entity, geometry) = set_geometry(entity, GeometryComponent(geometry))
-set_geometry(entity, (width, height)::Tuple) = set_geometry(entity, geometry(width, height))
+function set_geometry(entity, geometry::GeometryComponent; invalidate = true)
+  app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent] = geometry
+  !invalidate && return
+  Layout.invalidate!(app.systems.layout.engine, entity)
+end
+set_geometry(entity, geometry; kwargs...) = set_geometry(entity, GeometryComponent(geometry); kwargs...)
+set_geometry(entity, (width, height)::Tuple; kwargs...) = set_geometry(entity, geometry(width, height); kwargs...)
 unset_geometry(entity) = unset!(app.ecs, entity, GEOMETRY_COMPONENT_ID)
 get_z(entity) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID, ZCoordinateComponent]
 set_z(entity, z::Real) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID, ZCoordinateComponent] = convert(ZCoordinateComponent, z)
@@ -226,7 +234,7 @@ unbind(token) = unbind!(app.systems.event.ui.bindings, token)
 put_behind(behind, of) = put_behind!(app.systems.drawing_order, behind, of)
 put_in_front(in_front, of) = put_in_front!(app.systems.drawing_order, in_front, of)
 
-Layout.Group(object, objects...) = Group(app.systems.layout.engine, object, objects...)
+group(object, objects...) = Group(app.systems.layout.engine, object, objects...)
 place(object, onto) = place!(app.systems.layout.engine, object, onto)
 place_after(object, onto; kwargs...) = place_after!(app.systems.layout.engine, object, onto; kwargs...)
 align(objects, direction) = align!(app.systems.layout.engine, objects, direction)

@@ -1,6 +1,6 @@
 using Anvil
 using Anvil: LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, P2
-using Anvil.Layout: object_type, position_type, coordinate_type, geometry_type, get_position, get_coordinates, set_coordinates, set_position!, set_geometry!, positional_feature
+using Anvil.Layout: object_type, position_type, coordinate_type, geometry_type, get_position, get_coordinates, set_coordinates, set_position!, set_geometry!, positional_feature, Group
 import Anvil.Layout as L
 using GeometryExperiments
 using Entities
@@ -48,7 +48,7 @@ test_storage_interface!(engine.storage, objects)
 test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachindex(objects))
 
 @testset "Layout" begin
-  at(args...) = Layout.at(engine, args...)
+  at(args...) = L.at(engine, args...)
 
   @testset "Features" begin
     object = EntityID(1)
@@ -283,7 +283,7 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       reset_location.([1, 2, 3])
       reset_geometry.([1, 2, 3])
       remove_operations!(engine)
-      distribute!(engine, at.(objects, :right), :horizontal; spacing = Layout.average)
+      distribute!(engine, at.(objects, :right), :horizontal; spacing = L.average)
       compute_layout!(engine)
       xs = get_coordinates.(engine, objects)
       @test xs ≠ locations

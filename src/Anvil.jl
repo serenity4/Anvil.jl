@@ -70,6 +70,8 @@ include("components.jl")
 include("modules/Layout.jl")
 @reexport using .Layout
 using .Layout: Direction
+import .Layout: positional_feature
+const Group = Layout.Group{EntityID}
 include("layout.jl")
 include("bindings.jl")
 include("interaction_set.jl")

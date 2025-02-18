@@ -81,6 +81,8 @@ struct Group{O}
 end
 
 Base.broadcastable(group::Group) = Ref(group)
+Base.iterate(group::Group) = (group, nothing)
+Base.iterate(group::Group, state) = nothing
 
 function Base.getproperty(group::Group{O}, name::Symbol) where {O}
   name === :objects && return getfield(group, name)::Vector{GroupElement{O}}
@@ -133,8 +135,8 @@ struct Operation{O,OD<:ObjectData}
   result::Vector{OD}
 end
 
-broadcast_positional_feature(::Type{O}, object) where {O} = positional_feature(O, object)
-broadcast_positional_feature(::Type{O}, objects::AbstractVector) where {O} = positional_feature.(O, objects)
+broadcast_positional_feature(engine, object) = positional_feature(engine, object)
+broadcast_positional_feature(engine, objects::AbstractVector) = positional_feature.(engine, objects)
 
 function Operation(f!, engine, by, on)
   OD = object_data_type(engine)
@@ -143,12 +145,10 @@ function Operation(f!, engine, by, on)
     nothing
   end
   O = object_type(engine)
-  !isnothing(by) && (by = broadcast_positional_feature(O, by))
-  on = broadcast_positional_feature(O, on)
+  !isnothing(by) && (by = broadcast_positional_feature(engine, by))
+  on = broadcast_positional_feature(engine, on)
   Operation{O,OD}(callable, by, on, may_cache(engine, by, on), OD[])
 end
-
-invalidate!(operation::Operation) = empty!(operation.results)
 
 function may_cache(engine, inputs, outputs)
   C = coordinate_type(engine)
@@ -161,8 +161,8 @@ end
 contains_ref(::Type{C}, group::Group) where {C} = any(object -> contains_ref(C, object), group.objects)
 contains_ref(::Type{C}, object) where {C} = false
 
-function contains_ref(feature::PositionalFeature)
-  uses_ref(feature) || contains_ref(feature.object)
+function contains_ref(::Type{C}, feature::PositionalFeature) where {C}
+  uses_ref(C, feature) || contains_ref(C, feature.object)
 end
 
 function uses_ref(::Type{C}, feature) where {C}
@@ -214,6 +214,7 @@ function set_position!(engine::LayoutEngine, feature::PositionalFeature, positio
   set_position!(engine, object, position .- displacement)
 end
 set_geometry!(engine::LayoutEngine, feature::PositionalFeature, geometry) = set_geometry!(engine, feature[], geometry)
+set_geometry!(engine::LayoutEngine, group::Group, geometry) = error("Setting geometry for groups is not supported")
 
 Base.broadcastable(engine::LayoutEngine) = Ref(engine)
 
@@ -229,24 +230,44 @@ positional_feature(::Type{O}, feature::PositionalFeature{O}) where {O} = feature
 positional_feature(::Type{O}, object) where {O} = positional_feature(O, to_object(O, object))
 positional_feature(engine::LayoutEngine{O}, object) where {O} = positional_feature(O, object)
 
-remove_operations!(engine::LayoutEngine) = empty!(engine.operations)
-function remove_operations!(engine::LayoutEngine{O}, object) where {O}
+function find_operations_using(engine::LayoutEngine, object)
+  O = object_type(engine)
   object = to_object(engine, object)
-  to_delete = Int[]
+  indices = Int[]
   for (i, operation) in enumerate(engine.operations)
     if !isnothing(operation.by) && any(by[] == object for by in operation.by)
-      push!(to_delete, i)
+      push!(indices, i)
       continue
     end
     on = @match operation.on begin
       on::PositionalFeature{O} => [on]
       on::Vector{PositionalFeature{O}} => on
     end
-    any(x -> in_feature(object, x), on) && push!(to_delete, i)
+    any(x -> in_feature(object, x), on) && push!(indices, i)
   end
+  indices
+end
+
+remove_operations!(engine::LayoutEngine) = empty!(engine.operations)
+function remove_operations!(engine::LayoutEngine, object)
+  to_delete = find_operations_using(engine, object)
   isempty(to_delete) && return false
   splice!(engine.operations, to_delete)
   true
+end
+
+function invalidate!(operation::Operation)
+  isempty(operation.result) && return false
+  empty!(operation.result)
+  true
+end
+
+function invalidate!(engine::LayoutEngine, object)
+  invalidated = 0
+  for i in find_operations_using(engine, object)
+    invalidated += invalidate!(engine.operations[i])
+  end
+  invalidated
 end
 
 function in_feature(object::O, feature::PositionalFeature{O}) where {O}
@@ -270,8 +291,9 @@ end
 to_group_element(engine, x) = to_object(engine, x)
 to_group_element(engine, feature::PositionalFeature) = throw(ArgumentError("Positional features are not supported within groups. A group accepts objects or other groups."))
 
-Group(engine::LayoutEngine, object, objects...) = Group(engine, to_group_element.(engine, ((object, objects...))))
-function Group(engine::LayoutEngine{O}, objects::Tuple) where {O}
+Group{O}(engine::LayoutEngine{O}, object, objects...) where {O} = Group{O}(engine, to_group_element.(engine, ((object, objects...))))
+Group(engine::LayoutEngine, args...) = Group{object_type(engine)}(engine, args...)
+function Group{O}(engine::LayoutEngine{O}, objects::Tuple) where {O}
   length(objects) > 1 || throw(ArgumentError("More than one objects are required to form a group"))
   Group{O}(GroupElement{O}[objects...])
 end
@@ -528,30 +550,36 @@ end
 
 function compute_layout!(engine::LayoutEngine)
   OD = object_data_type(engine)
+  O = object_type(engine)
   inputs = OD[]
   previous = OD[]
   for operation in engine.operations
     outputs = operation.result
-    if !operation.may_cache
-      empty!(inputs)
-      empty!(previous)
-      empty!(outputs)
-      if !isnothing(operation.by)
-        for (i, object) in enumerate(operation.by) push!(inputs, ObjectData(engine, i, object)) end
+
+    if operation.may_cache && !isempty(outputs)
+      for (output, feature) in zip(outputs, operation.on)
+        set_position!(engine, feature, output.position)
+        isa(feature[], Group{O}) && continue
+        set_geometry!(engine, feature, output.geometry)
       end
-      for (i, object) in enumerate(operation.on) push!(outputs, ObjectData(engine, i, object)) end
-      append!(previous, outputs)
-      operation.callable(outputs, inputs)
-      length(previous) == length(outputs) || error("Pushing and deleting output objects is not allowed")
-    else
-      empty!(previous)
-      append!(previous, outputs)
+      continue
     end
+    @debug "Computing layout for $operation"
+
+    empty!(inputs)
+    empty!(previous)
+    empty!(outputs)
+    if !isnothing(operation.by)
+      for (i, object) in enumerate(operation.by) push!(inputs, ObjectData(engine, i, object)) end
+    end
+    for (i, object) in enumerate(operation.on) push!(outputs, ObjectData(engine, i, object)) end
+    append!(previous, outputs)
+    operation.callable(outputs, inputs)
+    length(previous) == length(outputs) || error("Pushing and deleting output objects is not allowed")
     for (previous, output, feature) in zip(previous, outputs, operation.on)
       previous.position ≠ output.position && set_position!(engine, feature, output.position)
       previous.geometry ≠ output.geometry && set_geometry!(engine, feature, output.geometry)
     end
-    !operation.may_cache && empty!(operation.result)
   end
 end
 
@@ -663,7 +691,6 @@ export
   compute_layout!,
   place!, place_after!, align!, distribute!, pin!,
   remove_operations!,
-  Group,
 
   Operation,
   PositionalFeature, width_of, height_of,
