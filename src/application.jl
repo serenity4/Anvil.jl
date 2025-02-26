@@ -179,7 +179,9 @@ get_location(entity) = app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent]
 function set_location(entity, location; invalidate = true)
   app.ecs[entity, LOCATION_COMPONENT_ID, LocationComponent] = location
   !invalidate && return
-  Layout.invalidate!(app.systems.layout.engine, entity)
+  engine = get_layout_engine()
+  isnothing(engine) && return
+  Layout.invalidate!(engine, entity)
 end
 unset_location(entity) = unset!(app.ecs, entity, LOCATION_COMPONENT_ID)
 get_geometry(entity) = app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent]
@@ -187,7 +189,9 @@ get_bounding_box(entity) = get_geometry(entity).aabb
 function set_geometry(entity, geometry::GeometryComponent; invalidate = true)
   app.ecs[entity, GEOMETRY_COMPONENT_ID, GeometryComponent] = geometry
   !invalidate && return
-  Layout.invalidate!(app.systems.layout.engine, entity)
+  engine = get_layout_engine()
+  isnothing(engine) && return
+  Layout.invalidate!(engine, entity)
 end
 set_geometry(entity, geometry; kwargs...) = set_geometry(entity, GeometryComponent(geometry); kwargs...)
 set_geometry(entity, (width, height)::Tuple; kwargs...) = set_geometry(entity, geometry(width, height); kwargs...)
@@ -234,17 +238,19 @@ unbind(token) = unbind!(app.systems.event.ui.bindings, token)
 put_behind(behind, of) = put_behind!(app.systems.drawing_order, behind, of)
 put_in_front(in_front, of) = put_in_front!(app.systems.drawing_order, in_front, of)
 
-group(object, objects...) = Group(app.systems.layout.engine, object, objects...)
-place(object, onto) = place!(app.systems.layout.engine, object, onto)
-place_after(object, onto; kwargs...) = place_after!(app.systems.layout.engine, object, onto; kwargs...)
-align(objects, direction) = align!(app.systems.layout.engine, objects, direction)
-align(target::Function, objects, direction) = align!(target, app.systems.layout.engine, objects, direction)
-align(objects, onto, direction) = align!(app.systems.layout.engine, objects, onto, direction)
-align(target::Function, objects, onto, direction) = align!(app.systems.layout.engine, objects, direction, target)
-distribute(objects, onto, direction; mode = SPACING_MODE_POINT, spacing = Layout.average) = distribute!(app.systems.layout.engine, objects, onto, direction; mode, spacing)
-distribute(objects, direction; mode = SPACING_MODE_POINT, spacing = Layout.average) = distribute!(app.systems.layout.engine, objects, direction; mode, spacing)
-pin(object, part, to; offset = 0.0) = pin!(app.systems.layout.engine, object, part, to; offset)
-remove_layout_operations(entity) = remove_operations!(app.systems.layout.engine, entity)
+get_layout_engine() = isdefined(app, :systems) ? app.systems.layout.engine : nothing
+group(object, objects...; origin = nothing) = Group(get_layout_engine(), object, objects...; origin)
+place(object, onto) = place!(get_layout_engine(), object, onto)
+place_after(object, onto; kwargs...) = place_after!(get_layout_engine(), object, onto; kwargs...)
+align(objects, direction) = align!(get_layout_engine(), objects, direction)
+align(target::Function, objects, direction) = align!(target, get_layout_engine(), objects, direction)
+align(objects, onto, direction) = align!(get_layout_engine(), objects, onto, direction)
+align(target::Function, objects, onto, direction) = align!(get_layout_engine(), objects, direction, target)
+distribute(objects, onto, direction; mode = SPACING_MODE_POINT, spacing = Layout.average) = distribute!(get_layout_engine(), objects, onto, direction; mode, spacing)
+distribute(objects, direction; mode = SPACING_MODE_POINT, spacing = Layout.average) = distribute!(get_layout_engine(), objects, direction; mode, spacing)
+pin(object, part, to; offset = 0.0) = pin!(get_layout_engine(), object, part, to; offset)
+remove_layout_operations(entity) = remove_operations!(get_layout_engine(), entity)
+execute_now(operation::Operation) = execute_now!(get_layout_engine(), operation)
 
 "Run systems that are common to and essential for both rendering and event handling."
 function run_systems()

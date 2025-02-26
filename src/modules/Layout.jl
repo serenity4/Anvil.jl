@@ -7,7 +7,6 @@ using StaticArrays: SVector
 using Graphs
 using GeometryExperiments: GeometryExperiments, boundingelement, Box, centroid
 
-using Base: RefValue
 using Core: OpaqueClosure
 using Base.Experimental: @opaque
 
@@ -77,7 +76,12 @@ end
 
 struct Group{O}
   objects::Any
-  Group{O}(objects) where {O} = new{O}(convert(Vector{GroupElement{O}}, objects))
+  offset::Tuple{Float64,Float64}
+  Group{O}(objects, offset) where {O} = new{O}(convert(Vector{GroupElement{O}}, objects), offset)
+  function Group{O}(objects; offset::Tuple{Any, Any} = (0.0, 0.0)) where {O}
+    offset isa Tuple{Real} || (offset = convert.(Float64, offset))
+    Group{O}(objects, offset)
+  end
 end
 
 Base.broadcastable(group::Group) = Ref(group)
@@ -152,24 +156,24 @@ end
 
 function may_cache(engine, inputs, outputs)
   C = coordinate_type(engine)
-  any(input -> contains_ref(C, input), inputs) && return false
-  any(output -> contains_ref(C, output), outputs) && return false
+  any(input -> contains_movable(C, input), inputs) && return false
+  any(output -> contains_movable(C, output), outputs) && return false
   # true
   false
 end
 
-contains_ref(::Type{C}, group::Group) where {C} = any(object -> contains_ref(C, object), group.objects)
-contains_ref(::Type{C}, object) where {C} = false
+contains_movable(::Type{C}, group::Group) where {C} = any(object -> contains_movable(C, object), group.objects)
+contains_movable(::Type{C}, object) where {C} = false
 
-function contains_ref(::Type{C}, feature::PositionalFeature) where {C}
-  uses_ref(C, feature) || contains_ref(C, feature.object)
+function contains_movable(::Type{C}, feature::PositionalFeature) where {C}
+  uses_movable(C, feature) || contains_movable(C, feature.object)
 end
 
-function uses_ref(::Type{C}, feature) where {C}
+function uses_movable(::Type{C}, feature) where {C}
   feature.location === FEATURE_LOCATION_CUSTOM || return false
-  isa(feature.data, RefValue{C}) && return true
+  isa(feature.data, Movable{C}) && return true
   T = eltype(C)
-  isa(feature.data, RefValue{T}) && return true
+  isa(feature.data, Movable{T}) && return true
   false
 end
 
@@ -264,8 +268,16 @@ end
 
 function invalidate!(engine::LayoutEngine, object)
   invalidated = 0
+  # TODO: invalidate only what the operations depend on
+  invalidate_from = -1
   for i in find_operations_using(engine, object)
     invalidated += invalidate!(engine.operations[i])
+    invalidate_from == -1 && (invalidate_from = i)
+  end
+  if invalidate_from > 0
+    for i in invalidate_from:length(engine.operations)
+      invalidate!(engine.operations[i])
+    end
   end
   invalidated
 end
@@ -291,22 +303,36 @@ end
 to_group_element(engine, x) = to_object(engine, x)
 to_group_element(engine, feature::PositionalFeature) = throw(ArgumentError("Positional features are not supported within groups. A group accepts objects or other groups."))
 
-Group{O}(engine::LayoutEngine{O}, object, objects...) where {O} = Group{O}(engine, to_group_element.(engine, ((object, objects...))))
-Group(engine::LayoutEngine, args...) = Group{object_type(engine)}(engine, args...)
-function Group{O}(engine::LayoutEngine{O}, objects::Tuple) where {O}
+Group{O}(engine::LayoutEngine{O}, object, objects...; origin = nothing) where {O} = Group{O}(engine, to_group_element.(engine, ((object, objects...))); origin)
+Group(engine::LayoutEngine, args...; kwargs...) = Group{object_type(engine)}(engine, args...; kwargs...)
+function Group{O}(engine::LayoutEngine{O}, objects::Tuple; origin = nothing) where {O}
   length(objects) > 1 || throw(ArgumentError("More than one objects are required to form a group"))
-  Group{O}(GroupElement{O}[objects...])
+  objects = GroupElement{O}[objects...]
+  offset = @match origin begin
+    ::Nothing => (0.0, 0.0)
+    ::Tuple{Any, Any} => convert.(Float64, origin)
+    _ => begin
+      reference = get_coordinates(engine, origin)
+      center = centroid(group_boundingelement(engine, objects))
+      offset = reference .- center
+      @assert length(offset) == 2
+      ntuple(i -> convert(Float64, offset[i]), length(offset))
+    end
+  end
+  Group{O}(objects, offset)
 end
 
-get_coordinates(engine::LayoutEngine, group::Group) = centroid(boundingelement(engine, group))
+get_coordinates(engine::LayoutEngine, group::Group) = centroid(boundingelement(engine, group)) .+ group.offset
 get_position(engine::LayoutEngine, group::Group) = get_coordinates(engine, group)
 
-function GeometryExperiments.boundingelement(engine::LayoutEngine, group::Group)
-  object = group.objects[1]
-  objects = @view group.objects[2]
+function group_boundingelement(engine::LayoutEngine, objects)
+  object = objects[1]
+  objects = @view objects[2]
   geometry = get_geometry(engine, object) + get_position(engine, object)
   foldl((x, y) -> boundingelement(x, get_geometry(engine, y) + get_position(engine, y)), objects; init = geometry)::geometry_type(engine)
 end
+
+GeometryExperiments.boundingelement(engine::LayoutEngine, group::Group) = group_boundingelement(engine, group.objects)
 
 function get_geometry(engine::LayoutEngine, group::Group)
   geometry = boundingelement(engine, group)
@@ -423,11 +449,28 @@ function get_relative_coordinates(engine::LayoutEngine, feature::PositionalFeatu
     &FEATURE_LOCATION_CORNER => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Corner)
     &FEATURE_LOCATION_EDGE => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::Edge)
     &FEATURE_LOCATION_GEOMETRY => coordinates(get_geometry(engine, feature[])::Box{2,T}, feature.data::GeometryFeature)
-    &FEATURE_LOCATION_CUSTOM => extract_custom_attribute(feature.data::Union{T, C, RefValue{T}, RefValue{C}})::Union{T, C}
+    &FEATURE_LOCATION_CUSTOM => extract_custom_attribute(feature.data::Union{T, C, Movable{T}, Movable{C}})::Union{T, C}
   end
 end
 
-extract_custom_attribute(attribute::RefValue) = attribute[]
+mutable struct Movable{T}
+  value::T
+  modified::Bool
+  Movable{T}(value) where {T} = new{T}(value, false)
+end
+
+Movable(value) = Movable{typeof(value)}(value)
+
+Base.getindex(movable::Movable) = movable.value
+
+function Base.setindex!(movable::Movable, value)
+  movable.value == value && return false
+  movable.value = value
+  movable.modified = true
+  movable.value
+end
+
+extract_custom_attribute(attribute::Movable) = attribute[]
 extract_custom_attribute(attribute) = attribute
 
 add_coordinates(x, y) = x .+ y
@@ -469,7 +512,7 @@ at(engine::LayoutEngine, x::Real, y::Real) = at(engine, (x, y))
 at(engine::LayoutEngine, (x, y)::Tuple) = at(engine, SVector(x, y))
 at(engine::LayoutEngine, p::SVector{2}) = x -> at(engine, x, p)
 at(engine::LayoutEngine, coord::Real) = x -> at(engine, x, coord)
-at(engine::LayoutEngine, p::RefValue) = x -> at(engine, x, p)
+at(engine::LayoutEngine, p::Movable) = x -> at(engine, x, p)
 at(engine::LayoutEngine, location::Symbol) = x -> at(engine, x, location)
 
 at(engine::LayoutEngine, object) = positional_feature(engine, object)
@@ -482,8 +525,8 @@ end
 function at(engine::LayoutEngine{O}, object, position) where {O}
   C = coordinate_type(engine)
   T = eltype(C)
-  if isa(position, RefValue)
-    isa(position, RefValue{T}) || isa(position, RefValue{C}) || throw(ArgumentError("If a `Ref` is provided for a custom feature location, it must be of type $T or of type $C; automatic conversion cannot be made for mutable objects"))
+  if isa(position, Movable)
+    isa(position, Movable{T}) || isa(position, Movable{C}) || throw(ArgumentError("If a `Movable` is provided for a custom feature location, it must be of type $T or of type $C; automatic conversion cannot be made for mutable objects"))
     at(O, to_object(engine, object), FEATURE_LOCATION_CUSTOM, position)
   else
     position = convert(C, position)::C
@@ -548,12 +591,13 @@ end
 
 # Apply operations.
 
-function compute_layout!(engine::LayoutEngine)
+function compute_layout!(engine::LayoutEngine, indices = eachindex(engine.operations))
   OD = object_data_type(engine)
   O = object_type(engine)
   inputs = OD[]
   previous = OD[]
-  for operation in engine.operations
+  for i in indices
+    operation = engine.operations[i]
     outputs = operation.result
 
     if operation.may_cache && !isempty(outputs)
@@ -583,9 +627,19 @@ function compute_layout!(engine::LayoutEngine)
   end
 end
 
+function execute_now!(engine::LayoutEngine, operation::Operation)
+  i = findfirst(op -> op === operation, engine.operations)
+  isnothing(i) && error("Operation $operation not found")
+  # TODO: only compute what is necessary
+  compute_layout!(engine, 1:i)
+end
+
 # Record operations.
 
-record!(engine::LayoutEngine, operation::Operation) = push!(engine.operations, operation)
+function record!(engine::LayoutEngine, operation::Operation)
+  push!(engine.operations, operation)
+  operation
+end
 record!(f!, engine::LayoutEngine, input, output) = record!(engine, Operation(f!, engine, input, output))
 record!(f!, engine::LayoutEngine, object) = record!(f!, engine, object, object)
 
@@ -688,9 +742,10 @@ end
 export
   LayoutEngine,
   LayoutStorage, ECSLayoutStorage, ArrayLayoutStorage,
-  compute_layout!,
+  compute_layout!, execute_now!,
   place!, place_after!, align!, distribute!, pin!,
   remove_operations!,
+  Movable,
 
   Operation,
   PositionalFeature, width_of, height_of,

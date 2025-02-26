@@ -58,10 +58,10 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
     @test feature == PositionalFeature(object, :origin)
     @test positional_feature(engine, feature) === feature
     @test at(object, 4.0) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, 4.0)
-    ref = Ref(5.0)
+    ref = Movable(5.0)
     @test at(object, ref) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, ref)
-    ref = Ref(P2(1, 2))
-    @test_throws "automatic conversion cannot be made" at(object, Ref((1, 2)))
+    ref = Movable(P2(1, 2))
+    @test_throws "automatic conversion cannot be made" at(object, Movable((1, 2)))
     @test at(object, ref) == PositionalFeature(object, FEATURE_LOCATION_CUSTOM, ref)
     @test at(object, FEATURE_LOCATION_CENTER) == PositionalFeature(object, FEATURE_LOCATION_CENTER, nothing)
     @test at(object, :center) == PositionalFeature(object, :center)
@@ -151,10 +151,10 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
       @test ecs[objects[2], LOCATION_COMPONENT_ID] == P2(10 + 1 + 30, 10)
 
-      # Use a `Ref` for dynamic placement.
+      # Use a `Movable` for dynamic placement.
       reset_location.([1, 2])
       remove_operations!(engine)
-      ref = Ref(P2(0, 0))
+      ref = Movable(P2(0, 0))
       place!(engine, objects[2], at(objects[1], ref))
       compute_layout!(engine)
       @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
@@ -166,7 +166,7 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
 
       reset_location.([1, 2])
       remove_operations!(engine)
-      ref = Ref(0.0)
+      ref = Movable(0.0)
       place!(engine, objects[2], at(objects[1], ref))
       compute_layout!(engine)
       @test ecs[objects[1], LOCATION_COMPONENT_ID] == P2(10, 10)
@@ -337,9 +337,28 @@ test_storage_interface!(ArrayLayoutStorage{Int64}(locations, geometries), eachin
       place!(engine, group, group)
       compute_layout!(engine)
       @test get_coordinates(engine, group) == [76, 31.25]
-      @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[1]
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      group = Group(engine, objects[1], objects[3]; origin = objects[1])
+      @test get_coordinates(engine, group) == locations[1]
+      place!(engine, group, objects[2])
+      compute_layout!(engine)
+      @test get_coordinates(engine, group) == locations[2]
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[2]
       @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[2]
-      @test ecs[objects[3], LOCATION_COMPONENT_ID] == locations[3]
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == locations[3] .+ (locations[2] .- locations[1])
+      compute_layout!(engine)
+      @test get_coordinates(engine, group) == locations[2]
+      @test ecs[objects[1], LOCATION_COMPONENT_ID] == locations[2]
+      @test ecs[objects[2], LOCATION_COMPONENT_ID] == locations[2]
+      @test ecs[objects[3], LOCATION_COMPONENT_ID] == locations[3] .+ (locations[2] .- locations[1])
+
+      reset_location.([1, 2, 3])
+      reset_geometry.([1, 2, 3])
+      remove_operations!(engine)
+      group = Group(engine, objects[1], objects[3])
       place!(engine, group, group |> at((10, 10)))
       compute_layout!(engine)
       @test get_coordinates(engine, group) == [86, 41.25]

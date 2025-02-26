@@ -94,6 +94,12 @@ function set_name(widget::Widget, name::Symbol)
   end
 end
 
+function positional_feature(engine::LayoutEngine, widget::Widget)
+  hasfield(typeof(widget), :layout) || return positional_feature(engine, widget.id)
+  isnothing(widget.layout) && return positional_feature(engine, widget.id)
+  positional_feature(engine, widget.layout)
+end
+
 """
     @widget struct Rectangle
       geometry::Box2
@@ -743,6 +749,7 @@ end
   on_input::Function
   background::Rectangle
   text::Optional{Text}
+  layout::Optional{Group}
 end
 
 constituents(button::Button) = (button.text,)
@@ -761,16 +768,17 @@ function Button(on_click, background::Rectangle; text = nothing)
   end
   (; id) = background
   geometry = get_geometry(background)
-  button = new_widget(id, Button, on_input, background, text)
+  layout = nothing
+  if !isnothing(text)
+    operation = place(text |> at(:center) |> at(0.0, -0.08), id)
+    execute_now(operation)
+    put_in_front(text, id)
+    layout = group(id, text; origin = id)
+  end
+  button = new_widget(id, Button, on_input, background, text, layout)
   set_geometry(background, geometry)
-  button
-end
-
-function synchronize(button::Button)
   add_callback(input -> is_left_click(input) && button.on_input(input), button, BUTTON_PRESSED)
-  isnothing(button.text) && return
-  put_in_front(button.text, button)
-  place(button.text |> at(:center) |> at(0.0, -0.08), button)
+  button
 end
 
 @widget struct Checkbox
