@@ -802,11 +802,11 @@ function Checkbox(on_toggle, value::Bool = false; size::Float64 = CHECKBOX_SIZE,
       on_toggle(checkbox.value)
     end
   end
+  add_callback(input -> is_left_click(input) && checkbox.on_toggle(input), checkbox, BUTTON_PRESSED)
   checkbox
 end
 
 function synchronize(checkbox::Checkbox)
-  add_callback(input -> is_left_click(input) && checkbox.on_toggle(input), checkbox, BUTTON_PRESSED)
   checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
 end
 
