@@ -33,7 +33,7 @@ mutable struct Renderer
     filter_validation_message("VUID-VkImageViewCreateInfo-usage-02275")
     instance, device = Lava.init(; debug = !release, with_validation = !release, instance_extensions = ["VK_KHR_xcb_surface"], device_specific_features = [:sample_rate_shading])
     color = new_color_attachment(device, window)
-    new(instance, device, FrameCycle(device, Surface(instance, window); n = 2), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())
+    new(instance, device, FrameCycle(device, Surface(instance, window); n = 3), color, ExecutionState[], ProgramCache(device), FrameDiagnostics())
   end
 end
 

@@ -3,6 +3,8 @@ using Anvil, Test, Logging
 !@isdefined(includet) && (includet = include)
 includet("main.jl")
 
+ENV["VK_LAYER_MESSAGE_ID_FILTER"] = "VUID-VkSwapchainCreateInfoKHR-presentMode-02839"
+
 Logging.disable_logging(Logging.Info)
 # Logging.disable_logging(Logging.BelowMinLevel)
 ENV["JULIA_DEBUG"] = "Anvil"
