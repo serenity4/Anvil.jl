@@ -13,6 +13,8 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
 
 !@isdefined(CURSOR) && includet("virtual_inputs.jl")
 
+global EVENTS::Vector{Event} = Event[]
+
 # While executing this testset, do not provide any input of any sort to the windows that pop up.
 # Otherwise, tests will fail due to unexpected interactions.
 
@@ -508,12 +510,52 @@ ENV["ANVIL_LOG_FRAMECOUNT"] = false
     press_key(:AB02) # 'x' to exit
     wait(app)
     @test istaskdone(app.task)
+    global EVENTS = save_events()
 
     @testset "Replaying events" begin
-      events = save_events()
       main(; async = true)
       synchronize()
-      replay_events(events; time_factor = 0.1)
+      replay_events(EVENTS; time_factor = 0.1)
+      @test wait(app)
+    end
+
+    @testset "Rendering" begin
+      prev = STAGED_RENDERING[]
+      @testset "Staged rendering: $(v ? "ON" : "OFF")" for v in (false, true)
+        STAGED_RENDERING[] = v
+        main(async = true)
+        synchronize()
+        sleep(0.5)
+        events = copy(EVENTS)
+        pop!(events) # remove 'x' key press so we don't directly exit
+        replay_events(events; time_factor = 0.1)
+        sleep(0.3)
+        Anvil.exit()
+        wait(app)
+
+        @testset "Frame consistency" begin
+          frames = copy(app.systems.rendering.frames)
+          frame = popfirst!(frames)
+          @test length(frame.entity_command_lists) > 10
+          @test isempty(frame.entity_changes)
+          @test all(isempty, frame.command_changes)
+
+          for other in frames
+            @test length(frame.entity_command_lists) == length(other.entity_command_lists)
+            @test keys(frame.entity_command_lists) == keys(other.entity_command_lists)
+            STAGED_RENDERING[] || continue # TODO: Fix tests for non-staged rendering
+            for list in frame.entity_command_lists
+              other_list = other.entity_command_lists[list.entity]
+              ncommands = 0
+              for (pass, commands) in pairs(list.changes)
+                ncommands += length(commands)
+                @test length(commands) == length(other_list.changes[pass])
+              end
+            end
+          end
+        end
+      end
+      STAGED_RENDERING[] = prev
     end
   end
 end;

@@ -16,6 +16,8 @@ end
   GEOMETRY_TYPE_FILLED_CIRCLE
 end
 
+short_name(x::GeometryType) = lowercase(replace(string(x), r"^GEOMETRY_TYPE_" => ""))
+
 struct GeometryComponent
   type::GeometryType
   aabb::Box2
@@ -50,3 +52,8 @@ function resize_geometry(geometry::GeometryComponent, aabb::Box2)
     _ => error("Resizing geometry is not supported for geometries of type ", geometry.type)
   end
 end
+
+Entities.remap_type_for_dataframe_display(::Type{GeometryComponent}) = Union{String, Missing}
+Entities.remap_value_for_dataframe_display(component::GeometryComponent) = short_name(component.type)
+
+Base.show(io::IO, geometry::GeometryComponent) = print(io, GeometryComponent, "(", short_name(geometry.type), ", ", geometry.aabb, ", ", geometry.data, ')')

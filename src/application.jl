@@ -41,12 +41,9 @@ function initialize(f::Optional{Function} = nothing; record_events::Bool = false
   window_options = get(Dict{String,Any}, options, "window")
   window_decoration_options = get(Dict{String,Any}, window_options, "decorations")
 
-  ecs = new_database()
-  app.ecs = ecs
-
   wm = XWindowManager()
+  initialize_ecs!(app)
 
-  WINDOW_ENTITY_COUNTER.val = typemax(UInt32) - 100U
   title = get(window_options, "title", "Anvil")
   window = Window(
     wm,
@@ -58,13 +55,13 @@ function initialize(f::Optional{Function} = nothing; record_events::Bool = false
     border_width = get(window_decoration_options, "border_width", 1),
   )
   window_id = new_entity(EntityID(Entities.next!(WINDOW_ENTITY_COUNTER)))
-  ecs[window_id, WINDOW_COMPONENT_ID] = window
+  set_name(window_id, :window)
+  app.ecs[window_id, WINDOW_COMPONENT_ID] = window
   set_location(window_id, zero(P2); invalidate = false)
   set_geometry(window_id, window_geometry(window); invalidate = false)
 
-  app.entity_pool = EntityPool(; limit = WINDOW_ENTITY_COUNTER[] - 1)
   systems = Systems(
-    LayoutSystem(ecs),
+    LayoutSystem(app.ecs),
     DrawingOrderSystem(),
     RenderingSystem(Renderer(window)),
     EventSystem(EventQueue(wm; record_history = record_events), UserInterface(window)),
@@ -85,11 +82,19 @@ function initialize(f::Optional{Function} = nothing; record_events::Bool = false
 
   # Required because `WidgetComponent` is a Union, so `typeof(value)` at first insertion will be too narrow.
   app.ecs.components[WIDGET_COMPONENT_ID] = ComponentStorage{WidgetComponent}()
-  start(systems.rendering.renderer; period = renderer_period)
-  !isnothing(f) && f()
 
+  f === nothing && return
+
+  start(systems.rendering.renderer; period = renderer_period)
+  f()
   map_window(window)
   nothing
+end
+
+function initialize_ecs!(app::Application)
+  app.ecs = new_database()
+  WINDOW_ENTITY_COUNTER[] = 4000000000
+  app.entity_pool = EntityPool(; limit = WINDOW_ENTITY_COUNTER[] - 1)
 end
 
 get_geometry(window::Window) = get_geometry(app.windows[window])
@@ -107,43 +112,6 @@ function new_entity(entity::EntityID = new!(app.entity_pool))
 end
 Base.delete!(app::Application, object) = delete!(app.ecs, convert(EntityID, object))
 
-set_name(object, name::Symbol) = set_name(convert(EntityID, object), name)
-function set_name(entity::EntityID, name::Symbol)
-  is_release() && return nothing
-  app.ecs.entity_names[entity] = name
-  nothing
-end
-
-macro set_name(ex, exs...)
-  exs = (ex, exs...)
-  exs, ex = exs[1:(end - 1)], exs[end]
-  Meta.isexpr(ex, :(=), 2) || error("Expected assignment of the form `lhs = rhs`, got $(repr(ex))")
-  name = ex.args[1]::Symbol
-  lhs = esc(name)
-  ex = esc(ex)
-  if isempty(exs)
-    quote
-      $ex
-      set_name($lhs, $(QuoteNode(name)))
-    end
-  else
-    quote
-      $ex
-      namespace = join($(Expr(:tuple, esc.(exs)...)), '/')
-      set_name($lhs, Symbol(namespace, '/', $(QuoteNode(name))))
-    end
-  end
-end
-
-macro set_name(ex::Symbol, exs::Symbol...)
-  ex = (ex, exs...)
-  ret = Expr(:block)
-  for ex in exs
-    push!(ret.args, :(set_name($(esc(ex)), $(QuoteNode(ex)))))
-  end
-  ret
-end
-get_name(entity::EntityID) = isdefined(app, :ecs) ? get(app.ecs.entity_names, entity, nothing) : nothing
 function get_entity(name::Symbol)
   # This function is slow. Use for tests or non-performance critical code only.
   for (entity, entity_name) in pairs(app.ecs.entity_names)
@@ -201,11 +169,23 @@ set_z(entity, z::Real) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID, ZCoordinateCo
 unset_z(entity) = unset!(app.ecs, entity, ZCOORDINATE_COMPONENT_ID)
 has_z(entity) = haskey(app.ecs, entity, ZCOORDINATE_COMPONENT_ID)
 get_render(entity) = app.ecs[entity, RENDER_COMPONENT_ID, RenderComponent]
-set_render(entity, render::RenderComponent) = app.ecs[entity, RENDER_COMPONENT_ID, RenderComponent] = render
+function set_render(entity, render::RenderComponent)
+  entity = convert(EntityID, entity)
+  app.ecs[entity, RENDER_COMPONENT_ID, RenderComponent] = render
+  stage_for_render!(app.systems.rendering, entity)
+end
 set_render(entity, render::UserDefinedRender) = set_render(entity, RenderComponent(RENDER_OBJECT_USER_DEFINED, nothing, render; render.is_opaque))
 set_render(f, entity; is_opaque::Bool = false) = set_render(entity, UserDefinedRender(f; is_opaque))
 has_render(entity) = haskey(app.ecs, entity, RENDER_COMPONENT_ID)
-unset_render(entity) = unset!(app.ecs, entity, RENDER_COMPONENT_ID)
+function unset_render(entity)
+  entity = convert(EntityID, entity)
+  unset!(app.ecs, entity, RENDER_COMPONENT_ID)
+  unstage_for_render!(app.systems.rendering, entity)
+end
+function update_render(entity)
+  entity = convert(EntityID, entity)
+  isdefined(app, :systems) && stage_for_render!(app.systems.rendering, entity)
+end
 get_widget(entity) = app.ecs[entity, WIDGET_COMPONENT_ID, WidgetComponent]
 function get_widget(name::Symbol)
   entity = get_entity(name)
@@ -258,21 +238,6 @@ function run_systems()
   app.systems.drawing_order(app.ecs)
 end
 
-# Called by the application thread.
-function frame_nodes(target::Resource)
-  run_systems()
-  app.systems.rendering(app.ecs, target)
-end
-
-function shutdown(app::Application)
-  shutdown(app.systems)
-  close(app.wm, app.window)
-  wait(shutdown_owned_tasks())
-  schedule_shutdown()
-end
-
-Base.wait(app::Application) = monitor_owned_tasks()
-
 function exit(code::Int = 0)
   if current_task() === app.task
     _exit(code)
@@ -289,13 +254,37 @@ function _exit(code::Int)
   code
 end
 
+function shutdown(app::Application)
+  shutdown(app.systems)
+  close(app.wm, app.window)
+  wait(shutdown_owned_tasks())
+  schedule_shutdown()
+end
+
+Base.wait(app::Application) = monitor_owned_tasks()
+
 function (app::Application)()
-  shutdown_scheduled() && return false
   # Make sure that the drawing order (which also defines interaction order)
   # has been resolved prior to resolving which object receives which event based on that order.
   run_systems()
-  app.systems.event(app.ecs)
+  queue = app.systems.event.queue
+  while refill_event_queue!(queue)
+    event = popfirst!(queue)
+    while event.type === WINDOW_EXPOSED # ignore these events
+      isempty(queue) && return true
+      event = popfirst!(queue)
+    end
+    shutdown_scheduled() && return false
+    app.systems.event(app.ecs, event)
+    run_systems()
+  end
   true
+end
+
+function refill_event_queue!(queue::EventQueue)
+  isempty(queue) && collect_events!(queue)
+  !isempty(queue) && return true
+  false
 end
 
 function main(f; async = false, application_period = 0.002, renderer_period = 0.005, record_events = false)
@@ -305,14 +294,13 @@ function main(f; async = false, application_period = 0.002, renderer_period = 0.
   app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, disallow_task_migration = true)) do
     initialize(f; record_events, renderer_period)
     LoopExecution(application_period; shutdown = false)(app)()
-    finalize(app)
   end
   async && return false
   wait(app)
 end
 
 save_events() = save_history(app.systems.event.queue.wm, app.systems.event.queue)
-replay_events(events; time_factor = 1.0) = replay_history(app.systems.event.queue.wm, events; time_factor)
+replay_events(events; time_factor = 1.0) = replay_history(app.systems.event.queue.wm, events; time_factor, stop = () -> istaskdone(app.task))
 
 execute(f, args...; kwargs...) = fetch(CooperativeTasks.execute(f, app.task, args...; kwargs...))
 

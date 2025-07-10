@@ -38,7 +38,7 @@ function new_widget(entity::EntityID, ::Type{T}, args...) where {T<:Widget}
   widget
 end
 
-# XXX: Use `EntityID` or `Widget` iterators to recursively get widget constituents,
+# REFACTOR: Use `EntityID` or `Widget` iterators to recursively get widget constituents,
 # instead of performing the recursion manually.
 
 function disable!(widget::WidgetID)
@@ -119,12 +119,12 @@ macro widget(ex)
   @match ex begin
     Expr(:struct, mutable, name, block) => begin
       ex.args[1] = true # force mutability
-      fields = map(x -> Meta.isexpr(x, :const) ? x.args[1] : x, filter(x -> Meta.isexpr(x, (:const, :(::))), block.args))
+      fields = map(x -> isexpr(x, :const) ? x.args[1] : x, filter(x -> isexpr(x, (:const, :(::))), block.args))
       new = @match name begin
         :($_{$Ts...}) => :(new{$(Ts...)})
         _ => :new
       end
-      !Meta.isexpr(name, :(<:)) && (ex.args[2] = Expr(:(<:), ex.args[2], Widget)) # force subtyping `Widget`.
+      !isexpr(name, :(<:)) && (ex.args[2] = Expr(:(<:), ex.args[2], Widget)) # force subtyping `Widget`.
       pushfirst!(block.args, Expr(:const, :(id::$WidgetID)), :(modified::Bool), :(disabled::Bool))
       push!(block.args, :($name(id::$WidgetID, args...) = $new(id, false, false, args...)))
     end
@@ -184,6 +184,9 @@ end
   edit::Any # ::TextEditState
 end
 
+Base.getindex(text::Text) = text.value
+Base.setindex!(text::Text, value) = setproperty!(text, :value, value)
+
 function Text(value::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ", editable = false, on_edit = nothing)
   text = new_widget(Text, value, OpenType.Line[], size, font, script, language, editable, nothing)
   if editable
@@ -204,7 +207,7 @@ function synchronize(text::Text)
   options = TextOptions()
   font = get_font(text.font)
   font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
-  string = text.editable && isa(text.edit, TextEditState) ? something(text.edit.buffer, text.value) : text.value
+  string = text.editable && isa(text.edit, TextEditState) ? something(text.edit.buffer, text[]) : text[]
   if !isempty(string)
     text_ot = OpenType.Text(string, options)
     lines = OpenType.lines(text_ot, [font => font_options])
@@ -219,7 +222,7 @@ function synchronize(text::Text)
 end
 
 function unset_shortcut(text::Text, shortcut::Char)
-  text = text.value
+  text = text[]
   for i in eachindex(text)
     char = text[i]
     if lowercase(char) == shortcut
@@ -248,7 +251,7 @@ function unset_shortcut(text::Text, shortcut::Char)
 end
 
 function set_shortcut(text::Text, shortcut::Char)
-  text = text.value
+  text = text[]
   for i in eachindex(text)
     char = text[i]
     if lowercase(char) == shortcut
@@ -337,7 +340,7 @@ mutable struct TextEditState
 end
 
 function start_editing!(edit::TextEditState)
-  edit.buffer = deepcopy(edit.text.value)
+  edit.buffer = deepcopy(edit.text[])
   register_shortcuts!(edit)
   remove_callback(edit.text, edit.edit_on_select)
   add_callback(edit.text, edit.select_cursor; drag_threshold = 0.1)
@@ -504,10 +507,10 @@ function cursor_geometry(lines::Vector{OpenType.Line}, glyph_index)
 end
 
 function commit_modifications!(edit::TextEditState)
-  edit.text.value = edit.buffer
+  edit.text[] = edit.buffer
   clear_modifications!(edit)
   edit.on_edit === nothing && return
-  edit.on_edit(edit.text.value)
+  edit.on_edit(edit.text[])
 end
 
 function insert_after!(edit::TextEditState, value)
@@ -789,6 +792,9 @@ end
   inactive_color::RGB{Float32}
 end
 
+Base.getindex(checkbox::Checkbox) = checkbox.value
+Base.setindex!(checkbox::Checkbox, value) = setproperty!(checkbox, :value, value)
+
 constituents(checkbox::Checkbox) = Widget[]
 
 function Checkbox(on_toggle, value::Bool = false; size::Float64 = CHECKBOX_SIZE, active_color = CHECKBOX_ACTIVE_COLOR, inactive_color = CHECKBOX_INACTIVE_COLOR)
@@ -798,8 +804,8 @@ function Checkbox(on_toggle, value::Bool = false; size::Float64 = CHECKBOX_SIZE,
   set_geometry(background, geometry)
   checkbox.on_toggle = function (input::Input)
     if is_left_click(input)
-      checkbox.value = !checkbox.value
-      on_toggle(checkbox.value)
+      checkbox[] = !checkbox[]
+      on_toggle(checkbox[])
     end
   end
   add_callback(input -> is_left_click(input) && checkbox.on_toggle(input), checkbox, BUTTON_PRESSED)
@@ -807,7 +813,7 @@ function Checkbox(on_toggle, value::Bool = false; size::Float64 = CHECKBOX_SIZE,
 end
 
 function synchronize(checkbox::Checkbox)
-  checkbox.background.color = checkbox.value ? checkbox.active_color : checkbox.inactive_color
+  checkbox.background.color = checkbox[] ? checkbox.active_color : checkbox.inactive_color
 end
 
 mutable struct MenuItem
@@ -837,7 +843,7 @@ end
 isactive(item::MenuItem) = item.active
 
 function MenuItem(on_selected, widget; text = nothing, shortcut = nothing, on_active = nothing)
-  !isnothing(text) && isnothing(shortcut) && (shortcut = lowercase(first(text.value)))
+  !isnothing(text) && isnothing(shortcut) && (shortcut = lowercase(first(text[])))
   MenuItem(widget, false, on_selected, on_active, text, shortcut)
 end
 
@@ -882,6 +888,7 @@ end
 
 function Menu(head, shortcut::Char; set = InteractionSet(), on_expand = nothing, on_collapse = nothing)
   menu = Menu(on_expand, on_collapse, head, WidgetID[], set, false, new_entity(), 0, lowercase(shortcut))
+  @set_name menu.overlay Symbol(:menu_overlay_, Int(menu.overlay))
   add_callback(menu.head, BUTTON_PRESSED) do input::Input
     is_left_click(input) && !menu.expanded && return expand!(menu)
     is_left_click(input) && menu.expanded && return collapse!(menu)

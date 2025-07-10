@@ -46,6 +46,7 @@ function generate_user_interface(state::ApplicationState)
         last_displacement[] = SVector(displacement)
         total_drag[] = total_drag[] .+ abs.(segment)
         set_location(image, origin[] .+ displacement)
+        update_render(image)
         if norm(total_drag) > 10
           total_drag[] = (0.0, 0.0)
           regenerate_image(state)
@@ -56,16 +57,16 @@ function generate_user_interface(state::ApplicationState)
   add_callback(on_input, image, BUTTON_PRESSED, DRAG)
 
   # File menu.
-  file_menu_head = Rectangle((3, 1), MENU_ITEM_COLOR)
-  file_menu_head_text = Text("File")
+  @set_name file_menu_head = Rectangle((3, 1), MENU_ITEM_COLOR)
+  @set_name file_menu_head_text = Text("File")
   file_menu = Menu(file_menu_head, 'F'; on_expand = menu -> generate_file_menu!(menu, state), on_collapse = close!)
   place(file_menu_head |> at(:top_left), app.windows[app.window] |> at(:top_left))
   place(at(file_menu_head_text, :center), at(file_menu_head, :center))
   state.info[:file_menu] = file_menu
 
   # Edit menu.
-  edit_menu_head = Rectangle((3, 1), MENU_ITEM_COLOR)
-  edit_menu_text = Text("Edit")
+  @set_name edit_menu_head = Rectangle((3, 1), MENU_ITEM_COLOR)
+  @set_name edit_menu_text = Text("Edit")
   edit_menu = Menu(edit_menu_head, 'E'; on_expand = menu -> generate_edit_menu!(menu, state), on_collapse = close!)
   place(edit_menu_head |> at(:top_left), file_menu_head |> at(:top_right))
   place(at(edit_menu_text, :center), at(edit_menu_head, :center))
@@ -100,12 +101,12 @@ function generate_user_interface(state::ApplicationState)
   @set_name my_object = new_entity()
   set_location(my_object, (5, 5))
   set_geometry(my_object, FilledCircle(1.5))
-  set_render(my_object; is_opaque = true) do pass, program_cache, location, geometry, parameters
+  set_render(my_object; is_opaque = true) do list, program_cache, location, geometry, parameters
     vertex_data = ShaderLibrary.Vec3[(1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0)]
     rect = ShaderLibrary.Rectangle(geometry.aabb, vertex_data, nothing)
     primitive = ShaderLibrary.Primitive(rect, location)
     command = ShaderLibrary.Command(program_cache, ShaderLibrary.Gradient(), parameters, primitive)
-    add_command!(pass, command)
+    add_command!(list, :render_opaque, command)
   end
 
   @set_name my_transparent_object = new_entity()
@@ -166,4 +167,15 @@ function generate_edit_menu!(menu::Menu, state::ApplicationState)
   add_menu_items!(menu, items)
 end
 
-main(state = ApplicationState(); async = false, record_events = false) = Anvil.main(() -> generate_user_interface(state); async, record_events)
+function main(state = ApplicationState(); async = false, record_events = false, replay = false, exit_after_replay = true)
+  record_events |= replay
+  replay && (state_copy = deepcopy(state))
+  ret = Anvil.main(() -> generate_user_interface(state); async, record_events)
+  !replay && return ret
+  events = save_events()
+  !exit_after_replay && while events[end].type !== POINTER_MOVED pop!(events) end
+  main(state_copy; async = true)
+  synchronize()
+  replay_events(events; time_factor = 1)
+  wait(app)
+end

@@ -19,7 +19,7 @@ const APPLICATION_THREADID = 2
 const RENDERER_THREADID = 3
 
 using CompileTraces
-using Lava: Command, Memory, @task
+using Lava: Command, Memory, @task, NodeID
 using Lava
 using ShaderLibrary
 using ShaderLibrary: Instance, aspect_ratio
@@ -44,7 +44,7 @@ using AbstractGUI: events, actions
 import AbstractGUI: overlay!, unoverlay!
 @reexport using StaticArrays: @SVector, SVector
 
-using Base: Callable, annotate!, annotations
+using Base: Callable, annotate!, annotations, RefValue
 using .Meta: isexpr
 @reexport using StyledStrings
 using StyledStrings: AnnotatedString, annotatedstring, eachregion, Face, addface!
@@ -64,7 +64,9 @@ const P2 = Point2
 const P2f = Point2f
 const WidgetID = EntityID
 
-include("renderer.jl")
+const STAGED_RENDERING = Ref(true)
+
+include("diff.jl")
 include("geometry.jl")
 include("components.jl")
 include("modules/Layout.jl")
@@ -75,11 +77,15 @@ const Group = Layout.Group{EntityID}
 include("layout.jl")
 include("bindings.jl")
 include("interaction_set.jl")
+include("names.jl")
 include("widgets.jl")
+include("renderer.jl")
 include("systems.jl")
+include("rendering.jl")
 include("assets.jl")
 include("observables.jl")
 include("application.jl")
+include("show.jl")
 include("theme.jl")
 
 const app = Application()
@@ -105,6 +111,8 @@ export
        ASSET_DIRECTORY,
        save_events, replay_events,
        execute, @execute,
+       filter_validation_message,
+       STAGED_RENDERING,
 
        # Components.
        RenderComponent, LocationComponent,
@@ -129,7 +137,7 @@ export
 
        # Application state.
        get_entity, get_location, get_geometry, get_z, get_render, get_widget, set_widget, unset_widget, get_window,
-       set_location, set_geometry, set_z, has_z, set_render, has_render, unset_render, set_widget, set_window,
+       set_location, set_geometry, set_z, has_z, set_render, has_render, unset_render, update_render, set_widget, set_window,
        overlay, unoverlay,
        add_callback, remove_callback,
 

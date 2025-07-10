@@ -13,6 +13,8 @@ const WINDOW_COMPONENT_ID = ComponentID(7) # Window
   RENDER_OBJECT_USER_DEFINED = 4
 end
 
+short_name(x::RenderObjectType) = lowercase(replace(string(x), r"^RENDER_OBJECT_" => ""))
+
 struct RectangleVisual
   color::RGBA{Float32}
   # TODO: add borders, corner roundness, etc.
@@ -139,25 +141,8 @@ end
 RenderComponent(visual::RectangleVisual) = RenderComponent(RENDER_OBJECT_RECTANGLE, vertex_colors(visual), Gradient{Vec4}(); is_opaque = isone(visual.color.alpha))
 RenderComponent(visual::ImageVisual) = RenderComponent(RENDER_OBJECT_IMAGE, nothing, visual; visual.parameters.is_opaque)
 
-add_command!(pass::Vector{Command}, command::Command) = push!(pass, command)
-add_commands!(pass::Vector{Command}, commands::Vector{Command}) = append!(pass, commands)
-add_commands!(pass::Vector{Command}, command_lists::Vector{Vector{Command}}) = foreach(commands -> add_commands!(pass, commands), command_lists)
-
-struct TransparencyPass
-  pass_1::Vector{Command}
-  pass_2::Vector{Command}
-end
-TransparencyPass() = TransparencyPass(Command[], Command[])
-
-add_command!(pass::TransparencyPass, command::Command) = push!(pass.pass_1, command)
-
-add_commands!(pass::TransparencyPass, commands::Vector{Command}) = append!(pass.pass_1, commands)
-
-function add_commands!(pass::TransparencyPass, commands::Vector{Vector{Command}})
-  length(commands) == 2 || error("Expected two sets of commands, got $(length(commands)) sets")
-  append!(pass.pass_1, commands[1])
-  append!(pass.pass_2, commands[2])
-end
+Entities.remap_type_for_dataframe_display(::Type{RenderComponent}) = Union{String, Missing}
+Entities.remap_value_for_dataframe_display(component::RenderComponent) = short_name(component.type)
 
 struct UserDefinedRender
   create_renderables!::Any
@@ -166,38 +151,7 @@ end
 
 UserDefinedRender(f; is_opaque::Bool = false) = UserDefinedRender(f, is_opaque)
 
-function add_commands!(pass, program_cache::ProgramCache, component::RenderComponent, location, geometry::GeometryComponent, parameters::ShaderParameters)
-  @switch component.type begin
-    @case &RENDER_OBJECT_RECTANGLE
-    rect = ShaderLibrary.Rectangle(geometry.aabb, component.vertex_data, nothing)
-    gradient = component.primitive_data::Gradient
-    primitive = Primitive(rect, location)
-    command = Command(program_cache, gradient, parameters, primitive)
-    add_command!(pass, command)
-
-    @case &RENDER_OBJECT_IMAGE
-    render = component.primitive_data::ImageVisual
-    uvs = image_uvs(geometry.aabb, render)
-    rect = ShaderLibrary.Rectangle(geometry.aabb, uvs, nothing)
-    primitive = Primitive(rect, location)
-    parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
-    command = Command(program_cache, render.sprite, parameters_ssaa, primitive)
-    add_command!(pass, command)
-
-    @case &RENDER_OBJECT_TEXT
-    text = component.primitive_data::ShaderLibrary.Text
-    parameters_ssaa = @set parameters.render_state.enable_fragment_supersampling = true
-    # XXX: We may want to draw all opaque text backgrounds in the corresponding pass,
-    # not in the transparency pass.
-    add_commands!(pass, renderables(program_cache, text, parameters_ssaa, location))
-
-    @case &RENDER_OBJECT_USER_DEFINED
-    (; create_renderables!) = component.primitive_data::UserDefinedRender
-    create_renderables!(pass, program_cache, location, geometry, parameters)
-  end
-end
-
-Base.show(io::IO, render::RenderComponent) = print(io, RenderComponent, "(", render.type, ", ", typeof(render.vertex_data), ", ", typeof(render.primitive_data))
+Base.show(io::IO, render::RenderComponent) = print(io, RenderComponent, "(", short_name(render.type), ", ::", typeof(render.vertex_data), ", ::", typeof(render.primitive_data), ')')
 
 function new_database()
   ecs = ECSDatabase(component_names = Dict(), entity_names = Dict())

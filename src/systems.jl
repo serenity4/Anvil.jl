@@ -76,8 +76,96 @@ function ((; behind, in_front)::DrawingOrderSystem)(ecs::ECSDatabase)
   end
 end
 
+const PassName = Symbol
+
+mutable struct PassInfo
+  const name::PassName
+  const node::NodeID
+  const stages::Vk.PipelineStageFlag2
+  parameters::ShaderParameters # managed by the application
+  PassInfo(name, node, stages) = new(name, node, stages)
+end
+
+const PerFrame{T} = Vector{T}
+
+struct EntityCommandList
+  entity::EntityID
+  changes::Dictionary{PassName, Vector{Command}}
+end
+EntityCommandList(entity::EntityID) = EntityCommandList(entity, Dictionary{PassName, Vector{Command}}())
+
+function add_command!(list::EntityCommandList, pass::PassName, command::Command)
+  push!(get!(Vector{Command}, list.changes, pass), command)
+  nothing
+end
+
+function add_commands!(list::EntityCommandList, pass::PassName, commands)
+  for command in commands
+    add_command!(list, pass, command)
+  end
+end
+
+struct FrameData
+  index::Int
+  color::Resource
+  depth::Resource
+  entity_changes::DiffSet{EntityID}
+  entity_command_lists::Dictionary{EntityID, EntityCommandList}
+  command_changes::Dictionary{PassName, DiffVector{Command}}
+end
+
+FrameData(index, color, depth) = FrameData(index, color, depth, DiffSet{EntityID}(), Dictionary{EntityID, EntityCommandList}(), Dictionary{PassName, DiffVector{Command}}())
+
 struct RenderingSystem <: System
   renderer::Renderer
+  frames::PerFrame{FrameData} # managed by the application
+  passes::Dictionary{PassName, PassInfo} # constant after construction
+  lock::ReentrantLock
+end
+
+@forward_methods RenderingSystem field=:lock Base.lock Base.unlock
+
+function RenderingSystem(renderer::Renderer)
+  # XXX: We may be missing shder stages.
+  standard_stages = |(Vk.PIPELINE_STAGE_2_VERTEX_SHADER_BIT, Vk.PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Vk.PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, Vk.PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, Vk.PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT)
+  passes = dictionary([
+    :render_opaque => PassInfo(:render_opaque, NodeID(0), standard_stages),
+    :render_transparent_1 => PassInfo(:render_transparent_1, NodeID(1), standard_stages),
+    :render_transparent_2 => PassInfo(:render_transparent_2, NodeID(2), standard_stages),
+    :depth_mask_opaque => PassInfo(:depth_mask_opaque, NodeID(3), standard_stages),
+    :depth_mask_transparent => PassInfo(:depth_mask_transparent, NodeID(4), standard_stages),
+  ])
+  RenderingSystem(renderer, FrameData[], passes, ReentrantLock())
+end
+
+# --- Renderer Interface ---
+
+function initialize_frames_and_commands!()
+  rendering = app.systems.rendering
+  initialize_frames!(rendering)
+  run_systems()
+  for frame in rendering.frames
+    generate_commands_for_frame!(frame, rendering, components(rendering))
+  end
+end
+
+function synchronize_commands_for_cycle!(cycle::FrameCycleInfo)
+  run_systems()
+  synchronize_commands_for_cycle!(cycle, app.systems.rendering)
+end
+
+# --------------------------
+
+Entities.components(::RenderingSystem) = components(app.ecs, (ENTITY_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{EntityID,P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+
+function Entities.components(::RenderingSystem, entities)
+  map(entities) do entity
+    location = get_location(entity)
+    geometry = get_geometry(entity)
+    object = get_render(entity)
+    z = get_z(entity)
+    (entity, location, geometry, object, z)
+  end
 end
 
 function shutdown(system::RenderingSystem)
@@ -85,28 +173,12 @@ function shutdown(system::RenderingSystem)
   wait(system.renderer.device)
 end
 
-function (rendering::RenderingSystem)(ecs::ECSDatabase, target::Resource)
-  nodes = RenderNode[]
-  depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, dimensions(target.attachment); name = :depth)
-  color_clear = [ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1f0))]
-  camera = camera_metric_to_viewport(target, rendering.renderer.frame_cycle.swapchain.surface.target)
-  parameters = ShaderParameters(target; depth, color_clear, camera)
-  @reset parameters.depth_clear = 1f0
-  compute_depth_mask!(nodes, rendering, ecs, parameters; opaque = true)
-  !isempty(nodes) && @reset parameters.depth_clear = nothing
-  render_opaque_objects!(nodes, rendering, ecs, parameters)
-  @reset parameters.depth_clear = nothing
-  @reset parameters.color_clear[1] = nothing
-  !isempty(nodes) && @reset parameters.depth_clear = nothing
-  compute_depth_mask!(nodes, rendering, ecs, parameters; opaque = false)
-  !isempty(nodes) && @reset parameters.depth_clear = nothing
-  @reset parameters.render_state.enable_depth_write = false
-  render_transparent_objects!(nodes, rendering, ecs, parameters)
-  nodes
-end
-
-function camera_metric_to_viewport(target::Resource, window::Window)
-  viewport_dimensions = 2 .* screen_semidiagonal(aspect_ratio(target))
+"""
+Create a `Camera` that remaps coordinates from a metric coordinate
+system to the renderer's viewport coordinate system.
+"""
+function camera_metric_to_viewport(area::RenderArea, window::Window)
+  viewport_dimensions = 2 .* screen_semidiagonal(aspect_ratio(area))
   window_size = physical_size(window)
   metric_to_viewport = viewport_dimensions ./ window_size
   camera = Camera(; extent = 2 ./ metric_to_viewport)
@@ -117,57 +189,10 @@ function physical_size(window::Window)
   (; screen) = window
   screen_size = (screen.width_in_millimeters, screen.height_in_millimeters)
   screen_dimensions = (screen.width_in_pixels, screen.height_in_pixels)
-  window_dimensions = extent(window)
-  all(iszero, window_dimensions) && return (0.0, 0.0)
+  all(iszero, window.extent) && return (0.0, 0.0)
   physical_scale = screen_size ./ screen_dimensions
   physical_scale = physical_scale ./ 10 # mm to cm
-  window_dimensions .* physical_scale
-end
-
-function compute_depth_mask!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters; opaque::Bool)
-  (; program_cache) = renderer
-  commands = Command[]
-  @reset parameters.render_state.enable_fragment_supersampling = true
-  for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
-    object.is_opaque == opaque || continue
-    geometry.type == GEOMETRY_TYPE_RECTANGLE && continue
-    center = location
-    location = Point3f(location..., -1/z)
-    @switch geometry.type begin
-      @case &GEOMETRY_TYPE_FILLED_CIRCLE
-      (; circle) = geometry
-      shader = FragmentLocationTest(p -> in(p - center, circle))
-      rect = ShaderLibrary.Rectangle(geometry.aabb, nothing, nothing)
-      primitive = Primitive(rect, location)
-      command = Command(program_cache, shader, parameters, primitive)
-      add_command!(commands, command)
-    end
-  end
-  !isempty(commands) && push!(nodes, RenderNode(commands))
-end
-
-function render_opaque_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
-  commands = Command[]
-  for (location, geometry, object, z) in components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
-    object.is_opaque || continue
-    location = Point3f(location..., -1/z)
-    @reset parameters.render_state.depth_compare_op = ifelse(geometry.type ≠ GEOMETRY_TYPE_RECTANGLE, Vk.COMPARE_OP_EQUAL, Vk.COMPARE_OP_LESS_OR_EQUAL)
-    add_commands!(commands, renderer.program_cache, object, location, geometry, parameters)
-  end
-  !isempty(commands) && push!(nodes, RenderNode(commands))
-end
-
-function render_transparent_objects!(nodes, (; renderer)::RenderingSystem, ecs::ECSDatabase, parameters::ShaderParameters)
-  pass = TransparencyPass()
-  data = components(ecs, (LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
-  for (location, geometry, object, z) in data
-    object.is_opaque && continue
-    location = Point3f(location..., -1/z)
-    @reset parameters.render_state.depth_compare_op = ifelse(geometry.type ≠ GEOMETRY_TYPE_RECTANGLE, Vk.COMPARE_OP_EQUAL, Vk.COMPARE_OP_LESS_OR_EQUAL)
-    add_commands!(pass, renderer.program_cache, object, location, geometry, parameters)
-  end
-  !isempty(pass.pass_1) && push!(nodes, RenderNode(pass.pass_1))
-  !isempty(pass.pass_2) && push!(nodes, RenderNode(pass.pass_2))
+  window.extent .* physical_scale
 end
 
 struct UserInterface
@@ -257,12 +282,22 @@ struct EventSystem <: System
   ui::UserInterface
 end
 
-function (system::EventSystem)(ecs::ECSDatabase)
-  isempty(system.queue) && collect_events!(system.queue)
-  while !isempty(system.queue)
-    event = popfirst!(system.queue)
-    code = system(ecs, to_metric_coordinate_system(event))
-    isa(code, Int) && return code
+function (system::EventSystem)(ecs::ECSDatabase, event::Event)
+  event = to_metric_coordinate_system(event)
+  event.type == WINDOW_RESIZED && (set_geometry(event.window, physical_size(event.window)))
+  update_overlays!(system, ecs)
+  consume!(system.ui.overlay, event)
+  event.type == WINDOW_CLOSED && exit()
+end
+
+function update_overlays!(system::EventSystem, ecs::ECSDatabase)
+  for (entity, area) in pairs(system.ui.areas)
+    location = get_location(entity)
+    geometry = get_geometry(entity)
+    z = get_z(entity)
+    area.aabb = geometry.aabb
+    area.z = z
+    area.contains = x -> in(x .- location, geometry)
   end
 end
 
@@ -298,24 +333,6 @@ function pixel_to_metric(point::Point{2}, screen = app.window.screen)
   point .* physical_scale
 end
 pixel_to_metric(box::Box{2}) = Box(pixel_to_metric(box.min), pixel_to_metric(box.max))
-
-function (system::EventSystem)(ecs::ECSDatabase, event::Event)
-  event.type == WINDOW_RESIZED && (set_geometry(event.window, physical_size(event.window)))
-  update_overlays!(system, ecs)
-  consume!(system.ui.overlay, event)
-  event.type == WINDOW_CLOSED && exit()
-end
-
-function update_overlays!(system::EventSystem, ecs::ECSDatabase)
-  for (entity, area) in pairs(system.ui.areas)
-    location = get_location(entity)
-    geometry = get_geometry(entity)
-    z = get_z(entity)
-    area.aabb = geometry.aabb
-    area.z = z
-    area.contains = x -> in(x .- location, geometry)
-  end
-end
 
 struct Systems
   layout::LayoutSystem

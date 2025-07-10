@@ -1,9 +1,9 @@
 using Anvil
-using Anvil: new_database, get_name, set_name, get_widget, initialize, Rectangle
+using Anvil: get_name, set_name, get_widget, initialize, Rectangle
 using Test
 
 @testset "Debug utilities" begin
-  app.ecs = new_database()
+  initialize()
   @set_name widget = Rectangle((3, 3), RGB(1, 1, 1))
   @test get_name(widget.id) === :widget
   set_name(widget, :rectangle)
