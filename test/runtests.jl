@@ -3,7 +3,8 @@ using Anvil, Test, Logging
 !@isdefined(includet) && (includet = include)
 includet("main.jl")
 
-filter_validation_message("VUID-VkImageViewCreateInfo-usage-02275")
+remove_validation_message_filters()
+# filter_validation_message("VUID-VkImageViewCreateInfo-usage-02275")
 filter_validation_message("VUID-VkSwapchainCreateInfoKHR-presentMode-02839")
 
 Logging.disable_logging(Logging.Info)
@@ -14,8 +15,8 @@ Logging.disable_logging(Logging.Info)
 # ENV["ANVIL_LOG_KEY_PRESS"] = true
 # ENV["ANVIL_RELEASE"] = true # may circumvent issues with validation layers
 
-STAGED_RENDERING[] = true
 # STAGED_RENDERING[] = false
+# STAGED_RENDERING[] = true
 main()
 
 # XXX: We are running out of fences, investigate
@@ -31,18 +32,18 @@ TODO:
 =#
 
 @testset "Anvil.jl" begin
-  include("layout.jl")
-  include("bindings.jl")
-  include("observables.jl")
-  include("debug.jl")
-  include("application.jl")
+  include("layout.jl");
+  include("bindings.jl");
+  include("observables.jl");
+  include("debug.jl");
+  include("application.jl");
 end;
 
 # For debugging.
 
 using DataFrames
 df = DataFrame(Anvil.app.ecs; remap = true)
-df = DataFrame(Anvil.app.ecs)
+# df = DataFrame(Anvil.app.ecs)
 select(df, :Name, :Render)
 select(df, :Name, :Z)
 select(df, :Name, :Location)

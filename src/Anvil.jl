@@ -18,6 +18,8 @@ module Anvil
 const APPLICATION_THREADID = 2
 const RENDERER_THREADID = 3
 
+global RENDER_SAMPLE_COUNT::Int = 8
+
 using CompileTraces
 using Lava: Command, Memory, @task, NodeID
 using Lava
@@ -111,7 +113,7 @@ export
        ASSET_DIRECTORY,
        save_events, replay_events,
        execute, @execute,
-       filter_validation_message,
+       filter_validation_message, remove_validation_message_filters,
        STAGED_RENDERING,
 
        # Components.
@@ -120,7 +122,7 @@ export
        ZCoordinateComponent,
        ENTITY_COMPONENT_ID, RENDER_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID, WIDGET_COMPONENT_ID, WINDOW_COMPONENT_ID,
 
-       RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT,
+       RenderObjectType, RENDER_OBJECT_RECTANGLE, RENDER_OBJECT_IMAGE, RENDER_OBJECT_TEXT, RENDER_OBJECT_DEPTH_MASK,
        ImageModeStretched, ImageModeTiled, ImageModeCropped, ImageParameters,
 
        window_geometry,

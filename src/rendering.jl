@@ -1,39 +1,82 @@
+function RenderingSystem(renderer::Renderer)
+  passes = dictionary([
+    :depth_mask_opaque => PassInfo(:depth_mask_opaque, NodeID(3)),
+    :render_opaque => PassInfo(:render_opaque, NodeID(0)),
+    :depth_mask_transparent => PassInfo(:depth_mask_transparent, NodeID(4)),
+    :render_transparent_1 => PassInfo(:render_transparent_1, NodeID(1)),
+    :render_transparent_2 => PassInfo(:render_transparent_2, NodeID(2)),
+  ])
+  RenderingSystem(renderer, FrameData[], passes, ReentrantLock())
+end
+
+# --- Renderer Interface ---
+
+function initialize_frames_and_commands!()
+  rendering = app.systems.rendering
+  initialize_frames!(rendering)
+  run_systems()
+  for frame in rendering.frames
+    generate_commands_for_frame!(frame, rendering, components(rendering))
+  end
+end
+
+function synchronize_commands_for_cycle!(cycle::FrameCycleInfo)
+  run_systems()
+  synchronize_commands_for_cycle!(cycle, app.systems.rendering)
+end
+
+# --------------------------
+
+Entities.components(::RenderingSystem) = components(app.ecs, (ENTITY_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{EntityID,P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
+
+function Entities.components(::RenderingSystem, entities)
+  map(entities) do entity
+    location = get_location(entity)
+    geometry = get_geometry(entity)
+    object = get_render(entity)
+    z = get_z(entity)
+    (entity, location, geometry, object, z)
+  end
+end
+
 function initialize_frames!(rendering::RenderingSystem)
   (; renderer, frames) = rendering
   empty!(frames)
   for cycle in renderer.cycles
     color = cycle.target
     extent = dimensions(color.attachment)
-    depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, extent; name = :depth)
+    depth = attachment_resource(Vk.FORMAT_D32_SFLOAT, extent; name = :depth, samples = RENDER_SAMPLE_COUNT)
     frame = FrameData(cycle.index, color, depth)
     push!(frames, frame)
     for pass in rendering.passes
       insert!(frame.command_changes, pass.name, DiffVector{Command}())
     end
     area = RenderArea(extent)
-    nodes = initialize_passes!(rendering, area)
+    nodes = initialize_passes!(rendering, frame, area)
     add_nodes!(cycle.render_graph, nodes)
   end
 end
 
-function initialize_passes!(rendering::RenderingSystem, area::RenderArea)
+function initialize_passes!(rendering::RenderingSystem, frame::FrameData, area::RenderArea)
   # Create new `RenderNode`s and initialize `ShaderParameters`.
   nodes = RenderNode[]
-  color_clear = [ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1f0))]
-  depth_clear = 1f0
 
   camera = camera_metric_to_viewport(area, rendering.renderer.frame_cycle.swapchain.surface.target)
   # Color and depth attachments will be set per frame before recording commands.
-  parameters = ShaderParameters(; camera, depth_clear, color_clear)
+  parameters = ShaderParameters(; camera)
 
   push!(nodes, initialize_pass!(rendering.passes[:depth_mask_opaque], area, parameters))
-  @reset parameters.depth_clear = nothing
-  @reset parameters.color_clear = [nothing]
   push!(nodes, initialize_pass!(rendering.passes[:render_opaque], area, parameters))
   push!(nodes, initialize_pass!(rendering.passes[:depth_mask_transparent], area, parameters))
   @reset parameters.render_state.enable_depth_write = false
   push!(nodes, initialize_pass!(rendering.passes[:render_transparent_1], area, parameters))
   push!(nodes, initialize_pass!(rendering.passes[:render_transparent_2], area, parameters))
+
+  color_clear = ClearValue((BACKGROUND_COLOR.r, BACKGROUND_COLOR.g, BACKGROUND_COLOR.b, 1f0))
+  depth_clear = ClearValue(1f0)
+  start = nodes[1]
+  insert!(start.clears, frame.color, color_clear)
+  insert!(start.clears, frame.depth, depth_clear)
 
   nodes
 end
@@ -44,19 +87,22 @@ function initialize_pass!(info::PassInfo, area::RenderArea, parameters::ShaderPa
 end
 
 function Lava.RenderNode(info::PassInfo, area::RenderArea)
-  RenderNode(; id = info.node, info.stages, render_area = area, info.name)
+  RenderNode(; id = info.node, render_area = area, info.name)
 end
 
 function generate_commands_for_frame!(frame::FrameData, rendering::RenderingSystem, components)
-  program_cache = rendering.renderer.program_cache # thread-safe
+  program_cache = rendering.renderer.program_cache # this cache is thread-safe
   for (entity, location, geometry, object, z) in components
     location = Point3f(location..., -1/z)
     list = get!(() -> EntityCommandList(entity), frame.entity_command_lists, entity)
     !STAGED_RENDERING[] && foreach(empty!, list.changes)
+
     parameters = pass_parameters(rendering.passes[ifelse(object.is_opaque, :depth_mask_opaque, :depth_mask_transparent)], frame)
     add_depth_mask_commands!(list, program_cache, object, location, geometry, parameters)
+
     parameters = pass_parameters(rendering.passes[ifelse(object.is_opaque, :render_opaque, :render_transparent_1)], frame)
     add_rendering_commands!(list, program_cache, object, location, geometry, parameters)
+
     for (pass, commands) in pairs(list.changes)
       append!(frame.command_changes[pass].additions, commands)
     end
@@ -100,8 +146,7 @@ function synchronize_commands_for_cycle!(cycle::FrameCycleInfo, rendering::Rende
   frame = rendering.frames[cycle.index]
   stage_command_changes_for_frame!(frame, rendering)
   for pass in rendering.passes
-    node = get(cycle.render_graph.nodes, pass.node, nothing)
-    node === nothing && continue
+    node = cycle.render_graph.nodes[pass.node]
     changes = frame.command_changes[pass.name]
     if STAGED_RENDERING[]
       update_commands!(node, changes.additions, changes.deletions)
@@ -155,9 +200,8 @@ function add_rendering_commands!(list::EntityCommandList, program_cache::Program
 end
 
 function add_depth_mask_commands!(list, program_cache::ProgramCache, component::RenderComponent, location, geometry::GeometryComponent, parameters::ShaderParameters)
-  @reset parameters.render_state.depth_compare_op = ifelse(geometry.type ≠ GEOMETRY_TYPE_RECTANGLE, Vk.COMPARE_OP_EQUAL, Vk.COMPARE_OP_LESS_OR_EQUAL)
+  geometry.type !== GEOMETRY_TYPE_RECTANGLE || return
   @reset parameters.render_state.enable_fragment_supersampling = true
-  geometry.type == GEOMETRY_TYPE_RECTANGLE && return
   center = Point2f(location.x, location.y)
   pass = ifelse(component.is_opaque, :depth_mask_opaque, :depth_mask_transparent)
   @switch geometry.type begin

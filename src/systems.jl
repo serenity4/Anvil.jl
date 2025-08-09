@@ -81,12 +81,9 @@ const PassName = Symbol
 mutable struct PassInfo
   const name::PassName
   const node::NodeID
-  const stages::Vk.PipelineStageFlag2
   parameters::ShaderParameters # managed by the application
-  PassInfo(name, node, stages) = new(name, node, stages)
+  PassInfo(name, node) = new(name, node)
 end
-
-const PerFrame{T} = Vector{T}
 
 struct EntityCommandList
   entity::EntityID
@@ -118,55 +115,12 @@ FrameData(index, color, depth) = FrameData(index, color, depth, DiffSet{EntityID
 
 struct RenderingSystem <: System
   renderer::Renderer
-  frames::PerFrame{FrameData} # managed by the application
+  frames::Vector{FrameData} # managed by the application
   passes::Dictionary{PassName, PassInfo} # constant after construction
   lock::ReentrantLock
 end
 
 @forward_methods RenderingSystem field=:lock Base.lock Base.unlock
-
-function RenderingSystem(renderer::Renderer)
-  # XXX: We may be missing shder stages.
-  standard_stages = |(Vk.PIPELINE_STAGE_2_VERTEX_SHADER_BIT, Vk.PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, Vk.PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, Vk.PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT, Vk.PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT)
-  passes = dictionary([
-    :render_opaque => PassInfo(:render_opaque, NodeID(0), standard_stages),
-    :render_transparent_1 => PassInfo(:render_transparent_1, NodeID(1), standard_stages),
-    :render_transparent_2 => PassInfo(:render_transparent_2, NodeID(2), standard_stages),
-    :depth_mask_opaque => PassInfo(:depth_mask_opaque, NodeID(3), standard_stages),
-    :depth_mask_transparent => PassInfo(:depth_mask_transparent, NodeID(4), standard_stages),
-  ])
-  RenderingSystem(renderer, FrameData[], passes, ReentrantLock())
-end
-
-# --- Renderer Interface ---
-
-function initialize_frames_and_commands!()
-  rendering = app.systems.rendering
-  initialize_frames!(rendering)
-  run_systems()
-  for frame in rendering.frames
-    generate_commands_for_frame!(frame, rendering, components(rendering))
-  end
-end
-
-function synchronize_commands_for_cycle!(cycle::FrameCycleInfo)
-  run_systems()
-  synchronize_commands_for_cycle!(cycle, app.systems.rendering)
-end
-
-# --------------------------
-
-Entities.components(::RenderingSystem) = components(app.ecs, (ENTITY_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, RENDER_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID), Tuple{EntityID,P2,GeometryComponent,RenderComponent,ZCoordinateComponent})
-
-function Entities.components(::RenderingSystem, entities)
-  map(entities) do entity
-    location = get_location(entity)
-    geometry = get_geometry(entity)
-    object = get_render(entity)
-    z = get_z(entity)
-    (entity, location, geometry, object, z)
-  end
-end
 
 function shutdown(system::RenderingSystem)
   wait(CooperativeTasks.shutdown(system.renderer.task))

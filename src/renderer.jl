@@ -46,6 +46,8 @@ end
 
 @forward_methods Renderer field=:lock Base.lock Base.unlock
 
+remove_validation_message_filters() = ENV["VK_LAYER_MESSAGE_ID_FILTER"] = ""
+
 function filter_validation_message(name)
   ignores = get(ENV, "VK_LAYER_MESSAGE_ID_FILTER", "")
   contains(ignores, name) && return
@@ -53,7 +55,7 @@ function filter_validation_message(name)
   ENV["VK_LAYER_MESSAGE_ID_FILTER"] = value
 end
 
-new_color_attachment(device::Device, window::Window) = attachment_resource(device, nothing; format = RGBA{Float16}, dims = collect(Int64, window.extent), usage_flags = Vk.IMAGE_USAGE_TRANSFER_SRC_BIT | Vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT, samples = 8, name = :color)
+new_color_attachment(device::Device, window::Window) = attachment_resource(device, nothing; format = RGBA{Float16}, dims = collect(Int64, window.extent), usage_flags = Vk.IMAGE_USAGE_TRANSFER_SRC_BIT | Vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT | Vk.IMAGE_USAGE_TRANSFER_DST_BIT, samples = RENDER_SAMPLE_COUNT, name = :color)
 
 function start(renderer::Renderer; period = 0.000)
   options = SpawnOptions(start_threadid = RENDERER_THREADID, disallow_task_migration = true, execution_mode = LoopExecution(period))
