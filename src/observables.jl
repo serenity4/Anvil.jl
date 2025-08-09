@@ -56,7 +56,7 @@ function extract_fieldnames(fields)
 end
 
 function setproperty_observed!(x, name::Symbol, value)
-  old = getproperty(x, name)
+  old = isdefined(x, name) ? getproperty(x, name) : missing
   new = setfield!(x, name, value)
   old === new && return new
   callbacks = get(x.field_callbacks, name, nothing)

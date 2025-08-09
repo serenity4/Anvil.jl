@@ -30,7 +30,11 @@ end
 DrawingOrderSystem() = DrawingOrderSystem(Dictionary(), Dictionary())
 
 put_behind!(drawing_order::DrawingOrderSystem, behind, of) = set!(drawing_order.behind, convert(EntityID, behind), of)
+put_behind!(drawing_order::DrawingOrderSystem, behind::Group, of) =
+  foreach(object -> put_behind!(drawing_order, object, of), behind.objects)
 put_in_front!(drawing_order::DrawingOrderSystem, in_front, of) = set!(drawing_order.in_front, convert(EntityID, in_front), of)
+put_in_front!(drawing_order::DrawingOrderSystem, in_front::Group, of) =
+  foreach(object -> put_in_front!(drawing_order, object, of), in_front.objects)
 
 function drawing_order_graph(behind, in_front)
   g = SimpleDiGraph{Int64}()

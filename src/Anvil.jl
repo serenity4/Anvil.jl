@@ -112,7 +112,7 @@ export
        APPLICATION_DIRECTORY,
        ASSET_DIRECTORY,
        save_events, replay_events,
-       execute, @execute,
+       execute, @execute, execute_now,
        filter_validation_message, remove_validation_message_filters,
        STAGED_RENDERING,
 
