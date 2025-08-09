@@ -239,7 +239,7 @@ function find_operations_using(engine::LayoutEngine, object)
   object = to_object(engine, object)
   indices = Int[]
   for (i, operation) in enumerate(engine.operations)
-    if !isnothing(operation.by) && any(by[] == object for by in operation.by)
+    if operation.by !== nothing && any(by[] == object for by in operation.by)
       push!(indices, i)
       continue
     end

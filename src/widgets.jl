@@ -208,17 +208,13 @@ function synchronize(text::Text)
   font = get_font(text.font)
   font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
   string = text.editable && isa(text.edit, TextEditState) ? something(text.edit.buffer, text[]) : text[]
-  if !isempty(string)
-    text_ot = OpenType.Text(string, options)
-    lines = OpenType.lines(text_ot, [font => font_options])
-    setfield!(text, :lines, lines)
-    shader = ShaderLibrary.Text(lines)
-    set_geometry(text, text_geometry(text_ot, lines))
-    set_render(text, RenderComponent(RENDER_OBJECT_TEXT, nothing, shader))
-  else
-    set_geometry(text, geometry(0, 0))
-    unset_render(text)
-  end
+  text_ot = OpenType.Text(string, options)
+  lines = OpenType.lines(text_ot, [font => font_options])
+  setfield!(text, :lines, lines)
+  shader = ShaderLibrary.Text(lines)
+  geometry = text_geometry(text_ot, lines)
+  set_geometry(text, @something(geometry, (0, 0)))
+  set_render(text, RenderComponent(RENDER_OBJECT_TEXT, nothing, shader))
 end
 
 function unset_shortcut(text::Text, shortcut::Char)
