@@ -11,6 +11,7 @@ function load_texture(data::AbstractMatrix; generate_mip_levels = true)
   dims = size(data)
   mip_levels = maximum_mip_level(dims)
 
+  generate_mip_levels = false # XXX remove
   if generate_mip_levels
     resource = image_resource(device, nothing; dims, format = Vk.FORMAT_R8G8B8A8_SRGB, mip_levels, usage_flags = Vk.IMAGE_USAGE_TRANSFER_SRC_BIT | Vk.IMAGE_USAGE_TRANSFER_DST_BIT | Vk.IMAGE_USAGE_STORAGE_BIT | Vk.IMAGE_USAGE_SAMPLED_BIT, flags = Vk.IMAGE_CREATE_EXTENDED_USAGE_BIT | Vk.IMAGE_CREATE_MUTABLE_FORMAT_BIT, name = :loaded_texture_image)
     copyto!(resource, data, device; mip_level = 1)

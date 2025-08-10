@@ -143,6 +143,7 @@ end
 Rectangle(geometry::Box2, visual::Union{ImageVisual, RectangleVisual}) = new_widget(Rectangle, geometry, visual)
 Rectangle((width, height)::Tuple, args...) = Rectangle(geometry(width, height), args...)
 
+Rectangle(geometry::GeometryComponent, args...) = Rectangle(geometry.aabb, args...)
 Rectangle(geometry::Box2, color::Colorant) = Rectangle(geometry, RectangleVisual(color))
 Rectangle(geometry::Box2, image::Texture, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, ImageVisual(image, parameters))
 Rectangle(geometry::Box2, data::Union{AbstractMatrix, AbstractString}, parameters::ImageParameters = ImageParameters()) = Rectangle(geometry, texture(data), parameters)

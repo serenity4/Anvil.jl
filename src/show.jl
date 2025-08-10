@@ -25,9 +25,22 @@ function Base.show(io::IO, ::MIME"text/plain", frame::FrameData)
 end
 
 function Base.show(io::IO, diff::AbstractDiff)
-  print(io, nameof(typeof(diff)), '(')
+  print(io, typeof(diff), '(')
   first = true
   !isempty(diff.additions) && (first = false; print(io, length(diff.additions), " additions"))
   !isempty(diff.deletions) && print(io, first ? "" : ", ", length(diff.deletions), " deletions")
+  print(io, ')')
+end
+
+function Base.show(io::IO, bindings::KeyBindings)
+  print(io, typeof(bindings), '(')
+  print(io, "active = [", join(keys(bindings.active), ", "), ']')
+  print(io, ", shadowed = [", join(keys(bindings.inactive), ", "), ']')
+  print(io, ", tokens = [")
+  for (i, (token, registered)) in enumerate(pairs(bindings.bindings))
+    i > 1 && print(io, ", ")
+    print(io, '#', token, " (", length(registered), ")")
+  end
+  print(io, ']')
   print(io, ')')
 end
