@@ -176,7 +176,7 @@ end
 
 @widget struct Text
   value::Base.AnnotatedString{String}
-  lines::Vector{OpenType.Line}
+  parsed::Optional{OpenType.ParsedText}
   size::Float64
   font::String
   script::Tag4
@@ -189,7 +189,7 @@ Base.getindex(text::Text) = text.value
 Base.setindex!(text::Text, value) = setproperty!(text, :value, value)
 
 function Text(value::AbstractString; font = "arial", size = TEXT_SIZE_MEDIUM, script = tag4"latn", language = tag4"en  ", editable = false, on_edit = nothing)
-  text = new_widget(Text, value, OpenType.Line[], size, font, script, language, editable, nothing)
+  text = new_widget(Text, value, nothing, size, font, script, language, editable, nothing)
   if editable
     text.edit = TextEditState(on_edit, text)
     finalizer(x -> finalize(x.edit::TextEditState), text)
@@ -210,11 +210,10 @@ function synchronize(text::Text)
   font_options = FontOptions(ShapingOptions(text.script, text.language), text.size)
   string = text.editable && isa(text.edit, TextEditState) ? something(text.edit.buffer, text[]) : text[]
   text_ot = OpenType.Text(string, options)
-  lines = OpenType.lines(text_ot, [font => font_options])
-  setfield!(text, :lines, lines)
-  shader = ShaderLibrary.Text(lines)
-  geometry = text_geometry(text_ot, lines)
-  set_geometry(text, @something(geometry, (0, 0)))
+  parsed = OpenType.ParsedText(text_ot, [font => font_options])
+  setfield!(text, :parsed, parsed)
+  shader = ShaderLibrary.Text(parsed)
+  set_geometry(text, @something(parsed.geometry, (0, 0)))
   set_render(text, RenderComponent(RENDER_OBJECT_TEXT, nothing, shader))
 end
 
@@ -363,7 +362,7 @@ function select_at_cursor!(edit::TextEditState, input::Input)
   location = get_location(edit.text)
   geometry = get_bounding_box(edit.text)
   origin = geometry.bottom_left .+ location
-  i = cursor_index(edit.buffer, edit.text.lines, input.event.location .- origin)
+  i = cursor_index(edit.buffer, edit.text.parsed, input.event.location .- origin)
   clear_selection!(edit)
   set_cursor!(edit, i)
 end
@@ -373,8 +372,8 @@ function select_at_selection!(edit::TextEditState, input::Input)
   geometry = get_bounding_box(edit.text)
   origin = geometry.bottom_left .+ location
   area, event = input.drag
-  i = cursor_index(edit.buffer, edit.text.lines, input.source.event.location .- origin)
-  j = cursor_index(edit.buffer, edit.text.lines, event.location .- origin)
+  i = cursor_index(edit.buffer, edit.text.parsed, input.source.event.location .- origin)
+  j = cursor_index(edit.buffer, edit.text.parsed, event.location .- origin)
   j == edit.cursor_index && return
   if j > edit.cursor_index
     navigate_and_select_next!(edit -> set_cursor!(edit, j), edit)
@@ -426,6 +425,7 @@ function register_shortcuts!(edit::TextEditState)
     isempty(edit.selection) ? delete_next_word!(edit) : delete_selection!(edit)
   end)
   push!(bindings, key"enter" => () -> commit_modifications!(edit))
+  push!(bindings, key"shift+enter" => () -> insert_new_line!(edit))
   push!(bindings, key"escape" => () -> clear_modifications!(edit))
   edit.shortcuts = bind(bindings)
 end
@@ -466,15 +466,14 @@ function display_cursor!(edit::TextEditState)
   origin = geometry.bottom_left .+ location
   # XXX: Remove this visual hack and actually address the vertical position issue.
   origin = origin .+ P2(0, 0.15)
-  set_location(edit.cursor, origin .+ cursor_location(edit.text.lines, glyph_index))
-  edit.cursor.geometry = cursor_geometry(edit.text.lines, glyph_index)
+  set_location(edit.cursor, origin .+ cursor_location(edit.text.parsed, glyph_index))
+  edit.cursor.geometry = cursor_geometry(edit.text.parsed, glyph_index)
   synchronize!(edit.cursor)
 end
 
-function cursor_index(text::AbstractString, lines::Vector{OpenType.Line}, (x, y))
+function cursor_index(text::AbstractString, parsed::OpenType.ParsedText, (x, y))
   # TODO: Support glyph substitutions and BiDi.
-  length(lines) == 1 || error("Multi-line text is not supported yet")
-  line = lines[1]
+  line = only(parsed.lines)
   offset = P2(0, 0)
   for (i, advance) in enumerate(line.advances)
     midpoint = offset .+ 0.5 .* advance
@@ -484,13 +483,13 @@ function cursor_index(text::AbstractString, lines::Vector{OpenType.Line}, (x, y)
   length(text)
 end
 
-function cursor_location(lines::Vector{OpenType.Line}, glyph_index)
-  line = only(lines)
+function cursor_location(parsed::OpenType.ParsedText, glyph_index)
+  line = only(parsed.lines)
   sum(@view line.advances[1:glyph_index])
 end
 
-function cursor_geometry(lines::Vector{OpenType.Line}, glyph_index)
-  line = only(lines)
+function cursor_geometry(parsed::OpenType.ParsedText, glyph_index)
+  line = only(parsed.lines)
   if glyph_index == 0
     segment = line.segments[1]
   else
@@ -508,6 +507,11 @@ function commit_modifications!(edit::TextEditState)
   clear_modifications!(edit)
   edit.on_edit === nothing && return
   edit.on_edit(edit.text[])
+end
+
+function insert_new_line!(edit::TextEditState)
+  char = '\n'
+  isempty(edit.selection) ? insert_after!(edit, char) : edit_selection!(edit, char)
 end
 
 function insert_after!(edit::TextEditState, value)
