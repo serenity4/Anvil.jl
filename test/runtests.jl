@@ -1,6 +1,5 @@
 using Anvil, Test, Logging
 
-!@isdefined(includet) && (includet = include)
 includet("main.jl")
 
 remove_validation_message_filters()
