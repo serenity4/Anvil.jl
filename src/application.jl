@@ -163,6 +163,7 @@ function set_geometry(entity, geometry::GeometryComponent; invalidate = true)
 end
 set_geometry(entity, geometry; kwargs...) = set_geometry(entity, GeometryComponent(geometry); kwargs...)
 set_geometry(entity, (width, height)::Tuple; kwargs...) = set_geometry(entity, geometry(width, height); kwargs...)
+set_geometry(f, entity, aabb) = set_geometry(entity, GeometryComponent(f, aabb))
 unset_geometry(entity) = unset!(app.ecs, entity, GEOMETRY_COMPONENT_ID)
 get_z(entity) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID, ZCoordinateComponent]
 set_z(entity, z::Real) = app.ecs[entity, ZCOORDINATE_COMPONENT_ID, ZCoordinateComponent] = convert(ZCoordinateComponent, z)
@@ -240,30 +241,36 @@ end
 
 function exit(code::Int = 0)
   if current_task() === app.task
-    _exit(code)
+    exit_application(code)
     true
   else
-    execute(_exit, code)
+    execute(exit_application, code)
     wait(app)
   end
 end
 
-function _exit(code::Int)
+function exit_application(code::Int)
   @debug "Exiting application" * (!iszero(code) ? " (exit code: $(code))" : "")
   shutdown(app)
   code
 end
 
 function shutdown(app::Application)
-  shutdown(app.systems)
-  close(app.wm, app.window)
+  shutdown_systems(app)
   wait(shutdown_owned_tasks())
   schedule_shutdown()
 end
 
+function shutdown_systems(app::Application)
+  shutdown(app.systems)
+  close_windows(app)
+end
+
+close_windows(app::Application) = close(app.wm, app.window)
+
 Base.wait(app::Application) = monitor_owned_tasks()
 
-function (app::Application)()
+function run_application_cycle(app::Application)
   # Make sure that the drawing order (which also defines interaction order)
   # has been resolved prior to resolving which object receives which event based on that order.
   run_systems()
@@ -278,7 +285,7 @@ function (app::Application)()
     app.systems.event(app.ecs, event)
     run_systems()
   end
-  true
+  return true
 end
 
 function refill_event_queue!(queue::EventQueue)
@@ -293,7 +300,17 @@ function main(f; async = false, application_period = 0.002, renderer_period = 0.
   CooperativeTasks.reset()
   app.task = spawn(SpawnOptions(start_threadid = APPLICATION_THREADID, disallow_task_migration = true)) do
     initialize(f; record_events, renderer_period)
-    LoopExecution(application_period; shutdown = false)(app)()
+    cycle = () -> run_application_cycle(app)
+    loop = LoopExecution(application_period; shutdown = false)(cycle)
+    try
+      loop()
+    finally
+      if shutdown_scheduled()
+        close_windows(app)
+      else
+        shutdown_systems(app)
+      end
+    end
   end
   async && return false
   wait(app)

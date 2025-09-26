@@ -65,14 +65,15 @@ end
 function Lava.render(renderer::Renderer)
   (; frame_cycle) = renderer
   cycle!(frame_cycle) do status::FrameCycleStatus
+    shutdown_scheduled() && return nothing
     status === FRAME_CYCLE_FIRST_FRAME && return initialize_cycles!(renderer)
     status === FRAME_CYCLE_SWAPCHAIN_RECREATED && return reinitialize_cycles!(renderer)
     @assert status === FRAME_CYCLE_RENDERING_FRAME
     cycle = renderer.cycles[frame_cycle.frame_index]
     Lava.finish!(cycle.render_graph)
-    ret = tryfetch(CooperativeTasks.execute(() -> synchronize_commands_for_cycle!(cycle), task_owner()))
-    iserror(ret) && shutdown_scheduled() && return nothing
-    unwrap(ret)
+    result = tryfetch(CooperativeTasks.execute(() -> synchronize_commands_for_cycle!(cycle), task_owner()))
+    iserror(result) && propagate_error_and_shutdown(unwrap_error(result))
+    shutdown_scheduled() && return nothing
     render!(cycle.render_graph, cycle.frame)
   end
   next!(renderer.frame_diagnostics)
@@ -103,7 +104,11 @@ function reinitialize_cycles!(renderer::Renderer)
 end
 
 function wait_initialize_frames_and_commands!()
-  ret = tryfetch(CooperativeTasks.execute(initialize_frames_and_commands!, task_owner()))
-  iserror(ret) && shutdown_scheduled() && return nothing
-  unwrap(ret)
+  result = tryfetch(CooperativeTasks.execute(initialize_frames_and_commands!, task_owner()))
+  iserror(result) && propagate_error_and_shutdown(unwrap_error(result))
+end
+
+function propagate_error_and_shutdown(exc)
+  propagate_error(exc)
+  schedule_shutdown()
 end

@@ -212,6 +212,13 @@ function add_depth_mask_commands!(list, program_cache::ProgramCache, component::
     primitive = Primitive(rect, location)
     command = Command(program_cache, shader, parameters, primitive)
     add_command!(list, pass, command)
+
+    @case &GEOMETRY_TYPE_USER_DEFINED
+    shader = FragmentLocationTest(let test = geometry.in; p -> test(p - center); end)
+    rect = ShaderLibrary.Rectangle(geometry.aabb, nothing, nothing)
+    primitive = Primitive(rect, location)
+    command = Command(program_cache, shader, parameters, primitive)
+    add_command!(list, pass, command)
   end
 end
 

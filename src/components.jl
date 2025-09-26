@@ -144,6 +144,11 @@ RenderComponent(visual::ImageVisual) = RenderComponent(RENDER_OBJECT_IMAGE, noth
 Entities.remap_type_for_dataframe_display(::Type{RenderComponent}) = Union{String, Missing}
 Entities.remap_value_for_dataframe_display(component::RenderComponent) = short_name(component.type)
 
+"""
+User-defined component for rendering, with the following fields:
+- `create_renderables!::Function`: `list, program_cache, location, geometry, parameters` -> `add_command!(...)`
+- `is_opaque::Bool`
+"""
 struct UserDefinedRender
   create_renderables!::Any
   is_opaque::Bool

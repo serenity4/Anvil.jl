@@ -37,7 +37,7 @@ using FileIO
 using Reexport
 @reexport using ColorTypes
 @reexport using FixedPointNumbers: N0f8
-@reexport using CooperativeTasks: CooperativeTasks, nthreads, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, monitor_owned_tasks, shutdown_owned_tasks, schedule_shutdown, shutdown_scheduled, task_owner
+@reexport using CooperativeTasks: CooperativeTasks, nthreads, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, monitor_owned_tasks, shutdown_owned_tasks, schedule_shutdown, shutdown_scheduled, task_owner, propagate_error
 @reexport using OpenType: Tag4, @tag_str, @tag4_str
 @reexport using Accessors: @set, setproperties, @reset
 using XCB
@@ -63,7 +63,9 @@ import Entities: new!
 const Optional{T} = Union{T,Nothing}
 const Box2 = Box{2,Float64}
 const P2 = Point2
+const P3 = Point3
 const P2f = Point2f
+const P3f = Point3f
 const WidgetID = EntityID
 
 const STAGED_RENDERING = Ref(true)
@@ -118,7 +120,7 @@ export
 
        # Components.
        RenderComponent, LocationComponent,
-       GeometryComponent, GeometryType, GEOMETRY_TYPE_RECTANGLE, GEOMETRY_TYPE_FILLED_CIRCLE, FilledCircle,
+       GeometryComponent, GeometryType, GEOMETRY_TYPE_RECTANGLE, GEOMETRY_TYPE_FILLED_CIRCLE, GEOMETRY_TYPE_USER_DEFINED, FilledCircle,
        ZCoordinateComponent,
        ENTITY_COMPONENT_ID, RENDER_COMPONENT_ID, LOCATION_COMPONENT_ID, GEOMETRY_COMPONENT_ID, ZCOORDINATE_COMPONENT_ID, WIDGET_COMPONENT_ID, WINDOW_COMPONENT_ID,
 
