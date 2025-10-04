@@ -37,7 +37,7 @@ using FileIO
 using Reexport
 @reexport using ColorTypes
 @reexport using FixedPointNumbers: N0f8
-@reexport using CooperativeTasks: CooperativeTasks, nthreads, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, monitor_owned_tasks, shutdown_owned_tasks, schedule_shutdown, shutdown_scheduled, task_owner, propagate_error
+@reexport using CooperativeTasks: CooperativeTasks, nthreads, fetch, tryfetch, spawn, SpawnOptions, LoopExecution, monitor_owned_tasks, shutdown_owned_tasks, schedule_shutdown, shutdown_scheduled, task_owner, TaskException, SHUTDOWN_RECEIVED, propagate_error
 @reexport using OpenType: Tag4, @tag_str, @tag4_str
 @reexport using Accessors: @set, setproperties, @reset
 using XCB

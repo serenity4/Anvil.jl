@@ -108,7 +108,9 @@ function wait_initialize_frames_and_commands!()
   iserror(result) && propagate_error_and_shutdown(unwrap_error(result))
 end
 
+is_task_shutdown(@nospecialize exc::Exception) = isa(exc, TaskException) && exc.code === SHUTDOWN_RECEIVED
+
 function propagate_error_and_shutdown(exc)
-  propagate_error(exc)
+  !is_task_shutdown(exc) && propagate_error(exc)
   schedule_shutdown()
 end
