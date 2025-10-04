@@ -25,9 +25,12 @@ struct DrawingOrderSystem <: System
   `A` was specified as behind `C` *before* `B`.
   """
   behind::Dictionary{EntityID, EntityID}
+  "Same, but specifying an object in front of another."
   in_front::Dictionary{EntityID, EntityID}
+  "Ignore entities in this list, except for those that are registered in `behind` or `in_front`."
+  ignored::Set{EntityID}
 end
-DrawingOrderSystem() = DrawingOrderSystem(Dictionary(), Dictionary())
+DrawingOrderSystem() = DrawingOrderSystem(Dictionary(), Dictionary(), Set{EntityID}())
 
 put_behind!(drawing_order::DrawingOrderSystem, behind, of) = set!(drawing_order.behind, convert(EntityID, behind), of)
 put_behind!(drawing_order::DrawingOrderSystem, behind::Group, of) =
@@ -35,6 +38,7 @@ put_behind!(drawing_order::DrawingOrderSystem, behind::Group, of) =
 put_in_front!(drawing_order::DrawingOrderSystem, in_front, of) = set!(drawing_order.in_front, convert(EntityID, in_front), of)
 put_in_front!(drawing_order::DrawingOrderSystem, in_front::Group, of) =
   foreach(object -> put_in_front!(drawing_order, object, of), in_front.objects)
+do_not_compute_z!(drawing_order::DrawingOrderSystem, entity) = push!(drawing_order.ignored, entity)
 
 function drawing_order_graph(behind, in_front)
   g = SimpleDiGraph{Int64}()
@@ -62,11 +66,12 @@ function drawing_order_graph(behind, in_front)
   g, entities
 end
 
-function ((; behind, in_front)::DrawingOrderSystem)(ecs::ECSDatabase)
+function ((; behind, in_front, ignored)::DrawingOrderSystem)(ecs::ECSDatabase)
   for entity in components(ecs, ENTITY_COMPONENT_ID, EntityID)
     # Do not process objects whose z-coordinate will depend on other objects first.
     haskey(behind, entity) && continue
     haskey(in_front, entity) && continue
+    in(entity, ignored) && continue
     has_z(entity) && isinf(get_z(entity)) && continue
     n = reinterpret(UInt32, entity)
     z = Float32(n)

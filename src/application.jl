@@ -218,6 +218,7 @@ unbind(token) = unbind!(app.systems.event.ui.bindings, token)
 
 put_behind(behind, of) = put_behind!(app.systems.drawing_order, behind, of)
 put_in_front(in_front, of) = put_in_front!(app.systems.drawing_order, in_front, of)
+do_not_compute_z(entity) = do_not_compute_z!(app.systems.drawing_order, entity)
 
 get_layout_engine() = isdefined(app, :systems) ? app.systems.layout.engine : nothing
 group(object, objects...; origin = nothing) = Group(get_layout_engine(), object, objects...; origin)

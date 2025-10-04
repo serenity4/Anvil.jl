@@ -152,7 +152,8 @@ export
 
        is_left_click,
 
-       place, place_after, align, distribute, pin, at, width, height, remove_layout_operations, put_behind, put_in_front, synchronize,
+       place, place_after, align, distribute, pin, at, width, height, remove_layout_operations, put_behind, put_in_front, do_not_compute_z,
+       synchronize,
 
        is_release, @set_name, EntityID, new_entity, @get_widget,
        observe!, unobserve!, @observable, @bind,
